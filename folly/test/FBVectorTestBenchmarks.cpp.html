@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html><head><title>joekychen/folly » folly › test › FBVectorTestBenchmarks.cpp.h
+
+</title>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+<meta name="generator" content="Docco">
+<link rel="stylesheet" media="all" href="../../stylesheets/docco.min.css" />
+
+
+</head>
+<body>
+<div id="container">
+<div id="background"></div>
+<table cellpadding="0" cellspacing="0">
+<thead><tr><th class="docs"><a id="home" href="../../index.html"></a><h1>FBVectorTestBenchmarks.cpp.h</h1></th><th class="code"></th></tr></thead>
+<tbody>
+
+
+<tr id="section-1"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-1">&#182;</a></div></td><td class="code"><div class="highlight"><pre><span class="cm">/*</span>
+<span class="cm"> * Copyright 2012 Facebook, Inc.</span>
+<span class="cm"> *</span>
+<span class="cm"> * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span class="cm"> * you may not use this file except in compliance with the License.</span>
+<span class="cm"> * You may obtain a copy of the License at</span>
+<span class="cm"> *</span>
+<span class="cm"> *   http://www.apache.org/licenses/LICENSE-2.0</span>
+<span class="cm"> *</span>
+<span class="cm"> * Unless required by applicable law or agreed to in writing, software</span>
+<span class="cm"> * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span class="cm"> * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span class="cm"> * See the License for the specific language governing permissions and</span>
+<span class="cm"> * limitations under the License.</span>
+<span class="cm"> */</span>
+
+<span class="cm">/**</span>
+<span class="cm"> * This file is supposed to be included from within</span>
+<span class="cm"> * FBVectorTest. Do not use otherwise.</span>
+<span class="cm"> */</span>
+
+<span class="n">TESTFUN</span><span class="p">(</span><span class="n">clause_23_3_6_1_1</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">VECTOR</span> <span class="n">v</span><span class="p">;</span>
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">v</span><span class="p">.</span><span class="n">empty</span><span class="p">());</span>
+  <span class="n">VECTOR</span><span class="o">::</span><span class="n">allocator_type</span> <span class="n">a</span><span class="p">;</span>
+  <span class="n">VECTOR</span> <span class="n">v1</span><span class="p">(</span><span class="n">a</span><span class="p">);</span>
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">v1</span><span class="p">.</span><span class="n">empty</span><span class="p">());</span>
+<span class="p">}</span>
+
+<span class="n">TESTFUN</span><span class="p">(</span><span class="n">clause_23_3_6_1_3</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">auto</span> <span class="k">const</span> <span class="n">n</span> <span class="o">=</span> <span class="n">random</span><span class="p">(</span><span class="mi">0U</span><span class="p">,</span> <span class="mi">10000U</span><span class="p">);</span>
+  <span class="n">VECTOR</span> <span class="n">v</span><span class="p">(</span><span class="n">n</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">v</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="n">n</span><span class="p">);</span>
+  <span class="n">FOR_EACH</span> <span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="n">v</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="o">*</span><span class="n">i</span><span class="p">,</span> <span class="n">VECTOR</span><span class="o">::</span><span class="n">value_type</span><span class="p">());</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="n">TESTFUN</span><span class="p">(</span><span class="n">clause_23_3_6_1_9</span><span class="p">)</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-2"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-2">&#182;</a></div><p>Insert with iterators</p></td><td class="code"><div class="highlight"><pre>  <span class="n">list</span><span class="o">&lt;</span><span class="n">VECTOR</span><span class="o">::</span><span class="n">value_type</span><span class="o">&gt;</span> <span class="n">lst</span><span class="p">;</span>
+  <span class="k">auto</span> <span class="k">const</span> <span class="n">n</span> <span class="o">=</span> <span class="n">random</span><span class="p">(</span><span class="mi">0U</span><span class="p">,</span> <span class="mi">10000U</span><span class="p">);</span>
+  <span class="n">FOR_EACH_RANGE</span> <span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">n</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">lst</span><span class="p">.</span><span class="n">push_back</span><span class="p">(</span><span class="n">randomObject</span><span class="o">&lt;</span><span class="n">VECTOR</span><span class="o">::</span><span class="n">value_type</span><span class="o">&gt;</span><span class="p">());</span>
+  <span class="p">}</span>
+  <span class="n">VECTOR</span> <span class="n">v</span><span class="p">(</span><span class="n">lst</span><span class="p">.</span><span class="n">begin</span><span class="p">(),</span> <span class="n">lst</span><span class="p">.</span><span class="n">end</span><span class="p">());</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">v</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="n">lst</span><span class="p">.</span><span class="n">size</span><span class="p">());</span>
+  <span class="kt">size_t</span> <span class="n">j</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+  <span class="n">FOR_EACH</span> <span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="n">lst</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">v</span><span class="p">[</span><span class="n">j</span><span class="o">++</span><span class="p">],</span> <span class="o">*</span><span class="n">i</span><span class="p">);</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="n">TESTFUN</span><span class="p">(</span><span class="n">clause_23_3_6_1_11</span><span class="p">)</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-3"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-3">&#182;</a></div><p>assign with iterators</p></td><td class="code"><div class="highlight"><pre>  <span class="n">list</span><span class="o">&lt;</span><span class="n">VECTOR</span><span class="o">::</span><span class="n">value_type</span><span class="o">&gt;</span> <span class="n">lst</span><span class="p">;</span>
+  <span class="k">auto</span> <span class="k">const</span> <span class="n">n</span> <span class="o">=</span> <span class="n">random</span><span class="p">(</span><span class="mi">0U</span><span class="p">,</span> <span class="mi">10000U</span><span class="p">);</span>
+  <span class="n">FOR_EACH_RANGE</span> <span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">n</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">lst</span><span class="p">.</span><span class="n">push_back</span><span class="p">(</span><span class="n">randomObject</span><span class="o">&lt;</span><span class="n">VECTOR</span><span class="o">::</span><span class="n">value_type</span><span class="o">&gt;</span><span class="p">());</span>
+  <span class="p">}</span>
+  <span class="n">VECTOR</span> <span class="n">v</span><span class="p">;</span>
+  <span class="n">v</span><span class="p">.</span><span class="n">assign</span><span class="p">(</span><span class="n">lst</span><span class="p">.</span><span class="n">begin</span><span class="p">(),</span> <span class="n">lst</span><span class="p">.</span><span class="n">end</span><span class="p">());</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">v</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="n">lst</span><span class="p">.</span><span class="n">size</span><span class="p">());</span>
+  <span class="kt">size_t</span> <span class="n">j</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+  <span class="n">FOR_EACH</span> <span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="n">lst</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">v</span><span class="p">[</span><span class="n">j</span><span class="o">++</span><span class="p">],</span> <span class="o">*</span><span class="n">i</span><span class="p">);</span>
+  <span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-4"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-4">&#182;</a></div><p>aliased assign</p></td><td class="code"><div class="highlight"><pre>  <span class="n">v</span><span class="p">.</span><span class="n">assign</span><span class="p">(</span><span class="n">v</span><span class="p">.</span><span class="n">begin</span><span class="p">(),</span> <span class="n">v</span><span class="p">.</span><span class="n">begin</span><span class="p">()</span> <span class="o">+</span> <span class="n">v</span><span class="p">.</span><span class="n">size</span><span class="p">()</span> <span class="o">/</span> <span class="mi">2</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">v</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="n">lst</span><span class="p">.</span><span class="n">size</span><span class="p">()</span> <span class="o">/</span> <span class="mi">2</span><span class="p">);</span>
+  <span class="n">j</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+  <span class="n">FOR_EACH</span> <span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="n">lst</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">j</span> <span class="o">==</span> <span class="n">v</span><span class="p">.</span><span class="n">size</span><span class="p">())</span> <span class="k">break</span><span class="p">;</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">v</span><span class="p">[</span><span class="n">j</span><span class="o">++</span><span class="p">],</span> <span class="o">*</span><span class="n">i</span><span class="p">);</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="n">TESTFUN</span><span class="p">(</span><span class="n">clause_23_3_6_1_12</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">VECTOR</span> <span class="n">v</span><span class="p">;</span>
+  <span class="k">auto</span> <span class="k">const</span> <span class="n">n</span> <span class="o">=</span> <span class="n">random</span><span class="p">(</span><span class="mi">0U</span><span class="p">,</span> <span class="mi">10000U</span><span class="p">);</span>
+  <span class="k">auto</span> <span class="k">const</span> <span class="n">obj</span> <span class="o">=</span> <span class="n">randomObject</span><span class="o">&lt;</span><span class="n">VECTOR</span><span class="o">::</span><span class="n">value_type</span><span class="o">&gt;</span><span class="p">();</span>
+  <span class="n">v</span><span class="p">.</span><span class="n">assign</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="n">obj</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">v</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="n">n</span><span class="p">);</span>
+  <span class="n">FOR_EACH</span> <span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="n">v</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="o">*</span><span class="n">i</span><span class="p">,</span> <span class="n">obj</span><span class="p">);</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="n">TESTFUN</span><span class="p">(</span><span class="n">clause_23_3_6_2_1</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">VECTOR</span> <span class="n">v</span><span class="p">;</span>
+  <span class="k">auto</span> <span class="k">const</span> <span class="n">n</span> <span class="o">=</span> <span class="n">random</span><span class="p">(</span><span class="mi">0U</span><span class="p">,</span> <span class="mi">10000U</span><span class="p">);</span>
+  <span class="n">v</span><span class="p">.</span><span class="n">reserve</span><span class="p">(</span><span class="n">n</span><span class="p">);</span>
+  <span class="n">EXPECT_GE</span><span class="p">(</span><span class="n">v</span><span class="p">.</span><span class="n">capacity</span><span class="p">(),</span> <span class="n">n</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="n">TESTFUN</span><span class="p">(</span><span class="n">clause_23_3_6_2_7</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">auto</span> <span class="k">const</span> <span class="n">n1</span> <span class="o">=</span> <span class="n">random</span><span class="p">(</span><span class="mi">0U</span><span class="p">,</span> <span class="mi">10000U</span><span class="p">);</span>
+  <span class="k">auto</span> <span class="k">const</span> <span class="n">n2</span> <span class="o">=</span> <span class="n">random</span><span class="p">(</span><span class="mi">0U</span><span class="p">,</span> <span class="mi">10000U</span><span class="p">);</span>
+  <span class="k">auto</span> <span class="k">const</span> <span class="n">obj1</span> <span class="o">=</span> <span class="n">randomObject</span><span class="o">&lt;</span><span class="n">VECTOR</span><span class="o">::</span><span class="n">value_type</span><span class="o">&gt;</span><span class="p">();</span>
+  <span class="k">auto</span> <span class="k">const</span> <span class="n">obj2</span> <span class="o">=</span> <span class="n">randomObject</span><span class="o">&lt;</span><span class="n">VECTOR</span><span class="o">::</span><span class="n">value_type</span><span class="o">&gt;</span><span class="p">();</span>
+  <span class="n">VECTOR</span> <span class="n">v1</span><span class="p">(</span><span class="n">n1</span><span class="p">,</span> <span class="n">obj1</span><span class="p">),</span> <span class="n">v2</span><span class="p">(</span><span class="n">n2</span><span class="p">,</span> <span class="n">obj2</span><span class="p">);</span>
+  <span class="n">v1</span><span class="p">.</span><span class="n">swap</span><span class="p">(</span><span class="n">v2</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">v1</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="n">n2</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">v2</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="n">n1</span><span class="p">);</span>
+  <span class="n">FOR_EACH</span> <span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="n">v1</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="o">*</span><span class="n">i</span><span class="p">,</span> <span class="n">obj2</span><span class="p">);</span>
+  <span class="p">}</span>
+  <span class="n">FOR_EACH</span> <span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="n">v2</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="o">*</span><span class="n">i</span><span class="p">,</span> <span class="n">obj1</span><span class="p">);</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="n">TESTFUN</span><span class="p">(</span><span class="n">clause_23_3_6_2_9</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">VECTOR</span> <span class="n">v</span><span class="p">;</span>
+  <span class="k">auto</span> <span class="k">const</span> <span class="n">n1</span> <span class="o">=</span> <span class="n">random</span><span class="p">(</span><span class="mi">0U</span><span class="p">,</span> <span class="mi">10000U</span><span class="p">);</span>
+  <span class="n">v</span><span class="p">.</span><span class="n">resize</span><span class="p">(</span><span class="n">n1</span><span class="p">);</span>
+  <span class="n">FOR_EACH</span> <span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="n">v</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="o">*</span><span class="n">i</span><span class="p">,</span> <span class="n">VECTOR</span><span class="o">::</span><span class="n">value_type</span><span class="p">());</span>
+  <span class="p">}</span>
+  <span class="k">auto</span> <span class="k">const</span> <span class="n">n2</span> <span class="o">=</span> <span class="n">random</span><span class="p">(</span><span class="mi">0U</span><span class="p">,</span> <span class="mi">10000U</span><span class="p">);</span>
+  <span class="n">FOR_EACH</span> <span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="n">v</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="o">*</span><span class="n">i</span><span class="p">,</span> <span class="n">VECTOR</span><span class="o">::</span><span class="n">value_type</span><span class="p">());</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="n">TESTFUN</span><span class="p">(</span><span class="n">clause_23_3_6_2_11</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">VECTOR</span> <span class="n">v</span><span class="p">;</span>
+  <span class="k">auto</span> <span class="k">const</span> <span class="n">n1</span> <span class="o">=</span> <span class="n">random</span><span class="p">(</span><span class="mi">0U</span><span class="p">,</span> <span class="mi">10000U</span><span class="p">);</span>
+  <span class="k">auto</span> <span class="k">const</span> <span class="n">obj1</span> <span class="o">=</span> <span class="n">randomObject</span><span class="o">&lt;</span><span class="n">VECTOR</span><span class="o">::</span><span class="n">value_type</span><span class="o">&gt;</span><span class="p">();</span>
+  <span class="n">v</span><span class="p">.</span><span class="n">resize</span><span class="p">(</span><span class="n">n1</span><span class="p">,</span> <span class="n">obj1</span><span class="p">);</span>
+  <span class="n">FOR_EACH</span> <span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="n">v</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="o">*</span><span class="n">i</span><span class="p">,</span> <span class="n">obj1</span><span class="p">);</span>
+  <span class="p">}</span>
+  <span class="k">auto</span> <span class="k">const</span> <span class="n">n2</span> <span class="o">=</span> <span class="n">random</span><span class="p">(</span><span class="mi">0U</span><span class="p">,</span> <span class="mi">10000U</span><span class="p">);</span>
+  <span class="k">auto</span> <span class="k">const</span> <span class="n">obj2</span> <span class="o">=</span> <span class="n">randomObject</span><span class="o">&lt;</span><span class="n">VECTOR</span><span class="o">::</span><span class="n">value_type</span><span class="o">&gt;</span><span class="p">();</span>
+  <span class="n">v</span><span class="p">.</span><span class="n">resize</span><span class="p">(</span><span class="n">n2</span><span class="p">,</span> <span class="n">obj2</span><span class="p">);</span>
+  <span class="k">if</span> <span class="p">(</span><span class="n">n1</span> <span class="o">&lt;</span> <span class="n">n2</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">FOR_EACH_RANGE</span> <span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="n">n1</span><span class="p">,</span> <span class="n">n2</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">v</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="n">obj2</span><span class="p">);</span>
+    <span class="p">}</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="n">TESTFUN</span><span class="p">(</span><span class="n">clause_absent_element_access</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">VECTOR</span> <span class="n">v</span><span class="p">;</span>
+  <span class="k">auto</span> <span class="k">const</span> <span class="n">n1</span> <span class="o">=</span> <span class="n">random</span><span class="p">(</span><span class="mi">1U</span><span class="p">,</span> <span class="mi">10000U</span><span class="p">);</span>
+  <span class="k">auto</span> <span class="k">const</span> <span class="n">obj1</span> <span class="o">=</span> <span class="n">randomObject</span><span class="o">&lt;</span><span class="n">VECTOR</span><span class="o">::</span><span class="n">value_type</span><span class="o">&gt;</span><span class="p">();</span>
+  <span class="n">v</span><span class="p">.</span><span class="n">resize</span><span class="p">(</span><span class="n">n1</span><span class="p">,</span> <span class="n">obj1</span><span class="p">);</span>
+  <span class="k">auto</span> <span class="k">const</span> <span class="n">n</span> <span class="o">=</span> <span class="n">random</span><span class="p">(</span><span class="mi">0U</span><span class="p">,</span> <span class="n">v</span><span class="p">.</span><span class="n">size</span><span class="p">()</span> <span class="o">-</span> <span class="mi">1</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">v</span><span class="p">[</span><span class="n">n</span><span class="p">],</span> <span class="n">v</span><span class="p">.</span><span class="n">at</span><span class="p">(</span><span class="n">n</span><span class="p">));</span>
+  <span class="k">auto</span> <span class="k">const</span> <span class="n">obj2</span> <span class="o">=</span> <span class="n">randomObject</span><span class="o">&lt;</span><span class="n">VECTOR</span><span class="o">::</span><span class="n">value_type</span><span class="o">&gt;</span><span class="p">();</span>
+  <span class="n">v</span><span class="p">[</span><span class="n">n</span><span class="p">]</span> <span class="o">=</span> <span class="n">obj2</span><span class="p">;</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">v</span><span class="p">[</span><span class="n">n</span><span class="p">],</span> <span class="n">v</span><span class="p">.</span><span class="n">at</span><span class="p">(</span><span class="n">n</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">v</span><span class="p">[</span><span class="n">n</span><span class="p">],</span> <span class="n">obj2</span><span class="p">);</span>
+  <span class="k">auto</span> <span class="k">const</span> <span class="n">obj3</span> <span class="o">=</span> <span class="n">randomObject</span><span class="o">&lt;</span><span class="n">VECTOR</span><span class="o">::</span><span class="n">value_type</span><span class="o">&gt;</span><span class="p">();</span>
+  <span class="n">v</span><span class="p">.</span><span class="n">at</span><span class="p">(</span><span class="n">n</span><span class="p">)</span> <span class="o">=</span> <span class="n">obj3</span><span class="p">;</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">v</span><span class="p">[</span><span class="n">n</span><span class="p">],</span> <span class="n">v</span><span class="p">.</span><span class="n">at</span><span class="p">(</span><span class="n">n</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">v</span><span class="p">[</span><span class="n">n</span><span class="p">],</span> <span class="n">obj3</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="n">TESTFUN</span><span class="p">(</span><span class="n">clause_23_3_6_3_1</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">VECTOR</span> <span class="n">v</span><span class="p">;</span>
+  <span class="k">auto</span> <span class="k">const</span> <span class="n">n1</span> <span class="o">=</span> <span class="n">random</span><span class="p">(</span><span class="mi">1U</span><span class="p">,</span> <span class="mi">10000U</span><span class="p">);</span>
+  <span class="k">auto</span> <span class="k">const</span> <span class="n">obj1</span> <span class="o">=</span> <span class="n">randomObject</span><span class="o">&lt;</span><span class="n">VECTOR</span><span class="o">::</span><span class="n">value_type</span><span class="o">&gt;</span><span class="p">();</span>
+  <span class="n">v</span><span class="p">.</span><span class="n">resize</span><span class="p">(</span><span class="n">n1</span><span class="p">,</span> <span class="n">obj1</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">v</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span> <span class="o">&amp;</span><span class="n">v</span><span class="p">.</span><span class="n">front</span><span class="p">());</span>
+<span class="p">}</span>
+
+<span class="n">TESTFUN</span><span class="p">(</span><span class="n">clause_23_3_6_4_1_a</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">VECTOR</span> <span class="n">v</span><span class="p">,</span> <span class="n">w</span><span class="p">;</span>
+  <span class="k">auto</span> <span class="k">const</span> <span class="n">n1</span> <span class="o">=</span> <span class="n">random</span><span class="p">(</span><span class="mi">1U</span><span class="p">,</span> <span class="mi">10000U</span><span class="p">);</span>
+  <span class="n">FOR_EACH_RANGE</span> <span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">n1</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">auto</span> <span class="k">const</span> <span class="n">obj1</span> <span class="o">=</span> <span class="n">randomObject</span><span class="o">&lt;</span><span class="n">VECTOR</span><span class="o">::</span><span class="n">value_type</span><span class="o">&gt;</span><span class="p">();</span>
+    <span class="n">v</span><span class="p">.</span><span class="n">push_back</span><span class="p">(</span><span class="n">obj1</span><span class="p">);</span>
+    <span class="n">w</span><span class="p">.</span><span class="n">push_back</span><span class="p">(</span><span class="n">obj1</span><span class="p">);</span>
+  <span class="p">}</span>
+  <span class="k">auto</span> <span class="k">const</span> <span class="n">n2</span> <span class="o">=</span> <span class="n">random</span><span class="p">(</span><span class="mi">0U</span><span class="p">,</span> <span class="n">n1</span> <span class="o">-</span> <span class="mi">1</span><span class="p">);</span>
+  <span class="k">auto</span> <span class="n">pos</span> <span class="o">=</span> <span class="n">v</span><span class="p">.</span><span class="n">begin</span><span class="p">()</span> <span class="o">+</span> <span class="n">n2</span><span class="p">;</span>
+  <span class="k">auto</span> <span class="k">const</span> <span class="n">obj2</span> <span class="o">=</span> <span class="n">randomObject</span><span class="o">&lt;</span><span class="n">VECTOR</span><span class="o">::</span><span class="n">value_type</span><span class="o">&gt;</span><span class="p">();</span>
+
+  <span class="k">auto</span> <span class="n">r</span> <span class="o">=</span> <span class="n">v</span><span class="p">.</span><span class="n">insert</span><span class="p">(</span><span class="n">pos</span><span class="p">,</span> <span class="n">obj2</span><span class="p">);</span>
+
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">v</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="n">w</span><span class="p">.</span><span class="n">size</span><span class="p">()</span> <span class="o">+</span> <span class="mi">1</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">r</span> <span class="o">-</span> <span class="n">v</span><span class="p">.</span><span class="n">begin</span><span class="p">(),</span> <span class="n">n2</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="o">*</span><span class="n">r</span><span class="p">,</span> <span class="n">obj2</span><span class="p">);</span>
+  <span class="n">FOR_EACH_RANGE</span> <span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">r</span> <span class="o">-</span> <span class="n">v</span><span class="p">.</span><span class="n">begin</span><span class="p">())</span> <span class="p">{</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">v</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="n">w</span><span class="p">[</span><span class="n">i</span><span class="p">]);</span>
+  <span class="p">}</span>
+  <span class="n">FOR_EACH_RANGE</span> <span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="n">r</span> <span class="o">-</span> <span class="n">v</span><span class="p">.</span><span class="n">begin</span><span class="p">()</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="n">v</span><span class="p">.</span><span class="n">size</span><span class="p">())</span> <span class="p">{</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">v</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="n">w</span><span class="p">[</span><span class="n">i</span> <span class="o">-</span> <span class="mi">1</span><span class="p">]);</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="n">TESTFUN</span><span class="p">(</span><span class="n">clause_23_3_6_4_1_c</span><span class="p">)</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-5"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-5">&#182;</a></div><p>This test only works for fbvector</p></td><td class="code"><div class="highlight"><pre>  <span class="n">fbvector</span><span class="o">&lt;</span><span class="n">VECTOR</span><span class="o">::</span><span class="n">value_type</span><span class="o">&gt;</span> <span class="n">v</span><span class="p">,</span> <span class="n">w</span><span class="p">;</span>
+  <span class="k">auto</span> <span class="k">const</span> <span class="n">n1</span> <span class="o">=</span> <span class="n">random</span><span class="p">(</span><span class="mi">1U</span><span class="p">,</span> <span class="mi">10000U</span><span class="p">);</span>
+  <span class="n">FOR_EACH_RANGE</span> <span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">n1</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">auto</span> <span class="k">const</span> <span class="n">obj1</span> <span class="o">=</span> <span class="n">randomObject</span><span class="o">&lt;</span><span class="n">VECTOR</span><span class="o">::</span><span class="n">value_type</span><span class="o">&gt;</span><span class="p">();</span>
+    <span class="n">v</span><span class="p">.</span><span class="n">push_back</span><span class="p">(</span><span class="n">obj1</span><span class="p">);</span>
+    <span class="n">w</span><span class="p">.</span><span class="n">push_back</span><span class="p">(</span><span class="n">obj1</span><span class="p">);</span>
+  <span class="p">}</span>
+  <span class="k">auto</span> <span class="k">const</span> <span class="n">n2</span> <span class="o">=</span> <span class="n">random</span><span class="p">(</span><span class="mi">0U</span><span class="p">,</span> <span class="n">n1</span><span class="o">-</span><span class="mi">1</span><span class="p">);</span>
+  <span class="k">auto</span> <span class="n">pos</span> <span class="o">=</span> <span class="n">v</span><span class="p">.</span><span class="n">begin</span><span class="p">()</span> <span class="o">+</span> <span class="n">n2</span><span class="p">;</span>
+  <span class="k">auto</span> <span class="k">const</span> <span class="n">obj2</span> <span class="o">=</span> <span class="n">randomObject</span><span class="o">&lt;</span><span class="n">VECTOR</span><span class="o">::</span><span class="n">value_type</span><span class="o">&gt;</span><span class="p">();</span>
+  <span class="k">auto</span> <span class="k">const</span> <span class="n">n3</span> <span class="o">=</span> <span class="n">random</span><span class="p">(</span><span class="mi">0U</span><span class="p">,</span> <span class="mi">10000U</span><span class="p">);</span>
+
+  <span class="k">auto</span> <span class="n">r</span> <span class="o">=</span> <span class="n">v</span><span class="p">.</span><span class="n">insert</span><span class="p">(</span><span class="n">pos</span><span class="p">,</span> <span class="n">n3</span><span class="p">,</span> <span class="n">obj2</span><span class="p">);</span>
+
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">v</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="n">w</span><span class="p">.</span><span class="n">size</span><span class="p">()</span> <span class="o">+</span> <span class="n">n3</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">r</span> <span class="o">-</span> <span class="n">v</span><span class="p">.</span><span class="n">begin</span><span class="p">(),</span> <span class="n">n2</span><span class="p">);</span>
+  <span class="n">FOR_EACH_RANGE</span> <span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">r</span> <span class="o">-</span> <span class="n">v</span><span class="p">.</span><span class="n">begin</span><span class="p">())</span> <span class="p">{</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">v</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="n">w</span><span class="p">[</span><span class="n">i</span><span class="p">]);</span>
+  <span class="p">}</span>
+  <span class="n">FOR_EACH_RANGE</span> <span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="n">r</span> <span class="o">-</span> <span class="n">v</span><span class="p">.</span><span class="n">begin</span><span class="p">(),</span> <span class="n">r</span> <span class="o">-</span> <span class="n">v</span><span class="p">.</span><span class="n">begin</span><span class="p">()</span> <span class="o">+</span> <span class="n">n3</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">v</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="n">obj2</span><span class="p">);</span>
+  <span class="p">}</span>
+  <span class="n">FOR_EACH_RANGE</span> <span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="n">r</span> <span class="o">-</span> <span class="n">v</span><span class="p">.</span><span class="n">begin</span><span class="p">()</span> <span class="o">+</span> <span class="n">n3</span><span class="p">,</span> <span class="n">v</span><span class="p">.</span><span class="n">size</span><span class="p">())</span> <span class="p">{</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">v</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="n">w</span><span class="p">[</span><span class="n">i</span> <span class="o">-</span> <span class="n">n3</span><span class="p">]);</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="n">TESTFUN</span><span class="p">(</span><span class="n">clause_23_3_6_4_1_d</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">VECTOR</span> <span class="n">v</span><span class="p">,</span> <span class="n">w</span><span class="p">;</span>
+  <span class="k">auto</span> <span class="k">const</span> <span class="n">n1</span> <span class="o">=</span> <span class="n">random</span><span class="p">(</span><span class="mi">0U</span><span class="p">,</span> <span class="mi">10000U</span><span class="p">);</span>
+  <span class="n">FOR_EACH_RANGE</span> <span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">n1</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">auto</span> <span class="k">const</span> <span class="n">obj1</span> <span class="o">=</span> <span class="n">randomObject</span><span class="o">&lt;</span><span class="n">VECTOR</span><span class="o">::</span><span class="n">value_type</span><span class="o">&gt;</span><span class="p">();</span>
+    <span class="n">v</span><span class="p">.</span><span class="n">push_back</span><span class="p">(</span><span class="n">obj1</span><span class="p">);</span>
+    <span class="n">w</span><span class="p">.</span><span class="n">push_back</span><span class="p">(</span><span class="n">obj1</span><span class="p">);</span>
+  <span class="p">}</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">v</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="n">n1</span><span class="p">);</span>
+
+  <span class="k">auto</span> <span class="k">const</span> <span class="n">obj2</span> <span class="o">=</span> <span class="n">randomObject</span><span class="o">&lt;</span><span class="n">VECTOR</span><span class="o">::</span><span class="n">value_type</span><span class="o">&gt;</span><span class="p">();</span>
+  <span class="n">v</span><span class="p">.</span><span class="n">push_back</span><span class="p">(</span><span class="n">obj2</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">v</span><span class="p">.</span><span class="n">back</span><span class="p">(),</span> <span class="n">obj2</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">v</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="n">w</span><span class="p">.</span><span class="n">size</span><span class="p">()</span> <span class="o">+</span> <span class="mi">1</span><span class="p">);</span>
+
+  <span class="n">FOR_EACH_RANGE</span> <span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">w</span><span class="p">.</span><span class="n">size</span><span class="p">())</span> <span class="p">{</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">v</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="n">w</span><span class="p">[</span><span class="n">i</span><span class="p">]);</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="n">TESTFUN</span><span class="p">(</span><span class="n">clause_23_3_6_4_3</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">VECTOR</span> <span class="n">v</span><span class="p">,</span> <span class="n">w</span><span class="p">;</span>
+  <span class="k">auto</span> <span class="k">const</span> <span class="n">n1</span> <span class="o">=</span> <span class="n">random</span><span class="p">(</span><span class="mi">1U</span><span class="p">,</span> <span class="mi">10000U</span><span class="p">);</span>
+  <span class="n">FOR_EACH_RANGE</span> <span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">n1</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">auto</span> <span class="k">const</span> <span class="n">obj1</span> <span class="o">=</span> <span class="n">randomObject</span><span class="o">&lt;</span><span class="n">VECTOR</span><span class="o">::</span><span class="n">value_type</span><span class="o">&gt;</span><span class="p">();</span>
+    <span class="n">v</span><span class="p">.</span><span class="n">push_back</span><span class="p">(</span><span class="n">obj1</span><span class="p">);</span>
+    <span class="n">w</span><span class="p">.</span><span class="n">push_back</span><span class="p">(</span><span class="n">obj1</span><span class="p">);</span>
+  <span class="p">}</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">v</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="n">n1</span><span class="p">);</span>
+
+  <span class="k">auto</span> <span class="k">const</span> <span class="n">n2</span> <span class="o">=</span> <span class="n">random</span><span class="p">(</span><span class="mi">0U</span><span class="p">,</span> <span class="n">n1</span> <span class="o">-</span> <span class="mi">1</span><span class="p">);</span>
+  <span class="k">auto</span> <span class="n">it</span> <span class="o">=</span> <span class="n">v</span><span class="p">.</span><span class="n">erase</span><span class="p">(</span><span class="n">v</span><span class="p">.</span><span class="n">begin</span><span class="p">()</span> <span class="o">+</span> <span class="n">n2</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">v</span><span class="p">.</span><span class="n">size</span><span class="p">()</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="n">w</span><span class="p">.</span><span class="n">size</span><span class="p">());</span>
+
+  <span class="n">FOR_EACH_RANGE</span> <span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">it</span> <span class="o">-</span> <span class="n">v</span><span class="p">.</span><span class="n">begin</span><span class="p">())</span> <span class="p">{</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">v</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="n">w</span><span class="p">[</span><span class="n">i</span><span class="p">]);</span>
+  <span class="p">}</span>
+
+  <span class="n">FOR_EACH_RANGE</span> <span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="n">it</span> <span class="o">-</span> <span class="n">v</span><span class="p">.</span><span class="n">begin</span><span class="p">(),</span> <span class="n">v</span><span class="p">.</span><span class="n">size</span><span class="p">())</span> <span class="p">{</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">v</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="n">w</span><span class="p">[</span><span class="n">i</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]);</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="n">TESTFUN</span><span class="p">(</span><span class="n">clause_23_3_6_4_4</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">VECTOR</span> <span class="n">v</span><span class="p">,</span> <span class="n">w</span><span class="p">;</span>
+  <span class="k">auto</span> <span class="k">const</span> <span class="n">n1</span> <span class="o">=</span> <span class="n">random</span><span class="p">(</span><span class="mi">1U</span><span class="p">,</span> <span class="mi">10000U</span><span class="p">);</span>
+  <span class="n">FOR_EACH_RANGE</span> <span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">n1</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">auto</span> <span class="k">const</span> <span class="n">obj1</span> <span class="o">=</span> <span class="n">randomObject</span><span class="o">&lt;</span><span class="n">VECTOR</span><span class="o">::</span><span class="n">value_type</span><span class="o">&gt;</span><span class="p">();</span>
+    <span class="n">v</span><span class="p">.</span><span class="n">push_back</span><span class="p">(</span><span class="n">obj1</span><span class="p">);</span>
+    <span class="n">w</span><span class="p">.</span><span class="n">push_back</span><span class="p">(</span><span class="n">obj1</span><span class="p">);</span>
+  <span class="p">}</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">v</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="n">n1</span><span class="p">);</span>
+
+  <span class="k">auto</span> <span class="k">const</span> <span class="n">n2</span> <span class="o">=</span> <span class="n">random</span><span class="p">(</span><span class="mi">0U</span><span class="p">,</span> <span class="n">n1</span> <span class="o">-</span> <span class="mi">1</span><span class="p">);</span>
+  <span class="k">auto</span> <span class="k">const</span> <span class="n">n3</span> <span class="o">=</span> <span class="n">random</span><span class="p">(</span><span class="n">n2</span><span class="p">,</span> <span class="n">n1</span> <span class="o">-</span> <span class="mi">1</span><span class="p">);</span>
+  <span class="k">auto</span> <span class="n">it</span> <span class="o">=</span> <span class="n">v</span><span class="p">.</span><span class="n">erase</span><span class="p">(</span><span class="n">v</span><span class="p">.</span><span class="n">begin</span><span class="p">()</span> <span class="o">+</span> <span class="n">n2</span><span class="p">,</span> <span class="n">v</span><span class="p">.</span><span class="n">begin</span><span class="p">()</span> <span class="o">+</span> <span class="n">n3</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">v</span><span class="p">.</span><span class="n">size</span><span class="p">()</span> <span class="o">+</span> <span class="p">(</span><span class="n">n3</span> <span class="o">-</span> <span class="n">n2</span><span class="p">),</span> <span class="n">w</span><span class="p">.</span><span class="n">size</span><span class="p">());</span>
+
+  <span class="n">FOR_EACH_RANGE</span> <span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">it</span> <span class="o">-</span> <span class="n">v</span><span class="p">.</span><span class="n">begin</span><span class="p">())</span> <span class="p">{</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">v</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="n">w</span><span class="p">[</span><span class="n">i</span><span class="p">]);</span>
+  <span class="p">}</span>
+
+  <span class="n">FOR_EACH_RANGE</span> <span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="n">it</span> <span class="o">-</span> <span class="n">v</span><span class="p">.</span><span class="n">begin</span><span class="p">(),</span> <span class="n">v</span><span class="p">.</span><span class="n">size</span><span class="p">())</span> <span class="p">{</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">v</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="n">w</span><span class="p">[</span><span class="n">i</span> <span class="o">+</span> <span class="p">(</span><span class="n">n3</span> <span class="o">-</span> <span class="n">n2</span><span class="p">)]);</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="n">TESTFUN</span><span class="p">(</span><span class="n">clause_23_3_6_4_clear</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">VECTOR</span> <span class="n">v</span><span class="p">;</span>
+  <span class="n">v</span><span class="p">.</span><span class="n">clear</span><span class="p">();</span>
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">v</span><span class="p">.</span><span class="n">empty</span><span class="p">());</span>
+  <span class="n">v</span><span class="p">.</span><span class="n">resize</span><span class="p">(</span><span class="n">random</span><span class="p">(</span><span class="mi">0U</span><span class="p">,</span> <span class="mi">10000U</span><span class="p">));</span>
+  <span class="k">auto</span> <span class="n">c</span> <span class="o">=</span> <span class="n">v</span><span class="p">.</span><span class="n">capacity</span><span class="p">();</span>
+  <span class="n">v</span><span class="p">.</span><span class="n">clear</span><span class="p">();</span>
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">v</span><span class="p">.</span><span class="n">empty</span><span class="p">());</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">v</span><span class="p">.</span><span class="n">capacity</span><span class="p">(),</span> <span class="n">c</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="n">BENCHMARK</span><span class="p">(</span><span class="n">BENCHFUN</span><span class="p">(</span><span class="n">zzInitRNG</span><span class="p">),</span> <span class="n">iters</span><span class="p">)</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-6"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-6">&#182;</a></div><p>LOG(INFO) &lt;&lt; "\nTesting with type " &lt;&lt; typeid(VECTOR).name() &lt;&lt; "\n";</p></td><td class="code"><div class="highlight"><pre>  <span class="n">srand</span><span class="p">(</span><span class="n">seed</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="n">BENCHMARK</span><span class="p">(</span><span class="n">BENCHFUN</span><span class="p">(</span><span class="n">defaultCtor</span><span class="p">),</span> <span class="n">iters</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">FOR_EACH_RANGE</span> <span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">iters</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">VECTOR</span> <span class="n">v</span><span class="p">[</span><span class="mi">4096</span><span class="p">];</span>
+    <span class="n">doNotOptimizeAway</span><span class="p">(</span><span class="o">&amp;</span><span class="n">v</span><span class="p">);</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="kt">void</span> <span class="n">BENCHFUN</span><span class="p">(</span><span class="n">sizeCtor</span><span class="p">)(</span><span class="kt">int</span> <span class="n">iters</span><span class="p">,</span> <span class="kt">int</span> <span class="n">size</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">FOR_EACH_RANGE</span> <span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">iters</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">VECTOR</span> <span class="n">v</span><span class="p">(</span><span class="n">size</span><span class="p">);</span>
+    <span class="n">doNotOptimizeAway</span><span class="p">(</span><span class="o">&amp;</span><span class="n">v</span><span class="p">);</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+<span class="n">BENCHMARK_PARAM</span><span class="p">(</span><span class="n">BENCHFUN</span><span class="p">(</span><span class="n">sizeCtor</span><span class="p">),</span> <span class="mi">128</span><span class="p">);</span>
+<span class="n">BENCHMARK_PARAM</span><span class="p">(</span><span class="n">BENCHFUN</span><span class="p">(</span><span class="n">sizeCtor</span><span class="p">),</span> <span class="mi">1024</span><span class="p">);</span>
+<span class="n">BENCHMARK_PARAM</span><span class="p">(</span><span class="n">BENCHFUN</span><span class="p">(</span><span class="n">sizeCtor</span><span class="p">),</span> <span class="mi">1048576</span><span class="p">);</span>
+
+<span class="kt">void</span> <span class="nf">BENCHFUN</span><span class="p">(</span><span class="n">fillCtor</span><span class="p">)(</span><span class="kt">int</span> <span class="n">iters</span><span class="p">,</span> <span class="kt">int</span> <span class="n">size</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">FOR_EACH_RANGE</span> <span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">iters</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">VECTOR</span> <span class="n">v</span><span class="p">(</span><span class="kt">size_t</span><span class="p">(</span><span class="n">size</span><span class="p">),</span> <span class="n">randomObject</span><span class="o">&lt;</span><span class="n">VECTOR</span><span class="o">::</span><span class="n">value_type</span><span class="o">&gt;</span><span class="p">());</span>
+    <span class="n">doNotOptimizeAway</span><span class="p">(</span><span class="o">&amp;</span><span class="n">v</span><span class="p">);</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+<span class="n">BENCHMARK_PARAM</span><span class="p">(</span><span class="n">BENCHFUN</span><span class="p">(</span><span class="n">fillCtor</span><span class="p">),</span> <span class="mi">128</span><span class="p">);</span>
+<span class="n">BENCHMARK_PARAM</span><span class="p">(</span><span class="n">BENCHFUN</span><span class="p">(</span><span class="n">fillCtor</span><span class="p">),</span> <span class="mi">1024</span><span class="p">);</span>
+<span class="n">BENCHMARK_PARAM</span><span class="p">(</span><span class="n">BENCHFUN</span><span class="p">(</span><span class="n">fillCtor</span><span class="p">),</span> <span class="mi">10240</span><span class="p">);</span>
+
+<span class="kt">void</span> <span class="nf">BENCHFUN</span><span class="p">(</span><span class="n">pushBack</span><span class="p">)(</span><span class="kt">int</span> <span class="n">iters</span><span class="p">,</span> <span class="kt">int</span> <span class="n">size</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">auto</span> <span class="k">const</span> <span class="n">obj</span> <span class="o">=</span> <span class="n">randomObject</span><span class="o">&lt;</span><span class="n">VECTOR</span><span class="o">::</span><span class="n">value_type</span><span class="o">&gt;</span><span class="p">();</span>
+  <span class="n">FOR_EACH_RANGE</span> <span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">iters</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">VECTOR</span> <span class="n">v</span><span class="p">;</span>
+    <span class="n">FOR_EACH_RANGE</span> <span class="p">(</span><span class="n">j</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">size</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">v</span><span class="p">.</span><span class="n">push_back</span><span class="p">(</span><span class="n">obj</span><span class="p">);</span>
+    <span class="p">}</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+<span class="n">BENCHMARK_PARAM</span><span class="p">(</span><span class="n">BENCHFUN</span><span class="p">(</span><span class="n">pushBack</span><span class="p">),</span> <span class="mi">128</span><span class="p">);</span>
+<span class="n">BENCHMARK_PARAM</span><span class="p">(</span><span class="n">BENCHFUN</span><span class="p">(</span><span class="n">pushBack</span><span class="p">),</span> <span class="mi">1024</span><span class="p">);</span>
+<span class="n">BENCHMARK_PARAM</span><span class="p">(</span><span class="n">BENCHFUN</span><span class="p">(</span><span class="n">pushBack</span><span class="p">),</span> <span class="mi">10240</span><span class="p">);</span>
+<span class="n">BENCHMARK_PARAM</span><span class="p">(</span><span class="n">BENCHFUN</span><span class="p">(</span><span class="n">pushBack</span><span class="p">),</span> <span class="mi">102400</span><span class="p">);</span>
+<span class="n">BENCHMARK_PARAM</span><span class="p">(</span><span class="n">BENCHFUN</span><span class="p">(</span><span class="n">pushBack</span><span class="p">),</span> <span class="mi">512000</span><span class="p">);</span>
+
+<span class="kt">void</span> <span class="nf">BENCHFUN</span><span class="p">(</span><span class="n">reserve</span><span class="p">)(</span><span class="kt">int</span> <span class="n">iters</span><span class="p">,</span> <span class="kt">int</span> <span class="n">size</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">auto</span> <span class="k">const</span> <span class="n">obj</span> <span class="o">=</span> <span class="n">randomObject</span><span class="o">&lt;</span><span class="n">VECTOR</span><span class="o">::</span><span class="n">value_type</span><span class="o">&gt;</span><span class="p">();</span>
+  <span class="n">VECTOR</span> <span class="n">v</span><span class="p">(</span><span class="n">random</span><span class="p">(</span><span class="mi">0U</span><span class="p">,</span> <span class="mi">10000U</span><span class="p">),</span> <span class="n">obj</span><span class="p">);</span>
+  <span class="n">FOR_EACH_RANGE</span> <span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">iters</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">v</span><span class="p">.</span><span class="n">reserve</span><span class="p">(</span><span class="n">random</span><span class="p">(</span><span class="mi">0U</span><span class="p">,</span> <span class="mi">100000U</span><span class="p">));</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+<span class="n">BENCHMARK_PARAM</span><span class="p">(</span><span class="n">BENCHFUN</span><span class="p">(</span><span class="n">reserve</span><span class="p">),</span> <span class="mi">128</span><span class="p">);</span>
+<span class="n">BENCHMARK_PARAM</span><span class="p">(</span><span class="n">BENCHFUN</span><span class="p">(</span><span class="n">reserve</span><span class="p">),</span> <span class="mi">1024</span><span class="p">);</span>
+<span class="n">BENCHMARK_PARAM</span><span class="p">(</span><span class="n">BENCHFUN</span><span class="p">(</span><span class="n">reserve</span><span class="p">),</span> <span class="mi">10240</span><span class="p">);</span>
+
+<span class="kt">void</span> <span class="nf">BENCHFUN</span><span class="p">(</span><span class="n">insert</span><span class="p">)(</span><span class="kt">int</span> <span class="n">iters</span><span class="p">,</span> <span class="kt">int</span> <span class="n">size</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">auto</span> <span class="k">const</span> <span class="n">obj1</span> <span class="o">=</span> <span class="n">randomObject</span><span class="o">&lt;</span><span class="n">VECTOR</span><span class="o">::</span><span class="n">value_type</span><span class="o">&gt;</span><span class="p">();</span>
+  <span class="k">auto</span> <span class="k">const</span> <span class="n">obj2</span> <span class="o">=</span> <span class="n">randomObject</span><span class="o">&lt;</span><span class="n">VECTOR</span><span class="o">::</span><span class="n">value_type</span><span class="o">&gt;</span><span class="p">();</span>
+  <span class="n">VECTOR</span> <span class="n">v</span><span class="p">(</span><span class="n">random</span><span class="p">(</span><span class="mi">0U</span><span class="p">,</span> <span class="mi">1U</span><span class="p">),</span> <span class="n">obj1</span><span class="p">);</span>
+  <span class="n">FOR_EACH_RANGE</span> <span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">iters</span> <span class="o">/</span> <span class="mi">100</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">v</span><span class="p">.</span><span class="n">insert</span><span class="p">(</span><span class="n">v</span><span class="p">.</span><span class="n">begin</span><span class="p">(),</span> <span class="n">obj2</span><span class="p">);</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+<span class="n">BENCHMARK_PARAM</span><span class="p">(</span><span class="n">BENCHFUN</span><span class="p">(</span><span class="n">insert</span><span class="p">),</span> <span class="mi">100</span><span class="p">);</span>
+
+<span class="kt">void</span> <span class="nf">BENCHFUN</span><span class="p">(</span><span class="n">erase</span><span class="p">)(</span><span class="kt">int</span> <span class="n">iters</span><span class="p">,</span> <span class="kt">int</span> <span class="n">size</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">auto</span> <span class="k">const</span> <span class="n">obj1</span> <span class="o">=</span> <span class="n">randomObject</span><span class="o">&lt;</span><span class="n">VECTOR</span><span class="o">::</span><span class="n">value_type</span><span class="o">&gt;</span><span class="p">();</span>
+  <span class="n">VECTOR</span> <span class="n">v</span><span class="p">(</span><span class="n">random</span><span class="p">(</span><span class="mi">0U</span><span class="p">,</span> <span class="mi">100U</span><span class="p">),</span> <span class="n">obj1</span><span class="p">);</span>
+  <span class="n">FOR_EACH_RANGE</span> <span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">iters</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">v</span><span class="p">.</span><span class="n">empty</span><span class="p">())</span> <span class="k">continue</span><span class="p">;</span>
+    <span class="n">v</span><span class="p">.</span><span class="n">erase</span><span class="p">(</span><span class="n">v</span><span class="p">.</span><span class="n">begin</span><span class="p">());</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+<span class="n">BENCHMARK_PARAM</span><span class="p">(</span><span class="n">BENCHFUN</span><span class="p">(</span><span class="n">erase</span><span class="p">),</span> <span class="mi">1024</span><span class="p">);</span>
+
+</pre></div></td></tr>
+
+</tbody>
+</table>
+</div>
+
+</body>
+<script>docas={repo:"joekychen/folly",depth:2}</script>
+<script>document.write('<script src=' + ('__proto__' in {} ? 'http://cdnjs.cloudflare.com/ajax/libs/zepto/1.0rc1/zepto.min.js' : 'https://ajax.googleapis.com/ajax/libs/jquery/1.7.2/jquery.min.js')+'><\\/script>')</script>
+<script src="http://baoshan.github.com/moment/min/moment.min.js"></script>
+<script src="../../javascript/docco.min.js"></script>
+</html>

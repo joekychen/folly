@@ -1,0 +1,6 @@
+f | EventCount.h | s | 5.0K | 161 | Philip Pronin | philipp@fb.com | 1339180124 |  | folly::detail::futex should be inline  Summary: It breaks build.  Test Plan: will check *_try builds  Reviewed By: andrei.alexandrescu@fb.com  FB internal diff: D489935
+d | io |  | 7 items |  | Tudor Bosman | tudorb@fb.com | 1340830276 |  | Minor changes to folly/experimental/io  Reviewed By: philipp@fb.com  FB internal diff: D491952
+f | Bits.h | s | 3.1K | 111 | Jordan DeLong | jdelong@fb.com | 1338661169 |  | Pull from FB rev 63ce89e2f2301e6bba44a111cc7d4218022156f6
+f | TestUtil.cpp | s | 2.8K | 84 | Jordan DeLong | jdelong@fb.com | 1338661169 |  | Pull from FB rev 63ce89e2f2301e6bba44a111cc7d4218022156f6
+f | TestUtil.h | s | 1.7K | 54 | Jordan DeLong | jdelong@fb.com | 1338661169 |  | Pull from FB rev 63ce89e2f2301e6bba44a111cc7d4218022156f6
+d | test |  | 3 items |  | Tudor Bosman | tudorb@fb.com | 1339103497 |  | EventCount: "condition variable" for lock-free algorithms  Summary: This allows you to convert non-blocking lock-free algorithms into blocking versions.  See http://www.1024cores.net/home/lock-free-algorithms/eventcounts, http://software.intel.com/en-us/forums/showthread.php?t=62364, http://www.akkadia.org/drepper/futex.pdf  Test Plan: new test  Reviewed By: delong.j@fb.com  FB internal diff: D474570

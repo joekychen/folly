@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html><head><title>joekychen/folly » folly › test › GroupVarintTest.cpp
+
+</title>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+<meta name="generator" content="Docco">
+<link rel="stylesheet" media="all" href="../../stylesheets/docco.min.css" />
+
+
+</head>
+<body>
+<div id="container">
+<div id="background"></div>
+<table cellpadding="0" cellspacing="0">
+<thead><tr><th class="docs"><a id="home" href="../../index.html"></a><h1>GroupVarintTest.cpp</h1></th><th class="code"></th></tr></thead>
+<tbody>
+
+
+<tr id="section-1"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-1">&#182;</a></div></td><td class="code"><div class="highlight"><pre><span class="cm">/*</span>
+<span class="cm"> * Copyright 2012 Facebook, Inc.</span>
+<span class="cm"> *</span>
+<span class="cm"> * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span class="cm"> * you may not use this file except in compliance with the License.</span>
+<span class="cm"> * You may obtain a copy of the License at</span>
+<span class="cm"> *</span>
+<span class="cm"> *   http://www.apache.org/licenses/LICENSE-2.0</span>
+<span class="cm"> *</span>
+<span class="cm"> * Unless required by applicable law or agreed to in writing, software</span>
+<span class="cm"> * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span class="cm"> * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span class="cm"> * See the License for the specific language governing permissions and</span>
+<span class="cm"> * limitations under the License.</span>
+<span class="cm"> */</span>
+
+<span class="cp">#include &lt;stdarg.h&gt;</span>
+<span class="cp">#include &quot;folly/GroupVarint.h&quot;</span>
+
+<span class="cp">#include &lt;gtest/gtest.h&gt;</span>
+
+<span class="k">using</span> <span class="k">namespace</span> <span class="n">folly</span><span class="p">;</span>
+
+<span class="k">namespace</span> <span class="p">{</span>
+
+<span class="k">class</span> <span class="nc">StringAppender</span> <span class="p">{</span>
+ <span class="k">public</span><span class="o">:</span>
+  <span class="cm">/* implicit */</span> <span class="n">StringAppender</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="o">&amp;</span> <span class="n">s</span><span class="p">)</span> <span class="o">:</span> <span class="n">s_</span><span class="p">(</span><span class="n">s</span><span class="p">)</span> <span class="p">{</span> <span class="p">}</span>
+  <span class="kt">void</span> <span class="k">operator</span><span class="p">()(</span><span class="n">StringPiece</span> <span class="n">sp</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">s_</span><span class="p">.</span><span class="n">append</span><span class="p">(</span><span class="n">sp</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span> <span class="n">sp</span><span class="p">.</span><span class="n">size</span><span class="p">());</span>
+  <span class="p">}</span>
+ <span class="k">private</span><span class="o">:</span>
+  <span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="o">&amp;</span> <span class="n">s_</span><span class="p">;</span>
+<span class="p">};</span>
+
+<span class="k">typedef</span> <span class="n">GroupVarintEncoder</span><span class="o">&lt;</span><span class="n">uint32_t</span><span class="p">,</span> <span class="n">StringAppender</span><span class="o">&gt;</span> <span class="n">GroupVarint32Encoder</span><span class="p">;</span>
+<span class="k">typedef</span> <span class="n">GroupVarintEncoder</span><span class="o">&lt;</span><span class="n">uint64_t</span><span class="p">,</span> <span class="n">StringAppender</span><span class="o">&gt;</span> <span class="n">GroupVarint64Encoder</span><span class="p">;</span>
+<span class="k">typedef</span> <span class="n">GroupVarintDecoder</span><span class="o">&lt;</span><span class="n">uint32_t</span><span class="o">&gt;</span> <span class="n">GroupVarint32Decoder</span><span class="p">;</span>
+<span class="k">typedef</span> <span class="n">GroupVarintDecoder</span><span class="o">&lt;</span><span class="n">uint32_t</span><span class="o">&gt;</span> <span class="n">GroupVarint64Decoder</span><span class="p">;</span></pre></div></td></tr>
+
+
+<tr id="section-2"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-2">&#182;</a></div><p>Expected bytes follow, terminate with -1</p></td><td class="code"><div class="highlight"><pre><span class="kt">void</span> <span class="n">testGroupVarint32</span><span class="p">(</span><span class="n">uint32_t</span> <span class="n">a</span><span class="p">,</span> <span class="n">uint32_t</span> <span class="n">b</span><span class="p">,</span> <span class="n">uint32_t</span> <span class="n">c</span><span class="p">,</span> <span class="n">uint32_t</span> <span class="n">d</span><span class="p">,</span> <span class="p">...)</span> <span class="p">{</span>
+  <span class="n">va_list</span> <span class="n">ap</span><span class="p">;</span>
+  <span class="n">va_start</span><span class="p">(</span><span class="n">ap</span><span class="p">,</span> <span class="n">d</span><span class="p">);</span>
+  <span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="kt">char</span><span class="o">&gt;</span> <span class="n">expectedBytes</span><span class="p">;</span>
+  <span class="kt">int</span> <span class="n">byte</span><span class="p">;</span>
+  <span class="k">while</span> <span class="p">((</span><span class="n">byte</span> <span class="o">=</span> <span class="n">va_arg</span><span class="p">(</span><span class="n">ap</span><span class="p">,</span> <span class="kt">int</span><span class="p">))</span> <span class="o">!=</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">expectedBytes</span><span class="p">.</span><span class="n">push_back</span><span class="p">(</span><span class="n">byte</span><span class="p">);</span>
+  <span class="p">}</span>
+  <span class="n">va_end</span><span class="p">(</span><span class="n">ap</span><span class="p">);</span>
+
+  <span class="n">size_t</span> <span class="n">size</span> <span class="o">=</span> <span class="n">GroupVarint32</span><span class="o">::</span><span class="n">size</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">,</span> <span class="n">c</span><span class="p">,</span> <span class="n">d</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">expectedBytes</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="n">size</span><span class="p">);</span>
+
+  <span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="kt">char</span><span class="o">&gt;</span> <span class="n">foundBytes</span><span class="p">;</span>
+  <span class="n">foundBytes</span><span class="p">.</span><span class="n">resize</span><span class="p">(</span><span class="n">size</span> <span class="o">+</span> <span class="mi">4</span><span class="p">);</span>
+  <span class="kt">char</span><span class="o">*</span> <span class="n">start</span> <span class="o">=</span> <span class="o">&amp;</span><span class="p">(</span><span class="n">foundBytes</span><span class="p">.</span><span class="n">front</span><span class="p">());</span>
+  <span class="kt">char</span><span class="o">*</span> <span class="n">p</span> <span class="o">=</span> <span class="n">GroupVarint32</span><span class="o">::</span><span class="n">encode</span><span class="p">(</span><span class="n">start</span><span class="p">,</span> <span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">,</span> <span class="n">c</span><span class="p">,</span> <span class="n">d</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">((</span><span class="kt">void</span><span class="o">*</span><span class="p">)(</span><span class="n">start</span> <span class="o">+</span> <span class="n">size</span><span class="p">),</span> <span class="p">(</span><span class="kt">void</span><span class="o">*</span><span class="p">)</span><span class="n">p</span><span class="p">);</span>
+
+  <span class="k">for</span> <span class="p">(</span><span class="n">size_t</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">size</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mh">0xff</span> <span class="o">&amp;</span> <span class="n">expectedBytes</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="mh">0xff</span> <span class="o">&amp;</span> <span class="n">foundBytes</span><span class="p">[</span><span class="n">i</span><span class="p">]);</span>
+  <span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-3"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-3">&#182;</a></div><p>Test decoding</p></td><td class="code"><div class="highlight"><pre>  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">size</span><span class="p">,</span> <span class="n">GroupVarint32</span><span class="o">::</span><span class="n">encodedSize</span><span class="p">(</span><span class="n">start</span><span class="p">));</span>
+
+  <span class="n">uint32_t</span> <span class="n">fa</span><span class="p">,</span> <span class="n">fb</span><span class="p">,</span> <span class="n">fc</span><span class="p">,</span> <span class="n">fd</span><span class="p">;</span>
+  <span class="k">const</span> <span class="kt">char</span><span class="o">*</span> <span class="n">r</span> <span class="o">=</span> <span class="n">GroupVarint32</span><span class="o">::</span><span class="n">decode</span><span class="p">(</span><span class="n">start</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">fa</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">fb</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">fc</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">fd</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">((</span><span class="kt">void</span><span class="o">*</span><span class="p">)(</span><span class="n">start</span> <span class="o">+</span> <span class="n">size</span><span class="p">),</span> <span class="p">(</span><span class="kt">void</span><span class="o">*</span><span class="p">)</span><span class="n">r</span><span class="p">);</span>
+
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">fa</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">b</span><span class="p">,</span> <span class="n">fb</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">c</span><span class="p">,</span> <span class="n">fc</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">d</span><span class="p">,</span> <span class="n">fd</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="kt">void</span> <span class="n">testGroupVarint64</span><span class="p">(</span><span class="n">uint64_t</span> <span class="n">a</span><span class="p">,</span> <span class="n">uint64_t</span> <span class="n">b</span><span class="p">,</span> <span class="n">uint64_t</span> <span class="n">c</span><span class="p">,</span> <span class="n">uint64_t</span> <span class="n">d</span><span class="p">,</span>
+                       <span class="n">uint64_t</span> <span class="n">e</span><span class="p">,</span> <span class="p">...)</span> <span class="p">{</span>
+  <span class="n">va_list</span> <span class="n">ap</span><span class="p">;</span>
+  <span class="n">va_start</span><span class="p">(</span><span class="n">ap</span><span class="p">,</span> <span class="n">e</span><span class="p">);</span>
+  <span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="kt">char</span><span class="o">&gt;</span> <span class="n">expectedBytes</span><span class="p">;</span>
+  <span class="kt">int</span> <span class="n">byte</span><span class="p">;</span>
+  <span class="k">while</span> <span class="p">((</span><span class="n">byte</span> <span class="o">=</span> <span class="n">va_arg</span><span class="p">(</span><span class="n">ap</span><span class="p">,</span> <span class="kt">int</span><span class="p">))</span> <span class="o">!=</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">expectedBytes</span><span class="p">.</span><span class="n">push_back</span><span class="p">(</span><span class="n">byte</span><span class="p">);</span>
+  <span class="p">}</span>
+  <span class="n">va_end</span><span class="p">(</span><span class="n">ap</span><span class="p">);</span>
+
+  <span class="n">size_t</span> <span class="n">size</span> <span class="o">=</span> <span class="n">GroupVarint64</span><span class="o">::</span><span class="n">size</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">,</span> <span class="n">c</span><span class="p">,</span> <span class="n">d</span><span class="p">,</span> <span class="n">e</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">expectedBytes</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="n">size</span><span class="p">);</span>
+
+  <span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="kt">char</span><span class="o">&gt;</span> <span class="n">foundBytes</span><span class="p">;</span>
+  <span class="n">foundBytes</span><span class="p">.</span><span class="n">resize</span><span class="p">(</span><span class="n">size</span> <span class="o">+</span> <span class="mi">8</span><span class="p">);</span>
+  <span class="kt">char</span><span class="o">*</span> <span class="n">start</span> <span class="o">=</span> <span class="o">&amp;</span><span class="p">(</span><span class="n">foundBytes</span><span class="p">.</span><span class="n">front</span><span class="p">());</span>
+  <span class="kt">char</span><span class="o">*</span> <span class="n">p</span> <span class="o">=</span> <span class="n">GroupVarint64</span><span class="o">::</span><span class="n">encode</span><span class="p">(</span><span class="n">start</span><span class="p">,</span> <span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">,</span> <span class="n">c</span><span class="p">,</span> <span class="n">d</span><span class="p">,</span> <span class="n">e</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">((</span><span class="kt">void</span><span class="o">*</span><span class="p">)(</span><span class="n">start</span> <span class="o">+</span> <span class="n">size</span><span class="p">),</span> <span class="p">(</span><span class="kt">void</span><span class="o">*</span><span class="p">)</span><span class="n">p</span><span class="p">);</span>
+
+  <span class="k">for</span> <span class="p">(</span><span class="n">size_t</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">size</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mh">0xff</span> <span class="o">&amp;</span> <span class="n">expectedBytes</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="mh">0xff</span> <span class="o">&amp;</span> <span class="n">foundBytes</span><span class="p">[</span><span class="n">i</span><span class="p">]);</span>
+  <span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-4"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-4">&#182;</a></div><p>Test decoding</p></td><td class="code"><div class="highlight"><pre>  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">size</span><span class="p">,</span> <span class="n">GroupVarint64</span><span class="o">::</span><span class="n">encodedSize</span><span class="p">(</span><span class="n">start</span><span class="p">));</span>
+
+  <span class="n">uint64_t</span> <span class="n">fa</span><span class="p">,</span> <span class="n">fb</span><span class="p">,</span> <span class="n">fc</span><span class="p">,</span> <span class="n">fd</span><span class="p">,</span> <span class="n">fe</span><span class="p">;</span>
+  <span class="k">const</span> <span class="kt">char</span><span class="o">*</span> <span class="n">r</span> <span class="o">=</span> <span class="n">GroupVarint64</span><span class="o">::</span><span class="n">decode</span><span class="p">(</span><span class="n">start</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">fa</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">fb</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">fc</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">fd</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">fe</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">((</span><span class="kt">void</span><span class="o">*</span><span class="p">)(</span><span class="n">start</span> <span class="o">+</span> <span class="n">size</span><span class="p">),</span> <span class="p">(</span><span class="kt">void</span><span class="o">*</span><span class="p">)</span><span class="n">r</span><span class="p">);</span>
+
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">fa</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">b</span><span class="p">,</span> <span class="n">fb</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">c</span><span class="p">,</span> <span class="n">fc</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">d</span><span class="p">,</span> <span class="n">fd</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">e</span><span class="p">,</span> <span class="n">fe</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="p">}</span>  <span class="c1">// namespace</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">GroupVarint</span><span class="p">,</span> <span class="n">GroupVarint32</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">GroupVarint32</span><span class="o">::</span><span class="n">maxSize</span><span class="p">(</span><span class="mi">0</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="n">GroupVarint32</span><span class="o">::</span><span class="n">maxSize</span><span class="p">(</span><span class="mi">1</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">9</span><span class="p">,</span> <span class="n">GroupVarint32</span><span class="o">::</span><span class="n">maxSize</span><span class="p">(</span><span class="mi">2</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">13</span><span class="p">,</span> <span class="n">GroupVarint32</span><span class="o">::</span><span class="n">maxSize</span><span class="p">(</span><span class="mi">3</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">17</span><span class="p">,</span> <span class="n">GroupVarint32</span><span class="o">::</span><span class="n">maxSize</span><span class="p">(</span><span class="mi">4</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">22</span><span class="p">,</span> <span class="n">GroupVarint32</span><span class="o">::</span><span class="n">maxSize</span><span class="p">(</span><span class="mi">5</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">26</span><span class="p">,</span> <span class="n">GroupVarint32</span><span class="o">::</span><span class="n">maxSize</span><span class="p">(</span><span class="mi">6</span><span class="p">));</span>
+  <span class="n">testGroupVarint32</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span>
+                    <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">);</span>
+  <span class="n">testGroupVarint32</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span>
+                    <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">);</span>
+  <span class="n">testGroupVarint32</span><span class="p">(</span><span class="mi">1</span> <span class="o">&lt;&lt;</span> <span class="mi">8</span><span class="p">,</span> <span class="p">(</span><span class="mi">2</span> <span class="o">&lt;&lt;</span> <span class="mi">16</span><span class="p">)</span> <span class="o">+</span> <span class="mi">3</span><span class="p">,</span> <span class="p">(</span><span class="mi">4</span> <span class="o">&lt;&lt;</span> <span class="mi">24</span><span class="p">)</span> <span class="o">+</span> <span class="p">(</span><span class="mi">5</span> <span class="o">&lt;&lt;</span> <span class="mi">8</span><span class="p">)</span> <span class="o">+</span> <span class="mi">6</span><span class="p">,</span> <span class="mi">7</span><span class="p">,</span>
+                    <span class="mh">0x39</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">6</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">7</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">GroupVarint</span><span class="p">,</span> <span class="n">GroupVarint64</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">GroupVarint64</span><span class="o">::</span><span class="n">maxSize</span><span class="p">(</span><span class="mi">0</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="n">GroupVarint64</span><span class="o">::</span><span class="n">maxSize</span><span class="p">(</span><span class="mi">1</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">18</span><span class="p">,</span> <span class="n">GroupVarint64</span><span class="o">::</span><span class="n">maxSize</span><span class="p">(</span><span class="mi">2</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">26</span><span class="p">,</span> <span class="n">GroupVarint64</span><span class="o">::</span><span class="n">maxSize</span><span class="p">(</span><span class="mi">3</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">34</span><span class="p">,</span> <span class="n">GroupVarint64</span><span class="o">::</span><span class="n">maxSize</span><span class="p">(</span><span class="mi">4</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">42</span><span class="p">,</span> <span class="n">GroupVarint64</span><span class="o">::</span><span class="n">maxSize</span><span class="p">(</span><span class="mi">5</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">52</span><span class="p">,</span> <span class="n">GroupVarint64</span><span class="o">::</span><span class="n">maxSize</span><span class="p">(</span><span class="mi">6</span><span class="p">));</span>
+  <span class="n">testGroupVarint64</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span>
+                    <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">);</span>
+  <span class="n">testGroupVarint64</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span>
+                    <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">);</span>
+  <span class="n">testGroupVarint64</span><span class="p">(</span><span class="mi">1</span> <span class="o">&lt;&lt;</span> <span class="mi">8</span><span class="p">,</span> <span class="p">(</span><span class="mi">2</span> <span class="o">&lt;&lt;</span> <span class="mi">16</span><span class="p">)</span> <span class="o">+</span> <span class="mi">3</span><span class="p">,</span> <span class="p">(</span><span class="mi">4</span> <span class="o">&lt;&lt;</span> <span class="mi">24</span><span class="p">)</span> <span class="o">+</span> <span class="p">(</span><span class="mi">5</span> <span class="o">&lt;&lt;</span> <span class="mi">8</span><span class="p">)</span> <span class="o">+</span> <span class="mi">6</span><span class="p">,</span>
+                    <span class="p">(</span><span class="mi">7ULL</span> <span class="o">&lt;&lt;</span> <span class="mi">32</span><span class="p">)</span> <span class="o">+</span> <span class="p">(</span><span class="mi">8</span> <span class="o">&lt;&lt;</span> <span class="mi">16</span><span class="p">),</span>
+                    <span class="p">(</span><span class="mi">9ULL</span> <span class="o">&lt;&lt;</span> <span class="mi">56</span><span class="p">)</span> <span class="o">+</span> <span class="p">(</span><span class="mi">10ULL</span> <span class="o">&lt;&lt;</span> <span class="mi">40</span><span class="p">)</span> <span class="o">+</span> <span class="mi">11</span><span class="p">,</span>
+                    <span class="mh">0xd1</span><span class="p">,</span> <span class="mh">0x78</span><span class="p">,</span>
+                    <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span>
+                    <span class="mi">3</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span>
+                    <span class="mi">6</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span>
+                    <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">8</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">7</span><span class="p">,</span>
+                    <span class="mi">11</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">10</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">9</span><span class="p">,</span>
+                    <span class="o">-</span><span class="mi">1</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">GroupVarint</span><span class="p">,</span> <span class="n">GroupVarintEncoder</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">std</span><span class="o">::</span><span class="n">string</span> <span class="n">s</span><span class="p">;</span>
+  <span class="p">{</span>
+    <span class="n">GroupVarint32Encoder</span> <span class="n">gv</span><span class="p">(</span><span class="n">s</span><span class="p">);</span>
+    <span class="n">gv</span><span class="p">.</span><span class="n">add</span><span class="p">(</span><span class="mi">0</span><span class="p">);</span>
+    <span class="n">gv</span><span class="p">.</span><span class="n">finish</span><span class="p">();</span>
+  <span class="p">}</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="n">s</span><span class="p">.</span><span class="n">size</span><span class="p">());</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="p">(</span><span class="s">&quot;</span><span class="se">\x00\x00</span><span class="s">&quot;</span><span class="p">,</span> <span class="mi">2</span><span class="p">),</span> <span class="n">s</span><span class="p">);</span>
+  <span class="n">s</span><span class="p">.</span><span class="n">clear</span><span class="p">();</span>
+  <span class="p">{</span>
+    <span class="n">GroupVarint32Encoder</span> <span class="n">gv</span><span class="p">(</span><span class="n">s</span><span class="p">);</span>
+    <span class="n">gv</span><span class="p">.</span><span class="n">add</span><span class="p">(</span><span class="mi">1</span><span class="p">);</span>
+    <span class="n">gv</span><span class="p">.</span><span class="n">add</span><span class="p">(</span><span class="mi">2</span><span class="p">);</span>
+    <span class="n">gv</span><span class="p">.</span><span class="n">add</span><span class="p">(</span><span class="mi">3</span><span class="p">);</span>
+    <span class="n">gv</span><span class="p">.</span><span class="n">add</span><span class="p">(</span><span class="mi">4</span><span class="p">);</span>
+    <span class="n">gv</span><span class="p">.</span><span class="n">finish</span><span class="p">();</span>
+  <span class="p">}</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="n">s</span><span class="p">.</span><span class="n">size</span><span class="p">());</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="p">(</span><span class="s">&quot;</span><span class="se">\x00\x01\x02\x03\x04</span><span class="s">&quot;</span><span class="p">,</span> <span class="mi">5</span><span class="p">),</span> <span class="n">s</span><span class="p">);</span>
+<span class="p">}</span>
+
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">GroupVarint</span><span class="p">,</span> <span class="n">GroupVarintDecoder</span><span class="p">)</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-5"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-5">&#182;</a></div><p>Make sure we don't read out of bounds</p></td><td class="code"><div class="highlight"><pre>  <span class="n">std</span><span class="o">::</span><span class="n">string</span> <span class="n">padding</span><span class="p">(</span><span class="mi">17</span><span class="p">,</span> <span class="sc">&#39;X&#39;</span><span class="p">);</span>
+
+  <span class="p">{</span>
+    <span class="n">std</span><span class="o">::</span><span class="n">string</span> <span class="n">s</span><span class="p">(</span><span class="s">&quot;</span><span class="se">\x00\x00</span><span class="s">&quot;</span><span class="p">,</span> <span class="mi">2</span><span class="p">);</span>
+    <span class="n">s</span> <span class="o">+=</span> <span class="n">padding</span><span class="p">;</span>
+    <span class="n">StringPiece</span> <span class="n">p</span><span class="p">(</span><span class="n">s</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span> <span class="mi">2</span><span class="p">);</span>
+
+    <span class="n">GroupVarint32Decoder</span> <span class="n">gv</span><span class="p">(</span><span class="n">p</span><span class="p">);</span>
+    <span class="n">uint32_t</span> <span class="n">v</span><span class="p">;</span>
+    <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">gv</span><span class="p">.</span><span class="n">next</span><span class="p">(</span><span class="o">&amp;</span><span class="n">v</span><span class="p">));</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">v</span><span class="p">);</span>
+    <span class="n">EXPECT_FALSE</span><span class="p">(</span><span class="n">gv</span><span class="p">.</span><span class="n">next</span><span class="p">(</span><span class="o">&amp;</span><span class="n">v</span><span class="p">));</span>
+    <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">gv</span><span class="p">.</span><span class="n">rest</span><span class="p">().</span><span class="n">empty</span><span class="p">());</span>
+  <span class="p">}</span>
+
+  <span class="p">{</span>
+    <span class="n">std</span><span class="o">::</span><span class="n">string</span> <span class="n">s</span><span class="p">(</span><span class="s">&quot;</span><span class="se">\x00\x01\x02\x03\x04\x01\x02\x03\x04</span><span class="s">&quot;</span><span class="p">,</span> <span class="mi">9</span><span class="p">);</span>
+    <span class="n">s</span> <span class="o">+=</span> <span class="n">padding</span><span class="p">;</span>
+    <span class="n">StringPiece</span> <span class="n">p</span><span class="p">(</span><span class="n">s</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span> <span class="mi">9</span><span class="p">);</span>
+
+    <span class="n">GroupVarint32Decoder</span> <span class="n">gv</span><span class="p">(</span><span class="n">p</span><span class="p">);</span>
+    <span class="n">uint32_t</span> <span class="n">v</span><span class="p">;</span>
+    <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">gv</span><span class="p">.</span><span class="n">next</span><span class="p">(</span><span class="o">&amp;</span><span class="n">v</span><span class="p">));</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">v</span><span class="p">);</span>
+    <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">gv</span><span class="p">.</span><span class="n">next</span><span class="p">(</span><span class="o">&amp;</span><span class="n">v</span><span class="p">));</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="n">v</span><span class="p">);</span>
+    <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">gv</span><span class="p">.</span><span class="n">next</span><span class="p">(</span><span class="o">&amp;</span><span class="n">v</span><span class="p">));</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="n">v</span><span class="p">);</span>
+    <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">gv</span><span class="p">.</span><span class="n">next</span><span class="p">(</span><span class="o">&amp;</span><span class="n">v</span><span class="p">));</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="n">v</span><span class="p">);</span>
+    <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">gv</span><span class="p">.</span><span class="n">next</span><span class="p">(</span><span class="o">&amp;</span><span class="n">v</span><span class="p">));</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mh">0x0302</span><span class="p">,</span> <span class="n">v</span><span class="p">);</span>
+    <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">gv</span><span class="p">.</span><span class="n">next</span><span class="p">(</span><span class="o">&amp;</span><span class="n">v</span><span class="p">));</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="n">v</span><span class="p">);</span>
+    <span class="n">EXPECT_FALSE</span><span class="p">(</span><span class="n">gv</span><span class="p">.</span><span class="n">next</span><span class="p">(</span><span class="o">&amp;</span><span class="n">v</span><span class="p">));</span>
+    <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">gv</span><span class="p">.</span><span class="n">rest</span><span class="p">().</span><span class="n">empty</span><span class="p">());</span>
+  <span class="p">}</span>
+
+  <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-6"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-6">&#182;</a></div><p>Limit max count when reading a full block</p></td><td class="code"><div class="highlight"><pre>    <span class="n">std</span><span class="o">::</span><span class="n">string</span> <span class="n">s</span><span class="p">(</span><span class="s">&quot;</span><span class="se">\x00\x01\x02\x03\x04\x01\x02\x03\x04</span><span class="s">&quot;</span><span class="p">,</span> <span class="mi">9</span><span class="p">);</span>
+    <span class="n">s</span> <span class="o">+=</span> <span class="n">padding</span><span class="p">;</span>
+    <span class="n">StringPiece</span> <span class="n">p</span><span class="p">(</span><span class="n">s</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span> <span class="mi">9</span><span class="p">);</span>
+
+    <span class="n">GroupVarint32Decoder</span> <span class="n">gv</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="mi">3</span><span class="p">);</span>
+    <span class="n">uint32_t</span> <span class="n">v</span><span class="p">;</span>
+    <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">gv</span><span class="p">.</span><span class="n">next</span><span class="p">(</span><span class="o">&amp;</span><span class="n">v</span><span class="p">));</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">v</span><span class="p">);</span>
+    <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">gv</span><span class="p">.</span><span class="n">next</span><span class="p">(</span><span class="o">&amp;</span><span class="n">v</span><span class="p">));</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="n">v</span><span class="p">);</span>
+    <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">gv</span><span class="p">.</span><span class="n">next</span><span class="p">(</span><span class="o">&amp;</span><span class="n">v</span><span class="p">));</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="n">v</span><span class="p">);</span>
+    <span class="n">EXPECT_FALSE</span><span class="p">(</span><span class="n">gv</span><span class="p">.</span><span class="n">next</span><span class="p">(</span><span class="o">&amp;</span><span class="n">v</span><span class="p">));</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="p">(</span><span class="s">&quot;</span><span class="se">\x04\x01\x02\x03\x04</span><span class="s">&quot;</span><span class="p">,</span> <span class="mi">5</span><span class="p">),</span> <span class="n">gv</span><span class="p">.</span><span class="n">rest</span><span class="p">().</span><span class="n">toString</span><span class="p">());</span>
+  <span class="p">}</span>
+
+  <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-7"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-7">&#182;</a></div><p>Limit max count when reading a partial block</p></td><td class="code"><div class="highlight"><pre>    <span class="n">std</span><span class="o">::</span><span class="n">string</span> <span class="n">s</span><span class="p">(</span><span class="s">&quot;</span><span class="se">\x00\x01\x02\x03\x04\x01\x02\x03\x04</span><span class="s">&quot;</span><span class="p">,</span> <span class="mi">9</span><span class="p">);</span>
+    <span class="n">s</span> <span class="o">+=</span> <span class="n">padding</span><span class="p">;</span>
+    <span class="n">StringPiece</span> <span class="n">p</span><span class="p">(</span><span class="n">s</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span> <span class="mi">9</span><span class="p">);</span>
+
+    <span class="n">GroupVarint32Decoder</span> <span class="n">gv</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="mi">5</span><span class="p">);</span>
+    <span class="n">uint32_t</span> <span class="n">v</span><span class="p">;</span>
+    <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">gv</span><span class="p">.</span><span class="n">next</span><span class="p">(</span><span class="o">&amp;</span><span class="n">v</span><span class="p">));</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">v</span><span class="p">);</span>
+    <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">gv</span><span class="p">.</span><span class="n">next</span><span class="p">(</span><span class="o">&amp;</span><span class="n">v</span><span class="p">));</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="n">v</span><span class="p">);</span>
+    <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">gv</span><span class="p">.</span><span class="n">next</span><span class="p">(</span><span class="o">&amp;</span><span class="n">v</span><span class="p">));</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="n">v</span><span class="p">);</span>
+    <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">gv</span><span class="p">.</span><span class="n">next</span><span class="p">(</span><span class="o">&amp;</span><span class="n">v</span><span class="p">));</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="n">v</span><span class="p">);</span>
+    <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">gv</span><span class="p">.</span><span class="n">next</span><span class="p">(</span><span class="o">&amp;</span><span class="n">v</span><span class="p">));</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mh">0x0302</span><span class="p">,</span> <span class="n">v</span><span class="p">);</span>
+    <span class="n">EXPECT_FALSE</span><span class="p">(</span><span class="n">gv</span><span class="p">.</span><span class="n">next</span><span class="p">(</span><span class="o">&amp;</span><span class="n">v</span><span class="p">));</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="p">(</span><span class="s">&quot;</span><span class="se">\x04</span><span class="s">&quot;</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="n">gv</span><span class="p">.</span><span class="n">rest</span><span class="p">().</span><span class="n">toString</span><span class="p">());</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+</pre></div></td></tr>
+
+</tbody>
+</table>
+</div>
+
+</body>
+<script>docas={repo:"joekychen/folly",depth:2}</script>
+<script>document.write('<script src=' + ('__proto__' in {} ? 'http://cdnjs.cloudflare.com/ajax/libs/zepto/1.0rc1/zepto.min.js' : 'https://ajax.googleapis.com/ajax/libs/jquery/1.7.2/jquery.min.js')+'><\\/script>')</script>
+<script src="http://baoshan.github.com/moment/min/moment.min.js"></script>
+<script src="../../javascript/docco.min.js"></script>
+</html>

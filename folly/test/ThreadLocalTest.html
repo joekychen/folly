@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html><head><title>joekychen/folly » folly › test › ThreadLocalTest.cpp
+
+</title>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+<meta name="generator" content="Docco">
+<link rel="stylesheet" media="all" href="../../stylesheets/docco.min.css" />
+
+
+</head>
+<body>
+<div id="container">
+<div id="background"></div>
+<table cellpadding="0" cellspacing="0">
+<thead><tr><th class="docs"><a id="home" href="../../index.html"></a><h1>ThreadLocalTest.cpp</h1></th><th class="code"></th></tr></thead>
+<tbody>
+
+
+<tr id="section-1"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-1">&#182;</a></div></td><td class="code"><div class="highlight"><pre><span class="cm">/*</span>
+<span class="cm"> * Copyright 2012 Facebook, Inc.</span>
+<span class="cm"> *</span>
+<span class="cm"> * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span class="cm"> * you may not use this file except in compliance with the License.</span>
+<span class="cm"> * You may obtain a copy of the License at</span>
+<span class="cm"> *</span>
+<span class="cm"> *   http://www.apache.org/licenses/LICENSE-2.0</span>
+<span class="cm"> *</span>
+<span class="cm"> * Unless required by applicable law or agreed to in writing, software</span>
+<span class="cm"> * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span class="cm"> * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span class="cm"> * See the License for the specific language governing permissions and</span>
+<span class="cm"> * limitations under the License.</span>
+<span class="cm"> */</span>
+
+<span class="cp">#include &quot;folly/ThreadLocal.h&quot;</span>
+
+<span class="cp">#include &lt;map&gt;</span>
+<span class="cp">#include &lt;unordered_map&gt;</span>
+<span class="cp">#include &lt;set&gt;</span>
+<span class="cp">#include &lt;atomic&gt;</span>
+<span class="cp">#include &lt;mutex&gt;</span>
+<span class="cp">#include &lt;condition_variable&gt;</span>
+<span class="cp">#include &lt;thread&gt;</span>
+<span class="cp">#include &lt;boost/thread/tss.hpp&gt;</span>
+<span class="cp">#include &lt;gtest/gtest.h&gt;</span>
+<span class="cp">#include &lt;gflags/gflags.h&gt;</span>
+<span class="cp">#include &lt;glog/logging.h&gt;</span>
+<span class="cp">#include &quot;folly/Benchmark.h&quot;</span>
+
+<span class="k">using</span> <span class="k">namespace</span> <span class="n">folly</span><span class="p">;</span>
+
+<span class="k">struct</span> <span class="n">Widget</span> <span class="p">{</span>
+  <span class="k">static</span> <span class="kt">int</span> <span class="n">totalVal_</span><span class="p">;</span>
+  <span class="kt">int</span> <span class="n">val_</span><span class="p">;</span>
+  <span class="o">~</span><span class="n">Widget</span><span class="p">()</span> <span class="p">{</span>
+    <span class="n">totalVal_</span> <span class="o">+=</span> <span class="n">val_</span><span class="p">;</span>
+  <span class="p">}</span>
+
+  <span class="k">static</span> <span class="kt">void</span> <span class="n">customDeleter</span><span class="p">(</span><span class="n">Widget</span><span class="o">*</span> <span class="n">w</span><span class="p">,</span> <span class="n">TLPDestructionMode</span> <span class="n">mode</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">totalVal_</span> <span class="o">+=</span> <span class="p">(</span><span class="n">mode</span> <span class="o">==</span> <span class="n">TLPDestructionMode</span><span class="o">::</span><span class="n">ALL_THREADS</span><span class="p">)</span> <span class="o">*</span> <span class="mi">1000</span><span class="p">;</span>
+    <span class="k">delete</span> <span class="n">w</span><span class="p">;</span>
+  <span class="p">}</span>
+<span class="p">};</span>
+<span class="kt">int</span> <span class="n">Widget</span><span class="o">::</span><span class="n">totalVal_</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">ThreadLocalPtr</span><span class="p">,</span> <span class="n">BasicDestructor</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">Widget</span><span class="o">::</span><span class="n">totalVal_</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+  <span class="n">ThreadLocalPtr</span><span class="o">&lt;</span><span class="n">Widget</span><span class="o">&gt;</span> <span class="n">w</span><span class="p">;</span>
+  <span class="n">std</span><span class="o">::</span><span class="kr">thread</span><span class="p">([</span><span class="o">&amp;</span><span class="n">w</span><span class="p">]()</span> <span class="p">{</span>
+      <span class="n">w</span><span class="p">.</span><span class="n">reset</span><span class="p">(</span><span class="k">new</span> <span class="n">Widget</span><span class="p">());</span>
+      <span class="n">w</span><span class="p">.</span><span class="n">get</span><span class="p">()</span><span class="o">-&gt;</span><span class="n">val_</span> <span class="o">+=</span> <span class="mi">10</span><span class="p">;</span>
+    <span class="p">}).</span><span class="n">join</span><span class="p">();</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="n">Widget</span><span class="o">::</span><span class="n">totalVal_</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">ThreadLocalPtr</span><span class="p">,</span> <span class="n">CustomDeleter1</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">Widget</span><span class="o">::</span><span class="n">totalVal_</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+  <span class="p">{</span>
+    <span class="n">ThreadLocalPtr</span><span class="o">&lt;</span><span class="n">Widget</span><span class="o">&gt;</span> <span class="n">w</span><span class="p">;</span>
+    <span class="n">std</span><span class="o">::</span><span class="kr">thread</span><span class="p">([</span><span class="o">&amp;</span><span class="n">w</span><span class="p">]()</span> <span class="p">{</span>
+        <span class="n">w</span><span class="p">.</span><span class="n">reset</span><span class="p">(</span><span class="k">new</span> <span class="n">Widget</span><span class="p">(),</span> <span class="n">Widget</span><span class="o">::</span><span class="n">customDeleter</span><span class="p">);</span>
+        <span class="n">w</span><span class="p">.</span><span class="n">get</span><span class="p">()</span><span class="o">-&gt;</span><span class="n">val_</span> <span class="o">+=</span> <span class="mi">10</span><span class="p">;</span>
+      <span class="p">}).</span><span class="n">join</span><span class="p">();</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="n">Widget</span><span class="o">::</span><span class="n">totalVal_</span><span class="p">);</span>
+  <span class="p">}</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="n">Widget</span><span class="o">::</span><span class="n">totalVal_</span><span class="p">);</span>
+<span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-2"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-2">&#182;</a></div><p>Test deleting the ThreadLocalPtr object</p></td><td class="code"><div class="highlight"><pre><span class="n">TEST</span><span class="p">(</span><span class="n">ThreadLocalPtr</span><span class="p">,</span> <span class="n">CustomDeleter2</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">Widget</span><span class="o">::</span><span class="n">totalVal_</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+  <span class="n">std</span><span class="o">::</span><span class="kr">thread</span> <span class="n">t</span><span class="p">;</span>
+  <span class="n">std</span><span class="o">::</span><span class="n">mutex</span> <span class="n">mutex</span><span class="p">;</span>
+  <span class="n">std</span><span class="o">::</span><span class="n">condition_variable</span> <span class="n">cv</span><span class="p">;</span>
+  <span class="k">enum</span> <span class="k">class</span> <span class="nc">State</span> <span class="p">{</span>
+    <span class="n">START</span><span class="p">,</span>
+    <span class="n">DONE</span><span class="p">,</span>
+    <span class="n">EXIT</span>
+  <span class="p">};</span>
+  <span class="n">State</span> <span class="n">state</span> <span class="o">=</span> <span class="n">State</span><span class="o">::</span><span class="n">START</span><span class="p">;</span>
+  <span class="p">{</span>
+    <span class="n">ThreadLocalPtr</span><span class="o">&lt;</span><span class="n">Widget</span><span class="o">&gt;</span> <span class="n">w</span><span class="p">;</span>
+    <span class="n">t</span> <span class="o">=</span> <span class="n">std</span><span class="o">::</span><span class="kr">thread</span><span class="p">([</span><span class="o">&amp;</span><span class="p">]()</span> <span class="p">{</span>
+        <span class="n">w</span><span class="p">.</span><span class="n">reset</span><span class="p">(</span><span class="k">new</span> <span class="n">Widget</span><span class="p">(),</span> <span class="n">Widget</span><span class="o">::</span><span class="n">customDeleter</span><span class="p">);</span>
+        <span class="n">w</span><span class="p">.</span><span class="n">get</span><span class="p">()</span><span class="o">-&gt;</span><span class="n">val_</span> <span class="o">+=</span> <span class="mi">10</span><span class="p">;</span></pre></div></td></tr>
+
+
+<tr id="section-3"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-3">&#182;</a></div><p>Notify main thread that we're done</p></td><td class="code"><div class="highlight"><pre>        <span class="p">{</span>
+          <span class="n">std</span><span class="o">::</span><span class="n">unique_lock</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">mutex</span><span class="o">&gt;</span> <span class="n">lock</span><span class="p">(</span><span class="n">mutex</span><span class="p">);</span>
+          <span class="n">state</span> <span class="o">=</span> <span class="n">State</span><span class="o">::</span><span class="n">DONE</span><span class="p">;</span>
+          <span class="n">cv</span><span class="p">.</span><span class="n">notify_all</span><span class="p">();</span>
+        <span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-4"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-4">&#182;</a></div><p>Wait for main thread to allow us to exit</p></td><td class="code"><div class="highlight"><pre>        <span class="p">{</span>
+          <span class="n">std</span><span class="o">::</span><span class="n">unique_lock</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">mutex</span><span class="o">&gt;</span> <span class="n">lock</span><span class="p">(</span><span class="n">mutex</span><span class="p">);</span>
+          <span class="k">while</span> <span class="p">(</span><span class="n">state</span> <span class="o">!=</span> <span class="n">State</span><span class="o">::</span><span class="n">EXIT</span><span class="p">)</span> <span class="p">{</span>
+            <span class="n">cv</span><span class="p">.</span><span class="n">wait</span><span class="p">(</span><span class="n">lock</span><span class="p">);</span>
+          <span class="p">}</span>
+        <span class="p">}</span>
+    <span class="p">});</span></pre></div></td></tr>
+
+
+<tr id="section-5"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-5">&#182;</a></div><p>Wait for main thread to start (and set w.get()->val_)</p></td><td class="code"><div class="highlight"><pre>    <span class="p">{</span>
+      <span class="n">std</span><span class="o">::</span><span class="n">unique_lock</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">mutex</span><span class="o">&gt;</span> <span class="n">lock</span><span class="p">(</span><span class="n">mutex</span><span class="p">);</span>
+      <span class="k">while</span> <span class="p">(</span><span class="n">state</span> <span class="o">!=</span> <span class="n">State</span><span class="o">::</span><span class="n">DONE</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">cv</span><span class="p">.</span><span class="n">wait</span><span class="p">(</span><span class="n">lock</span><span class="p">);</span>
+      <span class="p">}</span>
+    <span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-6"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-6">&#182;</a></div><p>Thread started but hasn't exited yet</p></td><td class="code"><div class="highlight"><pre>    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">Widget</span><span class="o">::</span><span class="n">totalVal_</span><span class="p">);</span></pre></div></td></tr>
+
+
+<tr id="section-7"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-7">&#182;</a></div><p>Destroy ThreadLocalPtr<Widget> (by letting it go out of scope)</p></td><td class="code"><div class="highlight"><pre>  <span class="p">}</span>
+
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">1010</span><span class="p">,</span> <span class="n">Widget</span><span class="o">::</span><span class="n">totalVal_</span><span class="p">);</span></pre></div></td></tr>
+
+
+<tr id="section-8"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-8">&#182;</a></div><p>Allow thread to exit</p></td><td class="code"><div class="highlight"><pre>  <span class="p">{</span>
+    <span class="n">std</span><span class="o">::</span><span class="n">unique_lock</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">mutex</span><span class="o">&gt;</span> <span class="n">lock</span><span class="p">(</span><span class="n">mutex</span><span class="p">);</span>
+    <span class="n">state</span> <span class="o">=</span> <span class="n">State</span><span class="o">::</span><span class="n">EXIT</span><span class="p">;</span>
+    <span class="n">cv</span><span class="p">.</span><span class="n">notify_all</span><span class="p">();</span>
+  <span class="p">}</span>
+  <span class="n">t</span><span class="p">.</span><span class="n">join</span><span class="p">();</span>
+
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">1010</span><span class="p">,</span> <span class="n">Widget</span><span class="o">::</span><span class="n">totalVal_</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">ThreadLocal</span><span class="p">,</span> <span class="n">BasicDestructor</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">Widget</span><span class="o">::</span><span class="n">totalVal_</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+  <span class="n">ThreadLocal</span><span class="o">&lt;</span><span class="n">Widget</span><span class="o">&gt;</span> <span class="n">w</span><span class="p">;</span>
+  <span class="n">std</span><span class="o">::</span><span class="kr">thread</span><span class="p">([</span><span class="o">&amp;</span><span class="n">w</span><span class="p">]()</span> <span class="p">{</span> <span class="n">w</span><span class="o">-&gt;</span><span class="n">val_</span> <span class="o">+=</span> <span class="mi">10</span><span class="p">;</span> <span class="p">}).</span><span class="n">join</span><span class="p">();</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="n">Widget</span><span class="o">::</span><span class="n">totalVal_</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">ThreadLocal</span><span class="p">,</span> <span class="n">SimpleRepeatDestructor</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">Widget</span><span class="o">::</span><span class="n">totalVal_</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+  <span class="p">{</span>
+    <span class="n">ThreadLocal</span><span class="o">&lt;</span><span class="n">Widget</span><span class="o">&gt;</span> <span class="n">w</span><span class="p">;</span>
+    <span class="n">w</span><span class="o">-&gt;</span><span class="n">val_</span> <span class="o">+=</span> <span class="mi">10</span><span class="p">;</span>
+  <span class="p">}</span>
+  <span class="p">{</span>
+    <span class="n">ThreadLocal</span><span class="o">&lt;</span><span class="n">Widget</span><span class="o">&gt;</span> <span class="n">w</span><span class="p">;</span>
+    <span class="n">w</span><span class="o">-&gt;</span><span class="n">val_</span> <span class="o">+=</span> <span class="mi">10</span><span class="p">;</span>
+  <span class="p">}</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">20</span><span class="p">,</span> <span class="n">Widget</span><span class="o">::</span><span class="n">totalVal_</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">ThreadLocal</span><span class="p">,</span> <span class="n">InterleavedDestructors</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">Widget</span><span class="o">::</span><span class="n">totalVal_</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+  <span class="n">ThreadLocal</span><span class="o">&lt;</span><span class="n">Widget</span><span class="o">&gt;*</span> <span class="n">w</span> <span class="o">=</span> <span class="nb">NULL</span><span class="p">;</span>
+  <span class="kt">int</span> <span class="n">wVersion</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+  <span class="k">const</span> <span class="kt">int</span> <span class="n">wVersionMax</span> <span class="o">=</span> <span class="mi">2</span><span class="p">;</span>
+  <span class="kt">int</span> <span class="n">thIter</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+  <span class="n">std</span><span class="o">::</span><span class="n">mutex</span> <span class="n">lock</span><span class="p">;</span>
+  <span class="k">auto</span> <span class="n">th</span> <span class="o">=</span> <span class="n">std</span><span class="o">::</span><span class="kr">thread</span><span class="p">([</span><span class="o">&amp;</span><span class="p">]()</span> <span class="p">{</span>
+    <span class="kt">int</span> <span class="n">wVersionPrev</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+    <span class="k">while</span> <span class="p">(</span><span class="kc">true</span><span class="p">)</span> <span class="p">{</span>
+      <span class="k">while</span> <span class="p">(</span><span class="kc">true</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">std</span><span class="o">::</span><span class="n">lock_guard</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">mutex</span><span class="o">&gt;</span> <span class="n">g</span><span class="p">(</span><span class="n">lock</span><span class="p">);</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">wVersion</span> <span class="o">&gt;</span> <span class="n">wVersionMax</span><span class="p">)</span> <span class="p">{</span>
+          <span class="k">return</span><span class="p">;</span>
+        <span class="p">}</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">wVersion</span> <span class="o">&gt;</span> <span class="n">wVersionPrev</span><span class="p">)</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-9"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-9">&#182;</a></div><p>We have a new version of w, so it should be initialized to zero</p></td><td class="code"><div class="highlight"><pre>          <span class="n">EXPECT_EQ</span><span class="p">((</span><span class="o">*</span><span class="n">w</span><span class="p">)</span><span class="o">-&gt;</span><span class="n">val_</span><span class="p">,</span> <span class="mi">0</span><span class="p">);</span>
+          <span class="k">break</span><span class="p">;</span>
+        <span class="p">}</span>
+      <span class="p">}</span>
+      <span class="n">std</span><span class="o">::</span><span class="n">lock_guard</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">mutex</span><span class="o">&gt;</span> <span class="n">g</span><span class="p">(</span><span class="n">lock</span><span class="p">);</span>
+      <span class="n">wVersionPrev</span> <span class="o">=</span> <span class="n">wVersion</span><span class="p">;</span>
+      <span class="p">(</span><span class="o">*</span><span class="n">w</span><span class="p">)</span><span class="o">-&gt;</span><span class="n">val_</span> <span class="o">+=</span> <span class="mi">10</span><span class="p">;</span>
+      <span class="o">++</span><span class="n">thIter</span><span class="p">;</span>
+    <span class="p">}</span>
+  <span class="p">});</span>
+  <span class="n">FOR_EACH_RANGE</span><span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">wVersionMax</span><span class="p">)</span> <span class="p">{</span>
+    <span class="kt">int</span> <span class="n">thIterPrev</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+    <span class="p">{</span>
+      <span class="n">std</span><span class="o">::</span><span class="n">lock_guard</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">mutex</span><span class="o">&gt;</span> <span class="n">g</span><span class="p">(</span><span class="n">lock</span><span class="p">);</span>
+      <span class="n">thIterPrev</span> <span class="o">=</span> <span class="n">thIter</span><span class="p">;</span>
+      <span class="k">delete</span> <span class="n">w</span><span class="p">;</span>
+      <span class="n">w</span> <span class="o">=</span> <span class="k">new</span> <span class="n">ThreadLocal</span><span class="o">&lt;</span><span class="n">Widget</span><span class="o">&gt;</span><span class="p">();</span>
+      <span class="o">++</span><span class="n">wVersion</span><span class="p">;</span>
+    <span class="p">}</span>
+    <span class="k">while</span> <span class="p">(</span><span class="kc">true</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">std</span><span class="o">::</span><span class="n">lock_guard</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">mutex</span><span class="o">&gt;</span> <span class="n">g</span><span class="p">(</span><span class="n">lock</span><span class="p">);</span>
+      <span class="k">if</span> <span class="p">(</span><span class="n">thIter</span> <span class="o">&gt;</span> <span class="n">thIterPrev</span><span class="p">)</span> <span class="p">{</span>
+        <span class="k">break</span><span class="p">;</span>
+      <span class="p">}</span>
+    <span class="p">}</span>
+  <span class="p">}</span>
+  <span class="p">{</span>
+    <span class="n">std</span><span class="o">::</span><span class="n">lock_guard</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">mutex</span><span class="o">&gt;</span> <span class="n">g</span><span class="p">(</span><span class="n">lock</span><span class="p">);</span>
+    <span class="n">wVersion</span> <span class="o">=</span> <span class="n">wVersionMax</span> <span class="o">+</span> <span class="mi">1</span><span class="p">;</span>
+  <span class="p">}</span>
+  <span class="n">th</span><span class="p">.</span><span class="n">join</span><span class="p">();</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">wVersionMax</span> <span class="o">*</span> <span class="mi">10</span><span class="p">,</span> <span class="n">Widget</span><span class="o">::</span><span class="n">totalVal_</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="k">class</span> <span class="nc">SimpleThreadCachedInt</span> <span class="p">{</span>
+
+  <span class="k">class</span> <span class="nc">NewTag</span><span class="p">;</span>
+  <span class="n">ThreadLocal</span><span class="o">&lt;</span><span class="kt">int</span><span class="p">,</span><span class="n">NewTag</span><span class="o">&gt;</span> <span class="n">val_</span><span class="p">;</span>
+
+ <span class="k">public</span><span class="o">:</span>
+  <span class="kt">void</span> <span class="n">add</span><span class="p">(</span><span class="kt">int</span> <span class="n">val</span><span class="p">)</span> <span class="p">{</span>
+    <span class="o">*</span><span class="n">val_</span> <span class="o">+=</span> <span class="n">val</span><span class="p">;</span>
+  <span class="p">}</span>
+
+  <span class="kt">int</span> <span class="n">read</span><span class="p">()</span> <span class="p">{</span>
+    <span class="kt">int</span> <span class="n">ret</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+    <span class="k">for</span> <span class="p">(</span><span class="k">const</span> <span class="k">auto</span><span class="o">&amp;</span> <span class="n">i</span> <span class="o">:</span> <span class="n">val_</span><span class="p">.</span><span class="n">accessAllThreads</span><span class="p">())</span> <span class="p">{</span>
+      <span class="n">ret</span> <span class="o">+=</span> <span class="n">i</span><span class="p">;</span>
+    <span class="p">}</span>
+    <span class="k">return</span> <span class="n">ret</span><span class="p">;</span>
+  <span class="p">}</span>
+<span class="p">};</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">ThreadLocalPtr</span><span class="p">,</span> <span class="n">AccessAllThreadsCounter</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">const</span> <span class="kt">int</span> <span class="n">kNumThreads</span> <span class="o">=</span> <span class="mi">10</span><span class="p">;</span>
+  <span class="n">SimpleThreadCachedInt</span> <span class="n">stci</span><span class="p">;</span>
+  <span class="n">std</span><span class="o">::</span><span class="n">atomic</span><span class="o">&lt;</span><span class="kt">bool</span><span class="o">&gt;</span> <span class="n">run</span><span class="p">(</span><span class="kc">true</span><span class="p">);</span>
+  <span class="n">std</span><span class="o">::</span><span class="n">atomic</span><span class="o">&lt;</span><span class="kt">int</span><span class="o">&gt;</span> <span class="n">totalAtomic</span><span class="p">(</span><span class="mi">0</span><span class="p">);</span>
+  <span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="kr">thread</span><span class="o">&gt;</span> <span class="n">threads</span><span class="p">;</span>
+  <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">kNumThreads</span><span class="p">;</span> <span class="o">++</span><span class="n">i</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">threads</span><span class="p">.</span><span class="n">push_back</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="kr">thread</span><span class="p">([</span><span class="o">&amp;</span><span class="p">,</span><span class="n">i</span><span class="p">]()</span> <span class="p">{</span>
+      <span class="n">stci</span><span class="p">.</span><span class="n">add</span><span class="p">(</span><span class="mi">1</span><span class="p">);</span>
+      <span class="n">totalAtomic</span><span class="p">.</span><span class="n">fetch_add</span><span class="p">(</span><span class="mi">1</span><span class="p">);</span>
+      <span class="k">while</span> <span class="p">(</span><span class="n">run</span><span class="p">.</span><span class="n">load</span><span class="p">())</span> <span class="p">{</span> <span class="n">usleep</span><span class="p">(</span><span class="mi">100</span><span class="p">);</span> <span class="p">}</span>
+    <span class="p">}));</span>
+  <span class="p">}</span>
+  <span class="k">while</span> <span class="p">(</span><span class="n">totalAtomic</span><span class="p">.</span><span class="n">load</span><span class="p">()</span> <span class="o">!=</span> <span class="n">kNumThreads</span><span class="p">)</span> <span class="p">{</span> <span class="n">usleep</span><span class="p">(</span><span class="mi">100</span><span class="p">);</span> <span class="p">}</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">kNumThreads</span><span class="p">,</span> <span class="n">stci</span><span class="p">.</span><span class="n">read</span><span class="p">());</span>
+  <span class="n">run</span><span class="p">.</span><span class="n">store</span><span class="p">(</span><span class="kc">false</span><span class="p">);</span>
+  <span class="k">for</span> <span class="p">(</span><span class="k">auto</span><span class="o">&amp;</span> <span class="n">t</span> <span class="o">:</span> <span class="n">threads</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">t</span><span class="p">.</span><span class="n">join</span><span class="p">();</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">ThreadLocal</span><span class="p">,</span> <span class="n">resetNull</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">ThreadLocal</span><span class="o">&lt;</span><span class="kt">int</span><span class="o">&gt;</span> <span class="n">tl</span><span class="p">;</span>
+  <span class="n">tl</span><span class="p">.</span><span class="n">reset</span><span class="p">(</span><span class="k">new</span> <span class="kt">int</span><span class="p">(</span><span class="mi">4</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="o">*</span><span class="n">tl</span><span class="p">.</span><span class="n">get</span><span class="p">(),</span> <span class="mi">4</span><span class="p">);</span>
+  <span class="n">tl</span><span class="p">.</span><span class="n">reset</span><span class="p">();</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="o">*</span><span class="n">tl</span><span class="p">.</span><span class="n">get</span><span class="p">(),</span> <span class="mi">0</span><span class="p">);</span>
+  <span class="n">tl</span><span class="p">.</span><span class="n">reset</span><span class="p">(</span><span class="k">new</span> <span class="kt">int</span><span class="p">(</span><span class="mi">5</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="o">*</span><span class="n">tl</span><span class="p">.</span><span class="n">get</span><span class="p">(),</span> <span class="mi">5</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="k">namespace</span> <span class="p">{</span>
+<span class="k">struct</span> <span class="n">Tag</span> <span class="p">{};</span>
+
+<span class="k">struct</span> <span class="n">Foo</span> <span class="p">{</span>
+  <span class="n">folly</span><span class="o">::</span><span class="n">ThreadLocal</span><span class="o">&lt;</span><span class="kt">int</span><span class="p">,</span> <span class="n">Tag</span><span class="o">&gt;</span> <span class="n">tl</span><span class="p">;</span>
+<span class="p">};</span>
+<span class="p">}</span>  <span class="c1">// namespace</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">ThreadLocal</span><span class="p">,</span> <span class="n">Movable1</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">Foo</span> <span class="n">a</span><span class="p">;</span>
+  <span class="n">Foo</span> <span class="n">b</span><span class="p">;</span>
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">a</span><span class="p">.</span><span class="n">tl</span><span class="p">.</span><span class="n">get</span><span class="p">()</span> <span class="o">!=</span> <span class="n">b</span><span class="p">.</span><span class="n">tl</span><span class="p">.</span><span class="n">get</span><span class="p">());</span>
+
+  <span class="n">a</span> <span class="o">=</span> <span class="n">Foo</span><span class="p">();</span>
+  <span class="n">b</span> <span class="o">=</span> <span class="n">Foo</span><span class="p">();</span>
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">a</span><span class="p">.</span><span class="n">tl</span><span class="p">.</span><span class="n">get</span><span class="p">()</span> <span class="o">!=</span> <span class="n">b</span><span class="p">.</span><span class="n">tl</span><span class="p">.</span><span class="n">get</span><span class="p">());</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">ThreadLocal</span><span class="p">,</span> <span class="n">Movable2</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">std</span><span class="o">::</span><span class="n">map</span><span class="o">&lt;</span><span class="kt">int</span><span class="p">,</span> <span class="n">Foo</span><span class="o">&gt;</span> <span class="n">map</span><span class="p">;</span>
+
+  <span class="n">map</span><span class="p">[</span><span class="mi">42</span><span class="p">];</span>
+  <span class="n">map</span><span class="p">[</span><span class="mi">10</span><span class="p">];</span>
+  <span class="n">map</span><span class="p">[</span><span class="mi">23</span><span class="p">];</span>
+  <span class="n">map</span><span class="p">[</span><span class="mi">100</span><span class="p">];</span>
+
+  <span class="n">std</span><span class="o">::</span><span class="n">set</span><span class="o">&lt;</span><span class="kt">void</span><span class="o">*&gt;</span> <span class="n">tls</span><span class="p">;</span>
+  <span class="k">for</span> <span class="p">(</span><span class="k">auto</span><span class="o">&amp;</span> <span class="n">m</span> <span class="o">:</span> <span class="n">map</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">tls</span><span class="p">.</span><span class="n">insert</span><span class="p">(</span><span class="n">m</span><span class="p">.</span><span class="n">second</span><span class="p">.</span><span class="n">tl</span><span class="p">.</span><span class="n">get</span><span class="p">());</span>
+  <span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-10"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-10">&#182;</a></div><p>Make sure that we have 4 different instances of *tl</p></td><td class="code"><div class="highlight"><pre>  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="n">tls</span><span class="p">.</span><span class="n">size</span><span class="p">());</span>
+<span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-11"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-11">&#182;</a></div><p>Simple reference implementation using pthread<em>get</em>specific</p></td><td class="code"><div class="highlight"><pre><span class="k">template</span><span class="o">&lt;</span><span class="k">typename</span> <span class="n">T</span><span class="o">&gt;</span>
+<span class="k">class</span> <span class="nc">PThreadGetSpecific</span> <span class="p">{</span>
+ <span class="k">public</span><span class="o">:</span>
+  <span class="n">PThreadGetSpecific</span><span class="p">()</span> <span class="o">:</span> <span class="n">key_</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">pthread_key_create</span><span class="p">(</span><span class="o">&amp;</span><span class="n">key_</span><span class="p">,</span> <span class="n">OnThreadExit</span><span class="p">);</span>
+  <span class="p">}</span>
+
+  <span class="n">T</span><span class="o">*</span> <span class="n">get</span><span class="p">()</span> <span class="k">const</span> <span class="p">{</span>
+    <span class="k">return</span> <span class="k">static_cast</span><span class="o">&lt;</span><span class="n">T</span><span class="o">*&gt;</span><span class="p">(</span><span class="n">pthread_getspecific</span><span class="p">(</span><span class="n">key_</span><span class="p">));</span>
+  <span class="p">}</span>
+
+  <span class="kt">void</span> <span class="n">reset</span><span class="p">(</span><span class="n">T</span><span class="o">*</span> <span class="n">t</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">delete</span> <span class="n">get</span><span class="p">();</span>
+    <span class="n">pthread_setspecific</span><span class="p">(</span><span class="n">key_</span><span class="p">,</span> <span class="n">t</span><span class="p">);</span>
+  <span class="p">}</span>
+  <span class="k">static</span> <span class="kt">void</span> <span class="n">OnThreadExit</span><span class="p">(</span><span class="kt">void</span><span class="o">*</span> <span class="n">obj</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">delete</span> <span class="k">static_cast</span><span class="o">&lt;</span><span class="n">T</span><span class="o">*&gt;</span><span class="p">(</span><span class="n">obj</span><span class="p">);</span>
+  <span class="p">}</span>
+ <span class="k">private</span><span class="o">:</span>
+  <span class="n">pthread_key_t</span> <span class="n">key_</span><span class="p">;</span>
+<span class="p">};</span>
+
+<span class="n">DEFINE_int32</span><span class="p">(</span><span class="n">numThreads</span><span class="p">,</span> <span class="mi">8</span><span class="p">,</span> <span class="s">&quot;Number simultaneous threads for benchmarks.&quot;</span><span class="p">);</span>
+
+<span class="cp">#define REG(var)                                                \</span>
+<span class="cp">  BENCHMARK(FB_CONCATENATE(BM_mt_, var), iters) {               \</span>
+<span class="cp">    const int itersPerThread = iters / FLAGS_numThreads;        \</span>
+<span class="cp">    std::vector&lt;std::thread&gt; threads;                           \</span>
+<span class="cp">    for (int i = 0; i &lt; FLAGS_numThreads; ++i) {                \</span>
+<span class="cp">      threads.push_back(std::thread([&amp;]() {                     \</span>
+<span class="cp">        var.reset(new int(0));                                  \</span>
+<span class="cp">        for (int i = 0; i &lt; itersPerThread; ++i) {              \</span>
+<span class="cp">          ++(*var.get());                                       \</span>
+<span class="cp">        }                                                       \</span>
+<span class="cp">      }));                                                      \</span>
+<span class="cp">    }                                                           \</span>
+<span class="cp">    for (auto&amp; t : threads) {                                   \</span>
+<span class="cp">      t.join();                                                 \</span>
+<span class="cp">    }                                                           \</span>
+<span class="cp">  }</span>
+
+<span class="n">ThreadLocalPtr</span><span class="o">&lt;</span><span class="kt">int</span><span class="o">&gt;</span> <span class="n">tlp</span><span class="p">;</span>
+<span class="n">REG</span><span class="p">(</span><span class="n">tlp</span><span class="p">);</span>
+<span class="n">PThreadGetSpecific</span><span class="o">&lt;</span><span class="kt">int</span><span class="o">&gt;</span> <span class="n">pthread_get_specific</span><span class="p">;</span>
+<span class="n">REG</span><span class="p">(</span><span class="n">pthread_get_specific</span><span class="p">);</span>
+<span class="n">boost</span><span class="o">::</span><span class="n">thread_specific_ptr</span><span class="o">&lt;</span><span class="kt">int</span><span class="o">&gt;</span> <span class="n">boost_tsp</span><span class="p">;</span>
+<span class="n">REG</span><span class="p">(</span><span class="n">boost_tsp</span><span class="p">);</span>
+<span class="n">BENCHMARK_DRAW_LINE</span><span class="p">();</span>
+
+<span class="kt">int</span> <span class="n">main</span><span class="p">(</span><span class="kt">int</span> <span class="n">argc</span><span class="p">,</span> <span class="kt">char</span><span class="o">**</span> <span class="n">argv</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">testing</span><span class="o">::</span><span class="n">InitGoogleTest</span><span class="p">(</span><span class="o">&amp;</span><span class="n">argc</span><span class="p">,</span> <span class="n">argv</span><span class="p">);</span>
+  <span class="n">google</span><span class="o">::</span><span class="n">ParseCommandLineFlags</span><span class="p">(</span><span class="o">&amp;</span><span class="n">argc</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">argv</span><span class="p">,</span> <span class="kc">true</span><span class="p">);</span>
+  <span class="n">google</span><span class="o">::</span><span class="n">SetCommandLineOptionWithMode</span><span class="p">(</span>
+    <span class="s">&quot;bm_max_iters&quot;</span><span class="p">,</span> <span class="s">&quot;100000000&quot;</span><span class="p">,</span> <span class="n">google</span><span class="o">::</span><span class="n">SET_FLAG_IF_DEFAULT</span>
+  <span class="p">);</span>
+  <span class="k">if</span> <span class="p">(</span><span class="n">FLAGS_benchmark</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">folly</span><span class="o">::</span><span class="n">runBenchmarks</span><span class="p">();</span>
+  <span class="p">}</span>
+  <span class="k">return</span> <span class="n">RUN_ALL_TESTS</span><span class="p">();</span>
+<span class="p">}</span>
+
+<span class="cm">/*</span>
+<span class="cm">Ran with 24 threads on dual 12-core Xeon(R) X5650 @ 2.67GHz with 12-MB caches</span>
+
+<span class="cm">Benchmark                               Iters   Total t    t/iter iter/sec</span>
+<span class="cm">------------------------------------------------------------------------------</span>
+<span class="cm">*       BM_mt_tlp                   100000000  39.88 ms  398.8 ps  2.335 G</span>
+<span class="cm"> +5.91% BM_mt_pthread_get_specific  100000000  42.23 ms  422.3 ps  2.205 G</span>
+<span class="cm"> + 295% BM_mt_boost_tsp             100000000  157.8 ms  1.578 ns  604.5 M</span>
+<span class="cm">------------------------------------------------------------------------------</span>
+<span class="cm">*/</span>
+
+</pre></div></td></tr>
+
+</tbody>
+</table>
+</div>
+
+</body>
+<script>docas={repo:"joekychen/folly",depth:2}</script>
+<script>document.write('<script src=' + ('__proto__' in {} ? 'http://cdnjs.cloudflare.com/ajax/libs/zepto/1.0rc1/zepto.min.js' : 'https://ajax.googleapis.com/ajax/libs/jquery/1.7.2/jquery.min.js')+'><\\/script>')</script>
+<script src="http://baoshan.github.com/moment/min/moment.min.js"></script>
+<script src="../../javascript/docco.min.js"></script>
+</html>

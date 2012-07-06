@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html><head><title>joekychen/folly » folly › SmallLocks.h
+
+</title>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+<meta name="generator" content="Docco">
+<link rel="stylesheet" media="all" href="../stylesheets/docco.min.css" />
+
+
+</head>
+<body>
+<div id="container">
+<div id="background"></div>
+<table cellpadding="0" cellspacing="0">
+<thead><tr><th class="docs"><a id="home" href="../index.html"></a><h1>SmallLocks.h</h1></th><th class="code"></th></tr></thead>
+<tbody>
+
+
+<tr id="section-1"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-1">&#182;</a></div></td><td class="code"><div class="highlight"><pre><span class="cm">/*</span>
+<span class="cm"> * Copyright 2012 Facebook, Inc.</span>
+<span class="cm"> *</span>
+<span class="cm"> * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span class="cm"> * you may not use this file except in compliance with the License.</span>
+<span class="cm"> * You may obtain a copy of the License at</span>
+<span class="cm"> *</span>
+<span class="cm"> *   http://www.apache.org/licenses/LICENSE-2.0</span>
+<span class="cm"> *</span>
+<span class="cm"> * Unless required by applicable law or agreed to in writing, software</span>
+<span class="cm"> * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span class="cm"> * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span class="cm"> * See the License for the specific language governing permissions and</span>
+<span class="cm"> * limitations under the License.</span>
+<span class="cm"> */</span>
+
+<span class="cp">#ifndef FOLLY_SMALLLOCKS_H_</span>
+<span class="cp">#define FOLLY_SMALLLOCKS_H_</span>
+
+<span class="cm">/*</span>
+<span class="cm"> * This header defines a few very small mutex types.  These are useful</span>
+<span class="cm"> * in highly memory-constrained environments where contention is</span>
+<span class="cm"> * unlikely.</span>
+<span class="cm"> *</span>
+<span class="cm"> * Note: these locks are for use when you aren&#39;t likely to contend on</span>
+<span class="cm"> * the critical section, or when the critical section is incredibly</span>
+<span class="cm"> * small.  Given that, both of the locks defined in this header are</span>
+<span class="cm"> * inherently unfair: that is, the longer a thread is waiting, the</span>
+<span class="cm"> * longer it waits between attempts to acquire, so newer waiters are</span>
+<span class="cm"> * more likely to get the mutex.  For the intended use-case this is</span>
+<span class="cm"> * fine.</span>
+<span class="cm"> *</span>
+<span class="cm"> * @author Keith Adams &lt;kma@fb.com&gt;</span>
+<span class="cm"> * @author Jordan DeLong &lt;delong.j@fb.com&gt;</span>
+<span class="cm"> */</span>
+
+<span class="cp">#include &lt;cinttypes&gt;</span>
+<span class="cp">#include &lt;type_traits&gt;</span>
+<span class="cp">#include &lt;ctime&gt;</span>
+<span class="cp">#include &lt;boost/noncopyable.hpp&gt;</span>
+<span class="cp">#include &lt;cstdlib&gt;</span>
+<span class="cp">#include &lt;pthread.h&gt;</span>
+<span class="cp">#include &lt;mutex&gt;</span>
+
+<span class="cp">#include &lt;glog/logging.h&gt;</span>
+
+<span class="cp">#ifndef __x86_64__</span>
+<span class="cp"># error &quot;SmallLocks.h is currently x64-only.&quot;</span>
+<span class="cp">#endif</span>
+
+<span class="n">namespace</span> <span class="n">folly</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-2"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-2">&#182;</a></div><p>////////////////////////////////////////////////////////////////////</p></td><td class="code"><div class="highlight"><pre><span class="n">namespace</span> <span class="n">detail</span> <span class="p">{</span>
+
+  <span class="cm">/*</span>
+<span class="cm">   * A helper object for the condended case. Starts off with eager</span>
+<span class="cm">   * spinning, and falls back to sleeping for small quantums.</span>
+<span class="cm">   */</span>
+  <span class="n">class</span> <span class="n">Sleeper</span> <span class="p">{</span>
+    <span class="k">static</span> <span class="k">const</span> <span class="kt">int32_t</span> <span class="n">kMaxActiveSpin</span> <span class="o">=</span> <span class="mi">4000</span><span class="p">;</span>
+
+    <span class="kt">uint32_t</span> <span class="n">spinCount</span><span class="p">;</span>
+
+  <span class="nl">public:</span>
+    <span class="n">Sleeper</span><span class="p">()</span> <span class="o">:</span> <span class="n">spinCount</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span> <span class="p">{}</span>
+
+    <span class="kt">void</span> <span class="n">wait</span><span class="p">()</span> <span class="p">{</span>
+      <span class="k">if</span> <span class="p">(</span><span class="n">spinCount</span> <span class="o">&lt;</span> <span class="n">kMaxActiveSpin</span><span class="p">)</span> <span class="p">{</span>
+        <span class="o">++</span><span class="n">spinCount</span><span class="p">;</span>
+        <span class="n">asm</span> <span class="k">volatile</span><span class="p">(</span><span class="s">&quot;pause&quot;</span><span class="p">);</span>
+      <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+        <span class="cm">/*</span>
+<span class="cm">         * Always sleep 0.5ms, assuming this will make the kernel put</span>
+<span class="cm">         * us down for whatever its minimum timer resolution is (in</span>
+<span class="cm">         * linux this varies by kernel version from 1ms to 10ms).</span>
+<span class="cm">         */</span>
+        <span class="k">struct</span> <span class="n">timespec</span> <span class="n">ts</span> <span class="o">=</span> <span class="p">{</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">500000</span> <span class="p">};</span>
+        <span class="n">nanosleep</span><span class="p">(</span><span class="o">&amp;</span><span class="n">ts</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">);</span>
+      <span class="p">}</span>
+    <span class="p">}</span>
+  <span class="p">};</span>
+
+<span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-3"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-3">&#182;</a></div><p>////////////////////////////////////////////////////////////////////</p></td><td class="code"><div class="highlight"><pre><span class="cm">/*</span>
+<span class="cm"> * A really, *really* small spinlock for fine-grained locking of lots</span>
+<span class="cm"> * of teeny-tiny data.</span>
+<span class="cm"> *</span>
+<span class="cm"> * Zero initializing these is guaranteed to be as good as calling</span>
+<span class="cm"> * init(), since the free state is guaranteed to be all-bits zero.</span>
+<span class="cm"> *</span>
+<span class="cm"> * This class should be kept a POD, so we can used it in other packed</span>
+<span class="cm"> * structs (gcc does not allow __attribute__((packed)) on structs that</span>
+<span class="cm"> * contain non-POD data).  This means avoid adding a constructor, or</span>
+<span class="cm"> * making some members private, etc.</span>
+<span class="cm"> */</span>
+<span class="k">struct</span> <span class="n">MicroSpinLock</span> <span class="p">{</span>
+  <span class="k">enum</span> <span class="p">{</span> <span class="n">FREE</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span> <span class="n">LOCKED</span> <span class="o">=</span> <span class="mi">1</span> <span class="p">};</span>
+  <span class="kt">uint8_t</span> <span class="n">lock_</span><span class="p">;</span>
+
+  <span class="cm">/*</span>
+<span class="cm">   * Atomically move lock_ from &quot;compare&quot; to &quot;newval&quot;. Return boolean</span>
+<span class="cm">   * success. Do not play on or around.</span>
+<span class="cm">   */</span>
+  <span class="n">bool</span> <span class="nf">cas</span><span class="p">(</span><span class="kt">uint8_t</span> <span class="n">compare</span><span class="p">,</span> <span class="kt">uint8_t</span> <span class="n">newVal</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">bool</span> <span class="n">out</span><span class="p">;</span>
+    <span class="n">asm</span> <span class="k">volatile</span><span class="p">(</span><span class="s">&quot;lock; cmpxchgb %2, (%3);&quot;</span>
+                 <span class="s">&quot;setz %0;&quot;</span>
+                 <span class="o">:</span> <span class="s">&quot;=r&quot;</span> <span class="p">(</span><span class="n">out</span><span class="p">)</span>
+                 <span class="o">:</span> <span class="s">&quot;a&quot;</span> <span class="p">(</span><span class="n">compare</span><span class="p">),</span> <span class="c1">// cmpxchgb constrains this to be in %al</span>
+                   <span class="s">&quot;q&quot;</span> <span class="p">(</span><span class="n">newVal</span><span class="p">),</span>  <span class="c1">// Needs to be byte-accessible</span>
+                   <span class="s">&quot;r&quot;</span> <span class="p">(</span><span class="o">&amp;</span><span class="n">lock_</span><span class="p">)</span>
+                 <span class="o">:</span> <span class="s">&quot;memory&quot;</span><span class="p">,</span> <span class="s">&quot;flags&quot;</span><span class="p">);</span>
+    <span class="k">return</span> <span class="n">out</span><span class="p">;</span>
+  <span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-4"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-4">&#182;</a></div><p>Initialize this MSL.  It is unnecessary to call this if you
+zero-initialize the MicroSpinLock.</p></td><td class="code"><div class="highlight"><pre>  <span class="kt">void</span> <span class="nf">init</span><span class="p">()</span> <span class="p">{</span>
+    <span class="n">lock_</span> <span class="o">=</span> <span class="n">FREE</span><span class="p">;</span>
+  <span class="p">}</span>
+
+  <span class="n">bool</span> <span class="nf">try_lock</span><span class="p">()</span> <span class="p">{</span>
+    <span class="k">return</span> <span class="n">cas</span><span class="p">(</span><span class="n">FREE</span><span class="p">,</span> <span class="n">LOCKED</span><span class="p">);</span>
+  <span class="p">}</span>
+
+  <span class="kt">void</span> <span class="nf">lock</span><span class="p">()</span> <span class="p">{</span>
+    <span class="n">detail</span><span class="o">::</span><span class="n">Sleeper</span> <span class="n">sleeper</span><span class="p">;</span>
+    <span class="k">do</span> <span class="p">{</span>
+      <span class="k">while</span> <span class="p">(</span><span class="n">lock_</span> <span class="o">!=</span> <span class="n">FREE</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">asm</span> <span class="k">volatile</span><span class="p">(</span><span class="s">&quot;&quot;</span> <span class="o">:</span> <span class="o">:</span> <span class="o">:</span> <span class="s">&quot;memory&quot;</span><span class="p">);</span>
+        <span class="n">sleeper</span><span class="p">.</span><span class="n">wait</span><span class="p">();</span>
+      <span class="p">}</span>
+    <span class="p">}</span> <span class="k">while</span> <span class="p">(</span><span class="o">!</span><span class="n">try_lock</span><span class="p">());</span>
+    <span class="n">DCHECK</span><span class="p">(</span><span class="n">lock_</span> <span class="o">==</span> <span class="n">LOCKED</span><span class="p">);</span>
+  <span class="p">}</span>
+
+  <span class="kt">void</span> <span class="nf">unlock</span><span class="p">()</span> <span class="p">{</span>
+    <span class="n">CHECK</span><span class="p">(</span><span class="n">lock_</span> <span class="o">==</span> <span class="n">LOCKED</span><span class="p">);</span>
+    <span class="n">asm</span> <span class="k">volatile</span><span class="p">(</span><span class="s">&quot;&quot;</span> <span class="o">:</span> <span class="o">:</span> <span class="o">:</span> <span class="s">&quot;memory&quot;</span><span class="p">);</span>
+    <span class="n">lock_</span> <span class="o">=</span> <span class="n">FREE</span><span class="p">;</span> <span class="c1">// release barrier on x86</span>
+  <span class="p">}</span>
+<span class="p">};</span></pre></div></td></tr>
+
+
+<tr id="section-5"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-5">&#182;</a></div><p>////////////////////////////////////////////////////////////////////</p></td><td class="code"><div class="highlight"><pre><span class="cm">/*</span>
+<span class="cm"> * Spin lock on a single bit in an integral type.  You can use this</span>
+<span class="cm"> * with 16, 32, or 64-bit integral types.</span>
+<span class="cm"> *</span>
+<span class="cm"> * This is useful if you want a small lock and already have an int</span>
+<span class="cm"> * with a bit in it that you aren&#39;t using.  But note that it can&#39;t be</span>
+<span class="cm"> * as small as MicroSpinLock (1 byte), if you don&#39;t already have a</span>
+<span class="cm"> * convenient int with an unused bit lying around to put it on.</span>
+<span class="cm"> *</span>
+<span class="cm"> * To construct these, either use init() or zero initialize.  We don&#39;t</span>
+<span class="cm"> * have a real constructor because we want this to be a POD type so we</span>
+<span class="cm"> * can put it into packed structs.</span>
+<span class="cm"> */</span>
+<span class="n">template</span><span class="o">&lt;</span><span class="n">class</span> <span class="n">IntType</span><span class="p">,</span> <span class="kt">int</span> <span class="n">Bit</span> <span class="o">=</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">IntType</span><span class="p">)</span> <span class="o">*</span> <span class="mi">8</span> <span class="o">-</span> <span class="mi">1</span><span class="o">&gt;</span>
+<span class="k">struct</span> <span class="n">PicoSpinLock</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-6"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-6">&#182;</a></div><p>Internally we deal with the unsigned version of the type.</p></td><td class="code"><div class="highlight"><pre>  <span class="k">typedef</span> <span class="kr">typename</span> <span class="n">std</span><span class="o">::</span><span class="n">make_unsigned</span><span class="o">&lt;</span><span class="n">IntType</span><span class="o">&gt;::</span><span class="n">type</span> <span class="n">UIntType</span><span class="p">;</span>
+
+  <span class="n">static_assert</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">is_integral</span><span class="o">&lt;</span><span class="n">IntType</span><span class="o">&gt;::</span><span class="n">value</span><span class="p">,</span>
+                <span class="s">&quot;PicoSpinLock needs an integral type&quot;</span><span class="p">);</span>
+  <span class="n">static_assert</span><span class="p">(</span><span class="k">sizeof</span><span class="p">(</span><span class="n">IntType</span><span class="p">)</span> <span class="o">==</span> <span class="mi">2</span> <span class="o">||</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">IntType</span><span class="p">)</span> <span class="o">==</span> <span class="mi">4</span> <span class="o">||</span>
+                  <span class="k">sizeof</span><span class="p">(</span><span class="n">IntType</span><span class="p">)</span> <span class="o">==</span> <span class="mi">8</span><span class="p">,</span>
+                <span class="s">&quot;PicoSpinLock can&#39;t work on integers smaller than 2 bytes&quot;</span><span class="p">);</span>
+
+<span class="nl">public:</span>
+  <span class="k">static</span> <span class="k">const</span> <span class="n">UIntType</span> <span class="n">kLockBitMask_</span> <span class="o">=</span> <span class="n">UIntType</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span> <span class="o">&lt;&lt;</span> <span class="n">Bit</span><span class="p">;</span>
+  <span class="n">UIntType</span> <span class="n">lock_</span><span class="p">;</span>
+
+  <span class="cm">/*</span>
+<span class="cm">   * You must call this function before using this class, if you</span>
+<span class="cm">   * default constructed it.  If you zero-initialized it you can</span>
+<span class="cm">   * assume the PicoSpinLock is in a valid unlocked state with</span>
+<span class="cm">   * getData() == 0.</span>
+<span class="cm">   *</span>
+<span class="cm">   * (This doesn&#39;t use a constructor because we want to be a POD.)</span>
+<span class="cm">   */</span>
+  <span class="kt">void</span> <span class="nf">init</span><span class="p">(</span><span class="n">IntType</span> <span class="n">initialValue</span> <span class="o">=</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">CHECK</span><span class="p">(</span><span class="o">!</span><span class="p">(</span><span class="n">initialValue</span> <span class="o">&amp;</span> <span class="n">kLockBitMask_</span><span class="p">));</span>
+    <span class="n">lock_</span> <span class="o">=</span> <span class="n">initialValue</span><span class="p">;</span>
+  <span class="p">}</span>
+
+  <span class="cm">/*</span>
+<span class="cm">   * Returns the value of the integer we using for our lock, except</span>
+<span class="cm">   * with the bit we are using as a lock cleared, regardless of</span>
+<span class="cm">   * whether the lock is held.</span>
+<span class="cm">   *</span>
+<span class="cm">   * It is &#39;safe&#39; to call this without holding the lock.  (As in: you</span>
+<span class="cm">   * get the same guarantees for simultaneous accesses to an integer</span>
+<span class="cm">   * as you normally get.)</span>
+<span class="cm">   */</span>
+  <span class="n">IntType</span> <span class="n">getData</span><span class="p">()</span> <span class="k">const</span> <span class="p">{</span>
+    <span class="k">return</span> <span class="n">static_cast</span><span class="o">&lt;</span><span class="n">IntType</span><span class="o">&gt;</span><span class="p">(</span><span class="n">lock_</span> <span class="o">&amp;</span> <span class="o">~</span><span class="n">kLockBitMask_</span><span class="p">);</span>
+  <span class="p">}</span>
+
+  <span class="cm">/*</span>
+<span class="cm">   * Set the value of the other bits in our integer.</span>
+<span class="cm">   *</span>
+<span class="cm">   * Don&#39;t use this when you aren&#39;t holding the lock, unless it can be</span>
+<span class="cm">   * guaranteed that no other threads may be trying to use this.</span>
+<span class="cm">   */</span>
+  <span class="kt">void</span> <span class="n">setData</span><span class="p">(</span><span class="n">IntType</span> <span class="n">w</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">CHECK</span><span class="p">(</span><span class="o">!</span><span class="p">(</span><span class="n">w</span> <span class="o">&amp;</span> <span class="n">kLockBitMask_</span><span class="p">));</span>
+    <span class="n">lock_</span> <span class="o">=</span> <span class="p">(</span><span class="n">lock_</span> <span class="o">&amp;</span> <span class="n">kLockBitMask_</span><span class="p">)</span> <span class="o">|</span> <span class="n">w</span><span class="p">;</span>
+  <span class="p">}</span>
+
+  <span class="cm">/*</span>
+<span class="cm">   * Try to get the lock without blocking: returns whether or not we</span>
+<span class="cm">   * got it.</span>
+<span class="cm">   */</span>
+  <span class="n">bool</span> <span class="n">try_lock</span><span class="p">()</span> <span class="k">const</span> <span class="p">{</span>
+    <span class="n">bool</span> <span class="n">ret</span> <span class="o">=</span> <span class="nb">false</span><span class="p">;</span>
+
+<span class="cp">#define FB_DOBTS(size)                                  \</span>
+<span class="cp">  asm volatile(&quot;lock; bts&quot; #size &quot; %1, (%2); setnc %0&quot;  \</span>
+<span class="cp">               : &quot;=r&quot; (ret)                             \</span>
+<span class="cp">               : &quot;i&quot; (Bit),                             \</span>
+<span class="cp">                 &quot;r&quot; (&amp;lock_)                           \</span>
+<span class="cp">               : &quot;memory&quot;, &quot;flags&quot;)</span>
+
+    <span class="k">switch</span> <span class="p">(</span><span class="k">sizeof</span><span class="p">(</span><span class="n">IntType</span><span class="p">))</span> <span class="p">{</span>
+    <span class="k">case</span> <span class="mi">2</span>: <span class="n">FB_DOBTS</span><span class="p">(</span><span class="n">w</span><span class="p">);</span> <span class="k">break</span><span class="p">;</span>
+    <span class="k">case</span> <span class="mi">4</span>: <span class="n">FB_DOBTS</span><span class="p">(</span><span class="n">l</span><span class="p">);</span> <span class="k">break</span><span class="p">;</span>
+    <span class="k">case</span> <span class="mi">8</span>: <span class="n">FB_DOBTS</span><span class="p">(</span><span class="n">q</span><span class="p">);</span> <span class="k">break</span><span class="p">;</span>
+    <span class="p">}</span>
+
+<span class="cp">#undef FB_DOBTS</span>
+
+    <span class="k">return</span> <span class="n">ret</span><span class="p">;</span>
+  <span class="p">}</span>
+
+  <span class="cm">/*</span>
+<span class="cm">   * Block until we can acquire the lock.  Uses Sleeper to wait.</span>
+<span class="cm">   */</span>
+  <span class="kt">void</span> <span class="n">lock</span><span class="p">()</span> <span class="k">const</span> <span class="p">{</span>
+    <span class="n">detail</span><span class="o">::</span><span class="n">Sleeper</span> <span class="n">sleeper</span><span class="p">;</span>
+    <span class="k">while</span> <span class="p">(</span><span class="o">!</span><span class="n">try_lock</span><span class="p">())</span> <span class="p">{</span>
+      <span class="n">sleeper</span><span class="p">.</span><span class="n">wait</span><span class="p">();</span>
+    <span class="p">}</span>
+  <span class="p">}</span>
+
+  <span class="cm">/*</span>
+<span class="cm">   * Release the lock, without changing the value of the rest of the</span>
+<span class="cm">   * integer.</span>
+<span class="cm">   */</span>
+  <span class="kt">void</span> <span class="n">unlock</span><span class="p">()</span> <span class="k">const</span> <span class="p">{</span>
+<span class="cp">#define FB_DOBTR(size)                          \</span>
+<span class="cp">  asm volatile(&quot;lock; btr&quot; #size &quot; %0, (%1)&quot;    \</span>
+<span class="cp">               :                                \</span>
+<span class="cp">               : &quot;i&quot; (Bit),                     \</span>
+<span class="cp">                 &quot;r&quot; (&amp;lock_)                   \</span>
+<span class="cp">               : &quot;memory&quot;, &quot;flags&quot;)</span></pre></div></td></tr>
+
+
+<tr id="section-7"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-7">&#182;</a></div><p>Reads and writes can not be reordered wrt locked instructions,
+so we don't need a memory fence here.</p></td><td class="code"><div class="highlight"><pre>    <span class="k">switch</span> <span class="p">(</span><span class="k">sizeof</span><span class="p">(</span><span class="n">IntType</span><span class="p">))</span> <span class="p">{</span>
+    <span class="k">case</span> <span class="mi">2</span>: <span class="n">FB_DOBTR</span><span class="p">(</span><span class="n">w</span><span class="p">);</span> <span class="k">break</span><span class="p">;</span>
+    <span class="k">case</span> <span class="mi">4</span>: <span class="n">FB_DOBTR</span><span class="p">(</span><span class="n">l</span><span class="p">);</span> <span class="k">break</span><span class="p">;</span>
+    <span class="k">case</span> <span class="mi">8</span>: <span class="n">FB_DOBTR</span><span class="p">(</span><span class="n">q</span><span class="p">);</span> <span class="k">break</span><span class="p">;</span>
+    <span class="p">}</span>
+
+<span class="cp">#undef FB_DOBTR</span>
+  <span class="p">}</span>
+<span class="p">};</span></pre></div></td></tr>
+
+
+<tr id="section-8"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-8">&#182;</a></div><p>////////////////////////////////////////////////////////////////////</p></td><td class="code"><div class="highlight"><pre><span class="k">typedef</span> <span class="n">std</span><span class="o">::</span><span class="n">lock_guard</span><span class="o">&lt;</span><span class="n">MicroSpinLock</span><span class="o">&gt;</span> <span class="n">MSLGuard</span><span class="p">;</span></pre></div></td></tr>
+
+
+<tr id="section-9"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-9">&#182;</a></div><p>////////////////////////////////////////////////////////////////////</p></td><td class="code"><div class="highlight"><pre><span class="p">}</span>
+
+<span class="cp">#endif</span>
+
+</pre></div></td></tr>
+
+</tbody>
+</table>
+</div>
+
+</body>
+<script>docas={repo:"joekychen/folly",depth:1}</script>
+<script>document.write('<script src=' + ('__proto__' in {} ? 'http://cdnjs.cloudflare.com/ajax/libs/zepto/1.0rc1/zepto.min.js' : 'https://ajax.googleapis.com/ajax/libs/jquery/1.7.2/jquery.min.js')+'><\\/script>')</script>
+<script src="http://baoshan.github.com/moment/min/moment.min.js"></script>
+<script src="../javascript/docco.min.js"></script>
+</html>

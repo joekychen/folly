@@ -1,0 +1,88 @@
+<h2><code>folly/ProducerConsumerQueue.h</code></h2>
+
+<p>The <code>folly::ProducerConsumerQueue</code> class is a one-producer
+one-consumer queue with very low synchronization overhead.</p>
+
+<p>The queue must be created with a fixed maximum size (and allocates
+that many cells of sizeof(T)), and it provides just a few simple
+operations:</p>
+
+<ul>
+<li><code>read</code>: Attempt to read the value at the front to the queue into a variable,
+       returns <code>false</code> iff queue was empty.</li>
+<li><code>write</code>: Emplace a value at the end of the queue, returns <code>false</code> iff the
+        queue was full.</li>
+<li><code>frontPtr</code>: Retrieve a pointer to the item at the front of the queue, or
+           <code>nullptr</code> if it is empty.</li>
+<li><code>popFront</code>: Remove the item from the front of the queue (queue must not be
+           empty).</li>
+<li><code>isEmpty</code>: Check if the queue is empty.</li>
+<li><code>isFull</code>: Check if the queue is full.</li>
+<li><code>sizeGuess</code>: Returns the number of entries in the queue. Because of the
+            way we coordinate threads, this guess could be slightly wrong
+            when called by the producer/consumer thread, and it could be
+            wildly inaccurate if called from any other threads. Hence,
+            only call from producer/consumer threads!</li>
+</ul>
+
+<p>All of these operations are wait-free.  The read operations (including
+<code>frontPtr</code> and <code>popFront</code>) and write operations must only be called by the
+reader and writer thread, respectively. <code>isFull</code>, <code>isEmpty</code>, and <code>sizeGuess</code>
+may be called by either thread, but the return values from <code>read</code>, <code>write</code>, or
+<code>frontPtr</code> are sufficient for most cases.</p>
+
+<p><code>write</code> may fail if the queue is full, and <code>read</code> may fail if the queue is
+empty, so in many situations it is important to choose the queue size such that
+the queue filling  or staying empty for long is unlikely.</p>
+
+<h3>Example</h3>
+
+<hr />
+
+<p>A toy example that doesn't really do anything useful:</p>
+
+<p>``` Cpp
+    folly::ProducerConsumerQueue<folly::fbstring> queue;</p>
+
+<pre><code>std::thread reader([&amp;queue] {
+  for (;;) {
+    folly::fbstring str;
+    while (!queue.read(str)) {
+      //spin until we get a value
+      continue;
+    }
+
+    sink(str);
+  }
+});
+
+// producer thread:
+for (;;) {
+  folly::fbstring str = source();
+  while (!queue.write(str)) {
+    //spin until the queue has room
+    continue;
+  }
+}
+</code></pre>
+
+<p>```</p>
+
+<p>Alternatively, the consumer may be written as follows to use the 'front' value
+in place, thus avoiding moves or copies:</p>
+
+<p>``` Cpp
+    std::thread reader([&amp;queue] {
+      for (;;) {
+        folly::fbstring* pval;
+        do {
+          pval = queue.frontPtr();
+        } while (!pval); // spin until we get a value;</p>
+
+<pre><code>    sink(*pval);
+    queue.popFront();
+  }
+});
+</code></pre>
+
+<p>```</p>

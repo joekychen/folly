@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html><head><title>joekychen/folly » folly › build › generate_escape_tables.py
+
+</title>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+<meta name="generator" content="Docco">
+<link rel="stylesheet" media="all" href="../../stylesheets/docco.min.css" />
+
+
+</head>
+<body>
+<div id="container">
+<div id="background"></div>
+<table cellpadding="0" cellspacing="0">
+<thead><tr><th class="docs"><a id="home" href="../../index.html"></a><h1>generate_escape_tables.py</h1></th><th class="code"></th></tr></thead>
+<tbody>
+
+
+<tr id="section-1"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-1">&#182;</a></div></td><td class="code"><div class="highlight"><pre><span class="c">#!/usr/bin/env python</span></pre></div></td></tr>
+
+
+<tr id="section-2"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-2">&#182;</a></div><p>Generate Escape tables.
+Copyright 2011 Facebook</p>
+
+<p>@author Tudor Bosman (tudorb@fb.com)</p></td><td class="code"><div class="highlight"><pre><span class="kn">import</span> <span class="nn">os</span>
+<span class="kn">from</span> <span class="nn">optparse</span> <span class="kn">import</span> <span class="n">OptionParser</span>
+
+<span class="n">OUTPUT_FILE</span> <span class="o">=</span> <span class="s">&quot;EscapeTables.cpp&quot;</span>
+
+<span class="k">def</span> <span class="nf">generate</span><span class="p">(</span><span class="n">f</span><span class="p">):</span>
+    <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s">&quot;namespace folly {</span><span class="se">\n</span><span class="s">&quot;</span>
+            <span class="s">&quot;namespace detail {</span><span class="se">\n</span><span class="s">&quot;</span>
+            <span class="s">&quot;</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">)</span>
+    <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s">&quot;extern const char cEscapeTable[] =</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">)</span>
+    <span class="n">escapes</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">((</span>
+        <span class="p">(</span><span class="s">&#39;&quot;&#39;</span><span class="p">,</span> <span class="s">&#39;</span><span class="se">\\</span><span class="s">&quot;&#39;</span><span class="p">),</span>
+        <span class="p">(</span><span class="s">&#39;</span><span class="se">\\</span><span class="s">&#39;</span><span class="p">,</span> <span class="s">&#39;</span><span class="se">\\\\</span><span class="s">&#39;</span><span class="p">),</span>
+        <span class="p">(</span><span class="s">&#39;?&#39;</span><span class="p">,</span> <span class="s">&#39;?&#39;</span><span class="p">),</span>
+        <span class="p">(</span><span class="s">&#39;</span><span class="se">\n</span><span class="s">&#39;</span><span class="p">,</span> <span class="s">&#39;n&#39;</span><span class="p">),</span>
+        <span class="p">(</span><span class="s">&#39;</span><span class="se">\r</span><span class="s">&#39;</span><span class="p">,</span> <span class="s">&#39;r&#39;</span><span class="p">),</span>
+        <span class="p">(</span><span class="s">&#39;</span><span class="se">\t</span><span class="s">&#39;</span><span class="p">,</span> <span class="s">&#39;t&#39;</span><span class="p">),</span>
+    <span class="p">))</span>
+    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">256</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">i</span> <span class="o">%</span> <span class="mi">64</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">i</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s">&quot;</span><span class="se">\&quot;\n</span><span class="s">&quot;</span><span class="p">)</span>
+            <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s">&quot;  </span><span class="se">\&quot;</span><span class="s">&quot;</span><span class="p">)</span>
+        <span class="n">c</span> <span class="o">=</span> <span class="nb">chr</span><span class="p">(</span><span class="n">i</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">escapes</span><span class="p">:</span>
+            <span class="n">c</span> <span class="o">=</span> <span class="n">escapes</span><span class="p">[</span><span class="n">c</span><span class="p">]</span>
+        <span class="k">elif</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="mi">32</span> <span class="ow">or</span> <span class="n">i</span> <span class="o">&gt;</span> <span class="mi">126</span><span class="p">:</span>
+            <span class="n">c</span> <span class="o">=</span> <span class="s">&#39;O&#39;</span>  <span class="c"># octal</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">c</span> <span class="o">=</span> <span class="s">&#39;P&#39;</span>  <span class="c"># printable</span>
+        <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">c</span><span class="p">)</span>
+    <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s">&quot;</span><span class="se">\&quot;</span><span class="s">;</span><span class="se">\n</span><span class="s">&quot;</span>
+            <span class="s">&quot;</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">)</span>
+
+    <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s">&quot;extern const char cUnescapeTable[] =</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">256</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">i</span> <span class="o">%</span> <span class="mi">64</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">i</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s">&quot;</span><span class="se">\&quot;\n</span><span class="s">&quot;</span><span class="p">)</span>
+            <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s">&quot;  </span><span class="se">\&quot;</span><span class="s">&quot;</span><span class="p">)</span>
+        <span class="n">c</span> <span class="o">=</span> <span class="nb">chr</span><span class="p">(</span><span class="n">i</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">c</span> <span class="ow">in</span> <span class="s">&#39;</span><span class="se">\&#39;</span><span class="s">?&#39;</span><span class="p">:</span>
+            <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">c</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">c</span> <span class="ow">in</span> <span class="s">&#39;&quot;</span><span class="se">\\</span><span class="s">abfnrtv&#39;</span><span class="p">:</span>
+            <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s">&quot;</span><span class="se">\\</span><span class="s">&quot;</span> <span class="o">+</span> <span class="n">c</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">i</span> <span class="o">&gt;=</span> <span class="nb">ord</span><span class="p">(</span><span class="s">&#39;0&#39;</span><span class="p">)</span> <span class="ow">and</span> <span class="n">i</span> <span class="o">&lt;=</span> <span class="nb">ord</span><span class="p">(</span><span class="s">&#39;7&#39;</span><span class="p">):</span>
+            <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s">&quot;O&quot;</span><span class="p">)</span>  <span class="c"># octal</span>
+        <span class="k">elif</span> <span class="n">c</span> <span class="o">==</span> <span class="s">&quot;x&quot;</span><span class="p">:</span>
+            <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s">&quot;X&quot;</span><span class="p">)</span>  <span class="c"># hex</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s">&quot;I&quot;</span><span class="p">)</span>  <span class="c"># invalid</span>
+    <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s">&quot;</span><span class="se">\&quot;</span><span class="s">;</span><span class="se">\n</span><span class="s">&quot;</span>
+            <span class="s">&quot;</span><span class="se">\n</span><span class="s">&quot;</span>
+            <span class="s">&quot;extern const unsigned char hexTable[] = {&quot;</span><span class="p">)</span>
+
+    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">256</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">i</span> <span class="o">%</span> <span class="mi">16</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s">&quot;</span><span class="se">\n</span><span class="s">  &quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">i</span> <span class="o">&gt;=</span> <span class="nb">ord</span><span class="p">(</span><span class="s">&#39;0&#39;</span><span class="p">)</span> <span class="ow">and</span> <span class="n">i</span> <span class="o">&lt;=</span> <span class="nb">ord</span><span class="p">(</span><span class="s">&#39;9&#39;</span><span class="p">):</span>
+            <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s">&quot;{0:2d}, &quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">i</span> <span class="o">-</span> <span class="nb">ord</span><span class="p">(</span><span class="s">&#39;0&#39;</span><span class="p">)))</span>
+        <span class="k">elif</span> <span class="n">i</span> <span class="o">&gt;=</span> <span class="nb">ord</span><span class="p">(</span><span class="s">&#39;a&#39;</span><span class="p">)</span> <span class="ow">and</span> <span class="n">i</span> <span class="o">&lt;=</span> <span class="nb">ord</span><span class="p">(</span><span class="s">&#39;f&#39;</span><span class="p">):</span>
+            <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s">&quot;{0:2d}, &quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">i</span> <span class="o">-</span> <span class="nb">ord</span><span class="p">(</span><span class="s">&#39;a&#39;</span><span class="p">)</span> <span class="o">+</span> <span class="mi">10</span><span class="p">))</span>
+        <span class="k">elif</span> <span class="n">i</span> <span class="o">&gt;=</span> <span class="nb">ord</span><span class="p">(</span><span class="s">&#39;A&#39;</span><span class="p">)</span> <span class="ow">and</span> <span class="n">i</span> <span class="o">&lt;=</span> <span class="nb">ord</span><span class="p">(</span><span class="s">&#39;F&#39;</span><span class="p">):</span>
+            <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s">&quot;{0:2d}, &quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">i</span> <span class="o">-</span> <span class="nb">ord</span><span class="p">(</span><span class="s">&#39;A&#39;</span><span class="p">)</span> <span class="o">+</span> <span class="mi">10</span><span class="p">))</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s">&quot;16, &quot;</span><span class="p">)</span>
+    <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s">&quot;</span><span class="se">\n</span><span class="s">};</span><span class="se">\n</span><span class="s">&quot;</span>
+            <span class="s">&quot;</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">)</span>
+
+    <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s">&quot;}  // namespace detail</span><span class="se">\n</span><span class="s">&quot;</span>
+            <span class="s">&quot;}  // namespace folly</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">)</span>
+
+<span class="k">def</span> <span class="nf">main</span><span class="p">():</span>
+    <span class="n">parser</span> <span class="o">=</span> <span class="n">OptionParser</span><span class="p">()</span>
+    <span class="n">parser</span><span class="o">.</span><span class="n">add_option</span><span class="p">(</span><span class="s">&quot;--install_dir&quot;</span><span class="p">,</span> <span class="n">dest</span><span class="o">=</span><span class="s">&quot;install_dir&quot;</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="s">&quot;.&quot;</span><span class="p">,</span>
+                      <span class="n">help</span><span class="o">=</span><span class="s">&quot;write output to DIR&quot;</span><span class="p">,</span> <span class="n">metavar</span><span class="o">=</span><span class="s">&quot;DIR&quot;</span><span class="p">)</span>
+    <span class="n">parser</span><span class="o">.</span><span class="n">add_option</span><span class="p">(</span><span class="s">&quot;--fbcode_dir&quot;</span><span class="p">)</span>
+    <span class="p">(</span><span class="n">options</span><span class="p">,</span> <span class="n">args</span><span class="p">)</span> <span class="o">=</span> <span class="n">parser</span><span class="o">.</span><span class="n">parse_args</span><span class="p">()</span>
+    <span class="n">f</span> <span class="o">=</span> <span class="nb">open</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">options</span><span class="o">.</span><span class="n">install_dir</span><span class="p">,</span> <span class="n">OUTPUT_FILE</span><span class="p">),</span> <span class="s">&quot;w&quot;</span><span class="p">)</span>
+    <span class="n">generate</span><span class="p">(</span><span class="n">f</span><span class="p">)</span>
+    <span class="n">f</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+
+<span class="k">if</span> <span class="n">__name__</span> <span class="o">==</span> <span class="s">&quot;__main__&quot;</span><span class="p">:</span>
+    <span class="n">main</span><span class="p">()</span>
+
+</pre></div></td></tr>
+
+</tbody>
+</table>
+</div>
+
+</body>
+<script>docas={repo:"joekychen/folly",depth:2}</script>
+<script>document.write('<script src=' + ('__proto__' in {} ? 'http://cdnjs.cloudflare.com/ajax/libs/zepto/1.0rc1/zepto.min.js' : 'https://ajax.googleapis.com/ajax/libs/jquery/1.7.2/jquery.min.js')+'><\\/script>')</script>
+<script src="http://baoshan.github.com/moment/min/moment.min.js"></script>
+<script src="../../javascript/docco.min.js"></script>
+</html>

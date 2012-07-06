@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html><head><title>joekychen/folly » folly › test › FBStringTestBenchmarks.cpp.h
+
+</title>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+<meta name="generator" content="Docco">
+<link rel="stylesheet" media="all" href="../../stylesheets/docco.min.css" />
+
+
+</head>
+<body>
+<div id="container">
+<div id="background"></div>
+<table cellpadding="0" cellspacing="0">
+<thead><tr><th class="docs"><a id="home" href="../../index.html"></a><h1>FBStringTestBenchmarks.cpp.h</h1></th><th class="code"></th></tr></thead>
+<tbody>
+
+
+<tr id="section-1"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-1">&#182;</a></div></td><td class="code"><div class="highlight"><pre><span class="cm">/*</span>
+<span class="cm"> * Copyright 2012 Facebook, Inc.</span>
+<span class="cm"> *</span>
+<span class="cm"> * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span class="cm"> * you may not use this file except in compliance with the License.</span>
+<span class="cm"> * You may obtain a copy of the License at</span>
+<span class="cm"> *</span>
+<span class="cm"> *   http://www.apache.org/licenses/LICENSE-2.0</span>
+<span class="cm"> *</span>
+<span class="cm"> * Unless required by applicable law or agreed to in writing, software</span>
+<span class="cm"> * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span class="cm"> * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span class="cm"> * See the License for the specific language governing permissions and</span>
+<span class="cm"> * limitations under the License.</span>
+<span class="cm"> */</span>
+
+<span class="cm">/**</span>
+<span class="cm"> * This file is supposed to be included from within</span>
+<span class="cm"> * FBStringTest. Do not use otherwise.</span>
+<span class="cm"> */</span>
+
+<span class="kt">void</span> <span class="nf">BENCHFUN</span><span class="p">(</span><span class="n">initRNG</span><span class="p">)(</span><span class="kt">int</span> <span class="n">iters</span><span class="p">,</span> <span class="kt">int</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">srand</span><span class="p">(</span><span class="n">seed</span><span class="p">);</span>
+<span class="p">}</span>
+<span class="n">BENCHMARK_PARAM</span><span class="p">(</span><span class="n">BENCHFUN</span><span class="p">(</span><span class="n">initRNG</span><span class="p">),</span> <span class="mi">0</span><span class="p">);</span>
+
+<span class="kt">void</span> <span class="nf">BENCHFUN</span><span class="p">(</span><span class="n">defaultCtor</span><span class="p">)(</span><span class="kt">int</span> <span class="n">iters</span><span class="p">,</span> <span class="kt">int</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">FOR_EACH_RANGE</span> <span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">iters</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">STRING</span> <span class="n">s</span><span class="p">[</span><span class="mi">4096</span><span class="p">];</span>
+    <span class="n">doNotOptimizeAway</span><span class="p">(</span><span class="o">&amp;</span><span class="n">s</span><span class="p">);</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+<span class="n">BENCHMARK_PARAM</span><span class="p">(</span><span class="n">BENCHFUN</span><span class="p">(</span><span class="n">defaultCtor</span><span class="p">),</span> <span class="mi">0</span><span class="p">);</span>
+
+<span class="kt">void</span> <span class="nf">BENCHFUN</span><span class="p">(</span><span class="n">copyCtor</span><span class="p">)(</span><span class="kt">int</span> <span class="n">iters</span><span class="p">,</span> <span class="kt">int</span> <span class="n">arg</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">STRING</span> <span class="n">s</span><span class="p">;</span>
+  <span class="n">BENCHMARK_SUSPEND</span> <span class="p">{</span>
+    <span class="n">randomString</span><span class="p">(</span><span class="o">&amp;</span><span class="n">s</span><span class="p">,</span> <span class="n">arg</span><span class="p">);</span>
+  <span class="p">}</span>
+  <span class="n">FOR_EACH_RANGE</span> <span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">iters</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">STRING</span> <span class="n">s1</span> <span class="o">=</span> <span class="n">s</span><span class="p">;</span>
+    <span class="n">doNotOptimizeAway</span><span class="p">(</span><span class="o">&amp;</span><span class="n">s1</span><span class="p">);</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+<span class="n">BENCHMARK_PARAM</span><span class="p">(</span><span class="n">BENCHFUN</span><span class="p">(</span><span class="n">copyCtor</span><span class="p">),</span> <span class="mi">32768</span><span class="p">);</span>
+
+<span class="kt">void</span> <span class="nf">BENCHFUN</span><span class="p">(</span><span class="n">ctorFromArray</span><span class="p">)(</span><span class="kt">int</span> <span class="n">iters</span><span class="p">,</span> <span class="kt">int</span> <span class="n">arg</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">STRING</span> <span class="n">s</span><span class="p">;</span>
+  <span class="n">BENCHMARK_SUSPEND</span> <span class="p">{</span>
+    <span class="n">randomString</span><span class="p">(</span><span class="o">&amp;</span><span class="n">s</span><span class="p">,</span> <span class="n">arg</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">s</span><span class="p">.</span><span class="n">empty</span><span class="p">())</span> <span class="p">{</span>
+      <span class="n">s</span> <span class="o">=</span> <span class="s">&quot;This is rare.&quot;</span><span class="p">;</span>
+    <span class="p">}</span>
+  <span class="p">}</span>
+  <span class="n">FOR_EACH_RANGE</span> <span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">iters</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">STRING</span> <span class="n">s1</span><span class="p">(</span><span class="n">s</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span> <span class="n">s</span><span class="p">.</span><span class="n">size</span><span class="p">());</span>
+    <span class="n">doNotOptimizeAway</span><span class="p">(</span><span class="o">&amp;</span><span class="n">s1</span><span class="p">);</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+<span class="n">BENCHMARK_PARAM</span><span class="p">(</span><span class="n">BENCHFUN</span><span class="p">(</span><span class="n">ctorFromArray</span><span class="p">),</span> <span class="mi">32768</span><span class="p">);</span>
+
+<span class="kt">void</span> <span class="nf">BENCHFUN</span><span class="p">(</span><span class="n">ctorFromTwoPointers</span><span class="p">)(</span><span class="kt">int</span> <span class="n">iters</span><span class="p">,</span> <span class="kt">int</span> <span class="n">arg</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">static</span> <span class="n">STRING</span> <span class="n">s</span><span class="p">;</span>
+  <span class="n">BENCHMARK_SUSPEND</span> <span class="p">{</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">s</span><span class="p">.</span><span class="n">size</span><span class="p">()</span> <span class="o">&lt;</span> <span class="n">arg</span><span class="p">)</span> <span class="n">s</span><span class="p">.</span><span class="n">resize</span><span class="p">(</span><span class="n">arg</span><span class="p">);</span>
+  <span class="p">}</span>
+  <span class="n">FOR_EACH_RANGE</span> <span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">iters</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">STRING</span> <span class="n">s1</span><span class="p">(</span><span class="n">s</span><span class="p">.</span><span class="n">begin</span><span class="p">(),</span> <span class="n">s</span><span class="p">.</span><span class="n">end</span><span class="p">());</span>
+    <span class="n">doNotOptimizeAway</span><span class="p">(</span><span class="o">&amp;</span><span class="n">s1</span><span class="p">);</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+<span class="n">BENCHMARK_PARAM</span><span class="p">(</span><span class="n">BENCHFUN</span><span class="p">(</span><span class="n">ctorFromTwoPointers</span><span class="p">),</span> <span class="mi">0</span><span class="p">);</span>
+<span class="n">BENCHMARK_PARAM</span><span class="p">(</span><span class="n">BENCHFUN</span><span class="p">(</span><span class="n">ctorFromTwoPointers</span><span class="p">),</span> <span class="mi">7</span><span class="p">);</span>
+<span class="n">BENCHMARK_PARAM</span><span class="p">(</span><span class="n">BENCHFUN</span><span class="p">(</span><span class="n">ctorFromTwoPointers</span><span class="p">),</span> <span class="mi">15</span><span class="p">);</span>
+<span class="n">BENCHMARK_PARAM</span><span class="p">(</span><span class="n">BENCHFUN</span><span class="p">(</span><span class="n">ctorFromTwoPointers</span><span class="p">),</span> <span class="mi">23</span><span class="p">);</span>
+<span class="n">BENCHMARK_PARAM</span><span class="p">(</span><span class="n">BENCHFUN</span><span class="p">(</span><span class="n">ctorFromTwoPointers</span><span class="p">),</span> <span class="mi">24</span><span class="p">);</span>
+
+<span class="kt">void</span> <span class="nf">BENCHFUN</span><span class="p">(</span><span class="n">ctorFromChar</span><span class="p">)(</span><span class="kt">int</span> <span class="n">iters</span><span class="p">,</span> <span class="kt">int</span> <span class="n">arg</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">FOR_EACH_RANGE</span> <span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">iters</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">STRING</span> <span class="n">s1</span><span class="p">(</span><span class="sc">&#39;a&#39;</span><span class="p">,</span> <span class="n">arg</span><span class="p">);</span>
+    <span class="n">doNotOptimizeAway</span><span class="p">(</span><span class="o">&amp;</span><span class="n">s1</span><span class="p">);</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+<span class="n">BENCHMARK_PARAM</span><span class="p">(</span><span class="n">BENCHFUN</span><span class="p">(</span><span class="n">ctorFromChar</span><span class="p">),</span> <span class="mi">1048576</span><span class="p">);</span>
+
+<span class="kt">void</span> <span class="nf">BENCHFUN</span><span class="p">(</span><span class="n">assignmentOp</span><span class="p">)(</span><span class="kt">int</span> <span class="n">iters</span><span class="p">,</span> <span class="kt">int</span> <span class="n">arg</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">STRING</span> <span class="n">s</span><span class="p">;</span>
+  <span class="n">BENCHMARK_SUSPEND</span> <span class="p">{</span>
+    <span class="n">randomString</span><span class="p">(</span><span class="o">&amp;</span><span class="n">s</span><span class="p">,</span> <span class="n">arg</span><span class="p">);</span>
+  <span class="p">}</span>
+  <span class="n">FOR_EACH_RANGE</span> <span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">iters</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">STRING</span> <span class="n">s1</span><span class="p">;</span>
+    <span class="n">BENCHMARK_SUSPEND</span> <span class="p">{</span>
+      <span class="n">randomString</span><span class="p">(</span><span class="o">&amp;</span><span class="n">s1</span><span class="p">,</span> <span class="n">arg</span><span class="p">);</span>
+      <span class="n">doNotOptimizeAway</span><span class="p">(</span><span class="o">&amp;</span><span class="n">s1</span><span class="p">);</span>
+    <span class="p">}</span>
+    <span class="n">s1</span> <span class="o">=</span> <span class="n">s</span><span class="p">;</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+<span class="n">BENCHMARK_PARAM</span><span class="p">(</span><span class="n">BENCHFUN</span><span class="p">(</span><span class="n">assignmentOp</span><span class="p">),</span> <span class="mi">256</span><span class="p">);</span>
+
+<span class="kt">void</span> <span class="nf">BENCHFUN</span><span class="p">(</span><span class="n">assignmentFill</span><span class="p">)(</span><span class="kt">int</span> <span class="n">iters</span><span class="p">,</span> <span class="kt">int</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">STRING</span> <span class="n">s</span><span class="p">;</span>
+  <span class="n">FOR_EACH_RANGE</span> <span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">iters</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">s</span> <span class="o">=</span> <span class="n">static_cast</span><span class="o">&lt;</span><span class="kt">char</span><span class="o">&gt;</span><span class="p">(</span><span class="n">i</span><span class="p">);</span>
+    <span class="n">doNotOptimizeAway</span><span class="p">(</span><span class="o">&amp;</span><span class="n">s</span><span class="p">);</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+<span class="n">BENCHMARK_PARAM</span><span class="p">(</span><span class="n">BENCHFUN</span><span class="p">(</span><span class="n">assignmentFill</span><span class="p">),</span> <span class="mi">0</span><span class="p">);</span>
+
+<span class="kt">void</span> <span class="nf">BENCHFUN</span><span class="p">(</span><span class="n">resize</span><span class="p">)(</span><span class="kt">int</span> <span class="n">iters</span><span class="p">,</span> <span class="kt">int</span> <span class="n">arg</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">STRING</span> <span class="n">s</span><span class="p">;</span>
+  <span class="n">FOR_EACH_RANGE</span> <span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">iters</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">s</span><span class="p">.</span><span class="n">resize</span><span class="p">(</span><span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">arg</span><span class="p">));</span>
+    <span class="n">doNotOptimizeAway</span><span class="p">(</span><span class="o">&amp;</span><span class="n">s</span><span class="p">);</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+<span class="n">BENCHMARK_PARAM</span><span class="p">(</span><span class="n">BENCHFUN</span><span class="p">(</span><span class="n">resize</span><span class="p">),</span> <span class="mi">524288</span><span class="p">);</span>
+
+<span class="kt">void</span> <span class="nf">BENCHFUN</span><span class="p">(</span><span class="n">findSuccessful</span><span class="p">)(</span><span class="kt">int</span> <span class="n">iters</span><span class="p">,</span> <span class="kt">int</span> <span class="n">arg</span><span class="p">)</span> <span class="p">{</span>
+  <span class="kt">size_t</span> <span class="n">pos</span><span class="p">,</span> <span class="n">len</span><span class="p">;</span>
+  <span class="n">STRING</span> <span class="n">s</span><span class="p">;</span>
+
+  <span class="n">BENCHMARK_SUSPEND</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-2"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-2">&#182;</a></div><p>Text courtesy (ahem) of
+http://www.psychologytoday.com/blog/career-transitions/200906/
+the-dreaded-writing-sample</p></td><td class="code"><div class="highlight"><pre>    <span class="n">s</span> <span class="o">=</span> <span class="s">&quot;\</span>
+<span class="s">Even if you&#39;ve mastered the art of the cover letter and the resume, \</span>
+<span class="s">another part of the job search process can trip up an otherwise \</span>
+<span class="s">qualified candidate: the writing sample.</span><span class="se">\n</span><span class="s">\</span>
+<span class="se">\n</span><span class="s">\</span>
+<span class="s">Strong writing and communication skills are highly sought after by \</span>
+<span class="s">most employers. Whether crafting short emails or lengthy annual \</span>
+<span class="s">reports, many workers use their writing skills every day. And for an \</span>
+<span class="s">employer seeking proof behind that ubiquitous candidate \</span>
+<span class="s">phrase,</span><span class="se">\&quot;</span><span class="s">excellent communication skills</span><span class="se">\&quot;</span><span class="s">, a required writing sample \</span>
+<span class="s">is invaluable.</span><span class="se">\n</span><span class="s">\</span>
+<span class="se">\n</span><span class="s">\</span>
+<span class="s">Writing samples need the same care and attention given to cover \</span>
+<span class="s">letters and resumes. Candidates with otherwise impeccable credentials \</span>
+<span class="s">are routinely eliminated by a poorly chosen writing sample. Notice I \</span>
+<span class="s">said </span><span class="se">\&quot;</span><span class="s">poorly chosen</span><span class="se">\&quot;</span><span class="s"> not </span><span class="se">\&quot;</span><span class="s">poorly written.</span><span class="se">\&quot;</span><span class="s"> Because that&#39;s the rub: \</span>
+<span class="s">a writing sample not only reveals the individual&#39;s writing skills, it \</span>
+<span class="s">also offers a peek into what they consider important or relevant for \</span>
+<span class="s">the position. If you miss that mark with your writing sample, don&#39;t \</span>
+<span class="s">expect to get a call for an interview.&quot;</span><span class="p">;</span>
+
+    <span class="n">pos</span> <span class="o">=</span> <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">s</span><span class="p">.</span><span class="n">size</span><span class="p">());</span>
+    <span class="n">len</span> <span class="o">=</span> <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">s</span><span class="p">.</span><span class="n">size</span><span class="p">()</span> <span class="o">-</span> <span class="n">pos</span><span class="p">);</span>
+  <span class="p">}</span>
+  <span class="n">FOR_EACH_RANGE</span> <span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">iters</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">doNotOptimizeAway</span><span class="p">(</span><span class="n">s</span><span class="p">.</span><span class="n">find</span><span class="p">(</span><span class="n">s</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span> <span class="n">pos</span><span class="p">,</span> <span class="n">len</span><span class="p">));</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+<span class="n">BENCHMARK_PARAM</span><span class="p">(</span><span class="n">BENCHFUN</span><span class="p">(</span><span class="n">findSuccessful</span><span class="p">),</span> <span class="mi">524288</span><span class="p">);</span>
+
+<span class="kt">void</span> <span class="nf">BENCHFUN</span><span class="p">(</span><span class="n">findUnsuccessful</span><span class="p">)(</span><span class="kt">int</span> <span class="n">iters</span><span class="p">,</span> <span class="kt">int</span> <span class="n">arg</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">STRING</span> <span class="n">s</span><span class="p">,</span> <span class="n">s1</span><span class="p">;</span>
+
+  <span class="n">BENCHMARK_SUSPEND</span> <span class="p">{</span>
+    <span class="n">s</span> <span class="o">=</span> <span class="s">&quot;\</span>
+<span class="s">Even if you&#39;ve mastered the art of the cover letter and the resume, \</span>
+<span class="s">another part of the job search process can trip up an otherwise \</span>
+<span class="s">qualified candidate: the writing sample.</span><span class="se">\n</span><span class="s">\</span>
+<span class="se">\n</span><span class="s">\</span>
+<span class="s">Strong writing and communication skills are highly sought after by \</span>
+<span class="s">most employers. Whether crafting short emails or lengthy annual \</span>
+<span class="s">reports, many workers use their writing skills every day. And for an \</span>
+<span class="s">employer seeking proof behind that ubiquitous candidate \</span>
+<span class="s">phrase,</span><span class="se">\&quot;</span><span class="s">excellent communication skills</span><span class="se">\&quot;</span><span class="s">, a required writing sample \</span>
+<span class="s">is invaluable.</span><span class="se">\n</span><span class="s">\</span>
+<span class="se">\n</span><span class="s">\</span>
+<span class="s">Writing samples need the same care and attention given to cover \</span>
+<span class="s">letters and resumes. Candidates with otherwise impeccable credentials \</span>
+<span class="s">are routinely eliminated by a poorly chosen writing sample. Notice I \</span>
+<span class="s">said </span><span class="se">\&quot;</span><span class="s">poorly chosen</span><span class="se">\&quot;</span><span class="s"> not </span><span class="se">\&quot;</span><span class="s">poorly written.</span><span class="se">\&quot;</span><span class="s"> Because that&#39;s the rub: \</span>
+<span class="s">a writing sample not only reveals the individual&#39;s writing skills, it \</span>
+<span class="s">also offers a peek into what they consider important or relevant for \</span>
+<span class="s">the position. If you miss that mark with your writing sample, don&#39;t \</span>
+<span class="s">expect to get a call for an interview.&quot;</span><span class="p">;</span>
+
+    <span class="n">s1</span> <span class="o">=</span> <span class="s">&quot;So how do you tackle that writing sample request?&quot;</span><span class="p">;</span>
+  <span class="p">}</span>
+
+  <span class="n">FOR_EACH_RANGE</span> <span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">iters</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">doNotOptimizeAway</span><span class="p">(</span><span class="n">s</span><span class="p">.</span><span class="n">find</span><span class="p">(</span><span class="n">s1</span><span class="p">));</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+<span class="n">BENCHMARK_PARAM</span><span class="p">(</span><span class="n">BENCHFUN</span><span class="p">(</span><span class="n">findUnsuccessful</span><span class="p">),</span> <span class="mi">524288</span><span class="p">);</span>
+
+<span class="kt">void</span> <span class="nf">BENCHFUN</span><span class="p">(</span><span class="n">replace</span><span class="p">)(</span><span class="kt">int</span> <span class="n">iters</span><span class="p">,</span> <span class="kt">int</span> <span class="n">arg</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">STRING</span> <span class="n">s</span><span class="p">;</span>
+  <span class="n">BENCHMARK_SUSPEND</span> <span class="p">{</span>
+    <span class="n">randomString</span><span class="p">(</span><span class="o">&amp;</span><span class="n">s</span><span class="p">,</span> <span class="n">arg</span><span class="p">);</span>
+  <span class="p">}</span>
+  <span class="n">FOR_EACH_RANGE</span> <span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">iters</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">BenchmarkSuspender</span> <span class="n">susp</span><span class="p">;</span>
+    <span class="n">doNotOptimizeAway</span><span class="p">(</span><span class="o">&amp;</span><span class="n">s</span><span class="p">);</span>
+    <span class="k">auto</span> <span class="k">const</span> <span class="n">pos</span> <span class="o">=</span> <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">s</span><span class="p">.</span><span class="n">size</span><span class="p">());</span>
+    <span class="k">auto</span> <span class="n">toRemove</span> <span class="o">=</span> <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">s</span><span class="p">.</span><span class="n">size</span><span class="p">()</span> <span class="o">-</span> <span class="n">pos</span><span class="p">);</span>
+    <span class="k">auto</span> <span class="n">toInsert</span> <span class="o">=</span> <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">arg</span><span class="p">);</span>
+    <span class="n">STRING</span> <span class="n">s1</span><span class="p">;</span>
+    <span class="n">randomString</span><span class="p">(</span><span class="o">&amp;</span><span class="n">s1</span><span class="p">,</span> <span class="n">toInsert</span><span class="p">);</span>
+    <span class="n">susp</span><span class="p">.</span><span class="n">dismiss</span><span class="p">();</span>
+
+   <span class="n">s</span><span class="p">.</span><span class="n">replace</span><span class="p">(</span><span class="n">pos</span><span class="p">,</span> <span class="n">toRemove</span><span class="p">,</span> <span class="n">s1</span><span class="p">);</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+<span class="n">BENCHMARK_PARAM</span><span class="p">(</span><span class="n">BENCHFUN</span><span class="p">(</span><span class="n">replace</span><span class="p">),</span> <span class="mi">256</span><span class="p">);</span>
+
+<span class="kt">void</span> <span class="nf">BENCHFUN</span><span class="p">(</span><span class="n">push_back</span><span class="p">)(</span><span class="kt">int</span> <span class="n">iters</span><span class="p">,</span> <span class="kt">int</span> <span class="n">arg</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">FOR_EACH_RANGE</span> <span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">iters</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">STRING</span> <span class="n">s</span><span class="p">;</span>
+    <span class="n">FOR_EACH_RANGE</span> <span class="p">(</span><span class="n">j</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">arg</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">s</span> <span class="o">+=</span> <span class="sc">&#39; &#39;</span><span class="p">;</span>
+    <span class="p">}</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+<span class="n">BENCHMARK_PARAM</span><span class="p">(</span><span class="n">BENCHFUN</span><span class="p">(</span><span class="n">push_back</span><span class="p">),</span> <span class="mi">1</span><span class="p">);</span>
+<span class="n">BENCHMARK_PARAM</span><span class="p">(</span><span class="n">BENCHFUN</span><span class="p">(</span><span class="n">push_back</span><span class="p">),</span> <span class="mi">23</span><span class="p">);</span>
+<span class="n">BENCHMARK_PARAM</span><span class="p">(</span><span class="n">BENCHFUN</span><span class="p">(</span><span class="n">push_back</span><span class="p">),</span> <span class="mi">127</span><span class="p">);</span>
+<span class="n">BENCHMARK_PARAM</span><span class="p">(</span><span class="n">BENCHFUN</span><span class="p">(</span><span class="n">push_back</span><span class="p">),</span> <span class="mi">1024</span><span class="p">);</span>
+
+</pre></div></td></tr>
+
+</tbody>
+</table>
+</div>
+
+</body>
+<script>docas={repo:"joekychen/folly",depth:2}</script>
+<script>document.write('<script src=' + ('__proto__' in {} ? 'http://cdnjs.cloudflare.com/ajax/libs/zepto/1.0rc1/zepto.min.js' : 'https://ajax.googleapis.com/ajax/libs/jquery/1.7.2/jquery.min.js')+'><\\/script>')</script>
+<script src="http://baoshan.github.com/moment/min/moment.min.js"></script>
+<script src="../../javascript/docco.min.js"></script>
+</html>

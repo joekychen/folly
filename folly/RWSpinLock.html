@@ -1,0 +1,770 @@
+<!DOCTYPE html>
+<html><head><title>joekychen/folly » folly › RWSpinLock.h
+
+</title>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+<meta name="generator" content="Docco">
+<link rel="stylesheet" media="all" href="../stylesheets/docco.min.css" />
+
+
+</head>
+<body>
+<div id="container">
+<div id="background"></div>
+<table cellpadding="0" cellspacing="0">
+<thead><tr><th class="docs"><a id="home" href="../index.html"></a><h1>RWSpinLock.h</h1></th><th class="code"></th></tr></thead>
+<tbody>
+
+
+<tr id="section-1"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-1">&#182;</a></div></td><td class="code"><div class="highlight"><pre><span class="cm">/*</span>
+<span class="cm"> * Copyright 2012 Facebook, Inc.</span>
+<span class="cm"> *</span>
+<span class="cm"> * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span class="cm"> * you may not use this file except in compliance with the License.</span>
+<span class="cm"> * You may obtain a copy of the License at</span>
+<span class="cm"> *</span>
+<span class="cm"> *   http://www.apache.org/licenses/LICENSE-2.0</span>
+<span class="cm"> *</span>
+<span class="cm"> * Unless required by applicable law or agreed to in writing, software</span>
+<span class="cm"> * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span class="cm"> * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span class="cm"> * See the License for the specific language governing permissions and</span>
+<span class="cm"> * limitations under the License.</span>
+<span class="cm"> */</span>
+
+<span class="cm">/*</span>
+<span class="cm"> * Two Read-Write spin lock implementations.</span>
+<span class="cm"> *</span>
+<span class="cm"> *  Ref: http://locklessinc.com/articles/locks</span>
+<span class="cm"> *</span>
+<span class="cm"> *  Both locks here are faster than pthread_rwlock and have very low</span>
+<span class="cm"> *  overhead (usually 20-30ns).  They don&#39;t use any system mutexes and</span>
+<span class="cm"> *  are very compact (4/8 bytes), so are suitable for per-instance</span>
+<span class="cm"> *  based locking, particularly when contention is not expected.</span>
+<span class="cm"> *</span>
+<span class="cm"> *  In most cases, RWSpinLock is a reasonable choice.  It has minimal</span>
+<span class="cm"> *  overhead, and comparable contention performance when the number of</span>
+<span class="cm"> *  competing threads is less than or equal to the number of logical</span>
+<span class="cm"> *  CPUs.  Even as the number of threads gets larger, RWSpinLock can</span>
+<span class="cm"> *  still be very competitive in READ, although it is slower on WRITE,</span>
+<span class="cm"> *  and also inherently unfair to writers.</span>
+<span class="cm"> *</span>
+<span class="cm"> *  RWTicketSpinLock shows more balanced READ/WRITE performance.  If</span>
+<span class="cm"> *  your application really needs a lot more threads, and a</span>
+<span class="cm"> *  higher-priority writer, prefer one of the RWTicketSpinLock locks.</span>
+<span class="cm"> *</span>
+<span class="cm"> *  Caveats:</span>
+<span class="cm"> *</span>
+<span class="cm"> *    RWTicketSpinLock locks can only be used with GCC on x86/x86-64</span>
+<span class="cm"> *    based systems.</span>
+<span class="cm"> *</span>
+<span class="cm"> *    RWTicketSpinLock&lt;32&gt; only allows up to 2^8 - 1 concurrent</span>
+<span class="cm"> *    readers and writers.</span>
+<span class="cm"> *</span>
+<span class="cm"> *    RWTicketSpinLock&lt;64&gt; only allows up to 2^16 - 1 concurrent</span>
+<span class="cm"> *    readers and writers.</span>
+<span class="cm"> *</span>
+<span class="cm"> *    RWSpinLock handles 2^30 - 1 concurrent readers.</span>
+<span class="cm"> *</span>
+<span class="cm"> * @author Xin Liu &lt;xliux@fb.com&gt;</span>
+<span class="cm"> */</span>
+
+<span class="cp">#ifndef FOLLY_RWSPINLOCK_H_</span>
+<span class="cp">#define FOLLY_RWSPINLOCK_H_</span>
+
+<span class="cm">/*</span>
+<span class="cm">========================================================================</span>
+<span class="cm">Benchmark on (Intel(R) Xeon(R) CPU  L5630  @ 2.13GHz)  8 cores(16 HTs)</span>
+<span class="cm">========================================================================</span>
+
+<span class="cm">------------------------------------------------------------------------------</span>
+<span class="cm">1. Single thread benchmark (read/write lock + unlock overhead)</span>
+<span class="cm">Benchmark                                    Iters   Total t    t/iter iter/sec</span>
+<span class="cm">-------------------------------------------------------------------------------</span>
+<span class="cm">*      BM_RWSpinLockRead                     100000  1.786 ms  17.86 ns   53.4M</span>
+<span class="cm">+30.5% BM_RWSpinLockWrite                    100000  2.331 ms  23.31 ns  40.91M</span>
+<span class="cm">+85.7% BM_RWTicketSpinLock32Read             100000  3.317 ms  33.17 ns  28.75M</span>
+<span class="cm">+96.0% BM_RWTicketSpinLock32Write            100000    3.5 ms     35 ns  27.25M</span>
+<span class="cm">+85.6% BM_RWTicketSpinLock64Read             100000  3.315 ms  33.15 ns  28.77M</span>
+<span class="cm">+96.0% BM_RWTicketSpinLock64Write            100000    3.5 ms     35 ns  27.25M</span>
+<span class="cm">+85.7% BM_RWTicketSpinLock32FavorWriterRead  100000  3.317 ms  33.17 ns  28.75M</span>
+<span class="cm">+29.7% BM_RWTicketSpinLock32FavorWriterWrite 100000  2.316 ms  23.16 ns  41.18M</span>
+<span class="cm">+85.3% BM_RWTicketSpinLock64FavorWriterRead  100000  3.309 ms  33.09 ns  28.82M</span>
+<span class="cm">+30.2% BM_RWTicketSpinLock64FavorWriterWrite 100000  2.325 ms  23.25 ns  41.02M</span>
+<span class="cm">+ 175% BM_PThreadRWMutexRead                 100000  4.917 ms  49.17 ns   19.4M</span>
+<span class="cm">+ 166% BM_PThreadRWMutexWrite                100000  4.757 ms  47.57 ns  20.05M</span>
+
+<span class="cm">------------------------------------------------------------------------------</span>
+<span class="cm">2. Contention Benchmark      90% read  10% write</span>
+<span class="cm">Benchmark                    hits       average    min       max        sigma</span>
+<span class="cm">------------------------------------------------------------------------------</span>
+<span class="cm">---------- 8  threads ------------</span>
+<span class="cm">RWSpinLock       Write       142666     220ns      78ns      40.8us     269ns</span>
+<span class="cm">RWSpinLock       Read        1282297    222ns      80ns      37.7us     248ns</span>
+<span class="cm">RWTicketSpinLock Write       85692      209ns      71ns      17.9us     252ns</span>
+<span class="cm">RWTicketSpinLock Read        769571     215ns      78ns      33.4us     251ns</span>
+<span class="cm">pthread_rwlock_t Write       84248      2.48us     99ns      269us      8.19us</span>
+<span class="cm">pthread_rwlock_t Read        761646     933ns      101ns     374us      3.25us</span>
+
+<span class="cm">---------- 16 threads ------------</span>
+<span class="cm">RWSpinLock       Write       124236     237ns      78ns      261us      801ns</span>
+<span class="cm">RWSpinLock       Read        1115807    236ns      78ns      2.27ms     2.17us</span>
+<span class="cm">RWTicketSpinLock Write       81781      231ns      71ns      31.4us     351ns</span>
+<span class="cm">RWTicketSpinLock Read        734518     238ns      78ns      73.6us     379ns</span>
+<span class="cm">pthread_rwlock_t Write       83363      7.12us     99ns      785us      28.1us</span>
+<span class="cm">pthread_rwlock_t Read        754978     2.18us     101ns     1.02ms     14.3us</span>
+
+<span class="cm">---------- 50 threads ------------</span>
+<span class="cm">RWSpinLock       Write       131142     1.37us     82ns      7.53ms     68.2us</span>
+<span class="cm">RWSpinLock       Read        1181240    262ns      78ns      6.62ms     12.7us</span>
+<span class="cm">RWTicketSpinLock Write       83045      397ns      73ns      7.01ms     31.5us</span>
+<span class="cm">RWTicketSpinLock Read        744133     386ns      78ns        11ms     31.4us</span>
+<span class="cm">pthread_rwlock_t Write       80849      112us      103ns     4.52ms     263us</span>
+<span class="cm">pthread_rwlock_t Read        728698     24us       101ns     7.28ms     194us</span>
+
+<span class="cm">*/</span>
+
+<span class="cp">#if defined(__GNUC__) &amp;&amp; (defined(__i386) || defined(__x86_64__) || \</span>
+<span class="cp">    defined(ARCH_K8))</span>
+<span class="cp">#define RW_SPINLOCK_USE_X86_INTRINSIC_</span>
+<span class="cp">#include &lt;x86intrin.h&gt;</span>
+<span class="cp">#else</span>
+<span class="cp">#undef RW_SPINLOCK_USE_X86_INTRINSIC_</span>
+<span class="cp">#endif</span>
+
+<span class="cp">#include &lt;atomic&gt;</span>
+<span class="cp">#include &lt;string&gt;</span>
+<span class="cp">#include &lt;algorithm&gt;</span>
+<span class="cp">#include &lt;boost/noncopyable.hpp&gt;</span>
+
+<span class="cp">#include &lt;sched.h&gt;</span>
+<span class="cp">#include &lt;glog/logging.h&gt;</span>
+
+<span class="cp">#include &quot;folly/Likely.h&quot;</span>
+
+<span class="n">namespace</span> <span class="n">folly</span> <span class="p">{</span>
+
+<span class="cm">/*</span>
+<span class="cm"> * A simple, small (4-bytes), but unfair rwlock.  Use it when you want</span>
+<span class="cm"> * a nice writer and don&#39;t expect a lot of write/read contention, or</span>
+<span class="cm"> * when you need small rwlocks since you are creating a large number</span>
+<span class="cm"> * of them.</span>
+<span class="cm"> *</span>
+<span class="cm"> * Note that the unfairness here is extreme: if the lock is</span>
+<span class="cm"> * continually accessed for read, writers will never get a chance.  If</span>
+<span class="cm"> * the lock can be that highly contended this class is probably not an</span>
+<span class="cm"> * ideal choice anyway.</span>
+<span class="cm"> *</span>
+<span class="cm"> * It currently implements most of the Lockable, SharedLockable and</span>
+<span class="cm"> * UpgradeLockable concepts except the TimedLockable related locking/unlocking</span>
+<span class="cm"> * interfaces.</span>
+<span class="cm"> */</span>
+<span class="n">class</span> <span class="n">RWSpinLock</span> <span class="o">:</span> <span class="n">boost</span><span class="o">::</span><span class="n">noncopyable</span> <span class="p">{</span>
+  <span class="k">enum</span> <span class="o">:</span> <span class="kt">int32_t</span> <span class="p">{</span> <span class="n">READER</span> <span class="o">=</span> <span class="mi">4</span><span class="p">,</span> <span class="n">UPGRADED</span> <span class="o">=</span> <span class="mi">2</span><span class="p">,</span> <span class="n">WRITER</span> <span class="o">=</span> <span class="mi">1</span> <span class="p">};</span>
+ <span class="nl">public:</span>
+  <span class="n">RWSpinLock</span><span class="p">()</span> <span class="o">:</span> <span class="n">bits_</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span> <span class="p">{}</span></pre></div></td></tr>
+
+
+<tr id="section-2"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-2">&#182;</a></div><p>Lockable Concept</p></td><td class="code"><div class="highlight"><pre>  <span class="kt">void</span> <span class="n">lock</span><span class="p">()</span> <span class="p">{</span>
+    <span class="kt">int</span> <span class="n">count</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+    <span class="k">while</span> <span class="p">(</span><span class="o">!</span><span class="n">LIKELY</span><span class="p">(</span><span class="n">try_lock</span><span class="p">()))</span> <span class="p">{</span>
+      <span class="k">if</span> <span class="p">(</span><span class="o">++</span><span class="n">count</span> <span class="o">&gt;</span> <span class="mi">1000</span><span class="p">)</span> <span class="n">sched_yield</span><span class="p">();</span>
+    <span class="p">}</span>
+  <span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-3"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-3">&#182;</a></div><p>Writer is responsible for clearing up both the UPGRADED and WRITER bits.</p></td><td class="code"><div class="highlight"><pre>  <span class="kt">void</span> <span class="n">unlock</span><span class="p">()</span> <span class="p">{</span>
+    <span class="n">static_assert</span><span class="p">(</span><span class="n">READER</span> <span class="o">&gt;</span> <span class="n">WRITER</span> <span class="o">+</span> <span class="n">UPGRADED</span><span class="p">,</span> <span class="s">&quot;wrong bits!&quot;</span><span class="p">);</span>
+    <span class="n">bits_</span><span class="p">.</span><span class="n">fetch_and</span><span class="p">(</span><span class="o">~</span><span class="p">(</span><span class="n">WRITER</span> <span class="o">|</span> <span class="n">UPGRADED</span><span class="p">),</span> <span class="n">std</span><span class="o">::</span><span class="n">memory_order_release</span><span class="p">);</span>
+  <span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-4"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-4">&#182;</a></div><p>SharedLockable Concept</p></td><td class="code"><div class="highlight"><pre>  <span class="kt">void</span> <span class="n">lock_shared</span><span class="p">()</span> <span class="p">{</span>
+    <span class="kt">int</span> <span class="n">count</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+    <span class="k">while</span> <span class="p">(</span><span class="o">!</span><span class="n">LIKELY</span><span class="p">(</span><span class="n">try_lock_shared</span><span class="p">()))</span> <span class="p">{</span>
+      <span class="k">if</span> <span class="p">(</span><span class="o">++</span><span class="n">count</span> <span class="o">&gt;</span> <span class="mi">1000</span><span class="p">)</span> <span class="n">sched_yield</span><span class="p">();</span>
+    <span class="p">}</span>
+  <span class="p">}</span>
+
+  <span class="kt">void</span> <span class="n">unlock_shared</span><span class="p">()</span> <span class="p">{</span>
+    <span class="n">bits_</span><span class="p">.</span><span class="n">fetch_add</span><span class="p">(</span><span class="o">-</span><span class="n">READER</span><span class="p">,</span> <span class="n">std</span><span class="o">::</span><span class="n">memory_order_release</span><span class="p">);</span>
+  <span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-5"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-5">&#182;</a></div><p>Downgrade the lock from writer status to reader status.</p></td><td class="code"><div class="highlight"><pre>  <span class="kt">void</span> <span class="n">unlock_and_lock_shared</span><span class="p">()</span> <span class="p">{</span>
+    <span class="n">bits_</span><span class="p">.</span><span class="n">fetch_add</span><span class="p">(</span><span class="n">READER</span><span class="p">,</span> <span class="n">std</span><span class="o">::</span><span class="n">memory_order_acquire</span><span class="p">);</span>
+    <span class="n">unlock</span><span class="p">();</span>
+  <span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-6"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-6">&#182;</a></div><p>UpgradeLockable Concept</p></td><td class="code"><div class="highlight"><pre>  <span class="kt">void</span> <span class="n">lock_upgrade</span><span class="p">()</span> <span class="p">{</span>
+    <span class="kt">int</span> <span class="n">count</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+    <span class="k">while</span> <span class="p">(</span><span class="o">!</span><span class="n">try_lock_upgrade</span><span class="p">())</span> <span class="p">{</span>
+      <span class="k">if</span> <span class="p">(</span><span class="o">++</span><span class="n">count</span> <span class="o">&gt;</span> <span class="mi">1000</span><span class="p">)</span> <span class="n">sched_yield</span><span class="p">();</span>
+    <span class="p">}</span>
+  <span class="p">}</span>
+
+  <span class="kt">void</span> <span class="n">unlock_upgrade</span><span class="p">()</span> <span class="p">{</span>
+    <span class="n">bits_</span><span class="p">.</span><span class="n">fetch_add</span><span class="p">(</span><span class="o">-</span><span class="n">UPGRADED</span><span class="p">,</span> <span class="n">std</span><span class="o">::</span><span class="n">memory_order_acq_rel</span><span class="p">);</span>
+  <span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-7"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-7">&#182;</a></div><p>unlock upgrade and try to acquire write lock</p></td><td class="code"><div class="highlight"><pre>  <span class="kt">void</span> <span class="n">unlock_upgrade_and_lock</span><span class="p">()</span> <span class="p">{</span>
+    <span class="kt">int64_t</span> <span class="n">count</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+    <span class="k">while</span> <span class="p">(</span><span class="o">!</span><span class="n">try_unlock_upgrade_and_lock</span><span class="p">())</span> <span class="p">{</span>
+      <span class="k">if</span> <span class="p">(</span><span class="o">++</span><span class="n">count</span> <span class="o">&gt;</span> <span class="mi">1000</span><span class="p">)</span> <span class="n">sched_yield</span><span class="p">();</span>
+    <span class="p">}</span>
+  <span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-8"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-8">&#182;</a></div><p>unlock upgrade and read lock atomically</p></td><td class="code"><div class="highlight"><pre>  <span class="kt">void</span> <span class="n">unlock_upgrade_and_lock_shared</span><span class="p">()</span> <span class="p">{</span>
+    <span class="n">bits_</span><span class="p">.</span><span class="n">fetch_add</span><span class="p">(</span><span class="n">READER</span> <span class="o">-</span> <span class="n">UPGRADED</span><span class="p">,</span> <span class="n">std</span><span class="o">::</span><span class="n">memory_order_acq_rel</span><span class="p">);</span>
+  <span class="p">}</span>
+
+  <span class="kt">void</span> <span class="n">unlock_shared_and_lock_upgrade</span><span class="p">()</span> <span class="p">{</span>
+    <span class="n">lock_upgrade</span><span class="p">();</span>
+    <span class="n">unlock_shared</span><span class="p">();</span>
+  <span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-9"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-9">&#182;</a></div><p>write unlock and upgrade lock atomically</p></td><td class="code"><div class="highlight"><pre>  <span class="kt">void</span> <span class="n">unlock_and_lock_upgrade</span><span class="p">()</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-10"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-10">&#182;</a></div><p>need to do it in two steps here -- as the UPGRADED bit might be OR-ed at
+the same time when other threads are trying do try<em>lock</em>upgrade().</p></td><td class="code"><div class="highlight"><pre>    <span class="n">bits_</span><span class="p">.</span><span class="n">fetch_or</span><span class="p">(</span><span class="n">UPGRADED</span><span class="p">,</span> <span class="n">std</span><span class="o">::</span><span class="n">memory_order_acquire</span><span class="p">);</span>
+    <span class="n">bits_</span><span class="p">.</span><span class="n">fetch_add</span><span class="p">(</span><span class="o">-</span><span class="n">WRITER</span><span class="p">,</span> <span class="n">std</span><span class="o">::</span><span class="n">memory_order_release</span><span class="p">);</span>
+  <span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-11"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-11">&#182;</a></div><p>Attempt to acquire writer permission. Return false if we didn't get it.</p></td><td class="code"><div class="highlight"><pre>  <span class="n">bool</span> <span class="n">try_lock</span><span class="p">()</span> <span class="p">{</span>
+    <span class="kt">int32_t</span> <span class="n">expect</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+    <span class="k">return</span> <span class="n">bits_</span><span class="p">.</span><span class="n">compare_exchange_strong</span><span class="p">(</span><span class="n">expect</span><span class="p">,</span> <span class="n">WRITER</span><span class="p">,</span>
+      <span class="n">std</span><span class="o">::</span><span class="n">memory_order_acq_rel</span><span class="p">);</span>
+  <span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-12"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-12">&#182;</a></div><p>Try to get reader permission on the lock. This can fail if we
+find out someone is a writer.</p></td><td class="code"><div class="highlight"><pre>  <span class="n">bool</span> <span class="n">try_lock_shared</span><span class="p">()</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-13"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-13">&#182;</a></div><p>fetch<em>add is considerably (100%) faster than compare</em>exchange,
+so here we are optimizing for the common (lock success) case.</p></td><td class="code"><div class="highlight"><pre>    <span class="kt">int32_t</span> <span class="n">value</span> <span class="o">=</span> <span class="n">bits_</span><span class="p">.</span><span class="n">fetch_add</span><span class="p">(</span><span class="n">READER</span><span class="p">,</span> <span class="n">std</span><span class="o">::</span><span class="n">memory_order_acquire</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">UNLIKELY</span><span class="p">(</span><span class="n">value</span> <span class="o">&amp;</span> <span class="n">WRITER</span><span class="p">))</span> <span class="p">{</span>
+      <span class="n">bits_</span><span class="p">.</span><span class="n">fetch_add</span><span class="p">(</span><span class="o">-</span><span class="n">READER</span><span class="p">,</span> <span class="n">std</span><span class="o">::</span><span class="n">memory_order_release</span><span class="p">);</span>
+      <span class="k">return</span> <span class="nb">false</span><span class="p">;</span>
+    <span class="p">}</span>
+    <span class="k">return</span> <span class="nb">true</span><span class="p">;</span>
+  <span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-14"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-14">&#182;</a></div><p>try to unlock upgrade and write lock atomically</p></td><td class="code"><div class="highlight"><pre>  <span class="n">bool</span> <span class="n">try_unlock_upgrade_and_lock</span><span class="p">()</span> <span class="p">{</span>
+    <span class="kt">int32_t</span> <span class="n">expect</span> <span class="o">=</span> <span class="n">UPGRADED</span><span class="p">;</span>
+    <span class="k">return</span> <span class="n">bits_</span><span class="p">.</span><span class="n">compare_exchange_strong</span><span class="p">(</span><span class="n">expect</span><span class="p">,</span> <span class="n">WRITER</span><span class="p">,</span>
+        <span class="n">std</span><span class="o">::</span><span class="n">memory_order_acq_rel</span><span class="p">);</span>
+  <span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-15"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-15">&#182;</a></div><p>try to acquire an upgradable lock.</p></td><td class="code"><div class="highlight"><pre>  <span class="n">bool</span> <span class="n">try_lock_upgrade</span><span class="p">()</span> <span class="p">{</span>
+    <span class="kt">int32_t</span> <span class="n">value</span> <span class="o">=</span> <span class="n">bits_</span><span class="p">.</span><span class="n">fetch_or</span><span class="p">(</span><span class="n">UPGRADED</span><span class="p">,</span> <span class="n">std</span><span class="o">::</span><span class="n">memory_order_acquire</span><span class="p">);</span></pre></div></td></tr>
+
+
+<tr id="section-16"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-16">&#182;</a></div><p>Note: when failed, we cannot flip the UPGRADED bit back,
+as in this case there is either another upgrade lock or a write lock.
+If it's a write lock, the bit will get cleared up when that lock's done
+with unlock().</p></td><td class="code"><div class="highlight"><pre>    <span class="k">return</span> <span class="p">((</span><span class="n">value</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">UPGRADED</span> <span class="o">|</span> <span class="n">WRITER</span><span class="p">))</span> <span class="o">==</span> <span class="mi">0</span><span class="p">);</span>
+  <span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-17"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-17">&#182;</a></div><p>mainly for debugging purposes.</p></td><td class="code"><div class="highlight"><pre>  <span class="kt">int32_t</span> <span class="n">bits</span><span class="p">()</span> <span class="k">const</span> <span class="p">{</span> <span class="k">return</span> <span class="n">bits_</span><span class="p">.</span><span class="n">load</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">memory_order_acquire</span><span class="p">);</span> <span class="p">}</span>
+
+  <span class="n">class</span> <span class="n">ReadHolder</span><span class="p">;</span>
+  <span class="n">class</span> <span class="n">UpgradedHolder</span><span class="p">;</span>
+  <span class="n">class</span> <span class="n">WriteHolder</span><span class="p">;</span>
+
+  <span class="n">class</span> <span class="n">ReadHolder</span> <span class="p">{</span>
+   <span class="nl">public:</span>
+    <span class="n">explicit</span> <span class="n">ReadHolder</span><span class="p">(</span><span class="n">RWSpinLock</span><span class="o">*</span> <span class="n">lock</span> <span class="o">=</span> <span class="n">nullptr</span><span class="p">)</span> <span class="o">:</span> <span class="n">lock_</span><span class="p">(</span><span class="n">lock</span><span class="p">)</span> <span class="p">{</span>
+      <span class="k">if</span> <span class="p">(</span><span class="n">lock_</span><span class="p">)</span> <span class="n">lock_</span><span class="o">-&gt;</span><span class="n">lock_shared</span><span class="p">();</span>
+    <span class="p">}</span>
+
+    <span class="n">explicit</span> <span class="n">ReadHolder</span><span class="p">(</span><span class="n">RWSpinLock</span><span class="o">&amp;</span> <span class="n">lock</span><span class="p">)</span> <span class="o">:</span> <span class="n">lock_</span><span class="p">(</span><span class="o">&amp;</span><span class="n">lock</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">lock_</span><span class="o">-&gt;</span><span class="n">lock_shared</span><span class="p">();</span>
+    <span class="p">}</span>
+
+    <span class="n">ReadHolder</span><span class="p">(</span><span class="n">ReadHolder</span><span class="o">&amp;&amp;</span> <span class="n">other</span><span class="p">)</span> <span class="o">:</span> <span class="n">lock_</span><span class="p">(</span><span class="n">other</span><span class="p">.</span><span class="n">lock_</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">other</span><span class="p">.</span><span class="n">lock_</span> <span class="o">=</span> <span class="n">nullptr</span><span class="p">;</span>
+    <span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-18"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-18">&#182;</a></div><p>down-grade</p></td><td class="code"><div class="highlight"><pre>    <span class="n">explicit</span> <span class="n">ReadHolder</span><span class="p">(</span><span class="n">UpgradedHolder</span><span class="o">&amp;&amp;</span> <span class="n">upgraded</span><span class="p">)</span> <span class="o">:</span> <span class="n">lock_</span><span class="p">(</span><span class="n">upgraded</span><span class="p">.</span><span class="n">lock_</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">upgraded</span><span class="p">.</span><span class="n">lock_</span> <span class="o">=</span> <span class="n">nullptr</span><span class="p">;</span>
+      <span class="k">if</span> <span class="p">(</span><span class="n">lock_</span><span class="p">)</span> <span class="n">lock_</span><span class="o">-&gt;</span><span class="n">unlock_upgrade_and_lock_shared</span><span class="p">();</span>
+    <span class="p">}</span>
+
+    <span class="n">explicit</span> <span class="n">ReadHolder</span><span class="p">(</span><span class="n">WriteHolder</span><span class="o">&amp;&amp;</span> <span class="n">writer</span><span class="p">)</span> <span class="o">:</span> <span class="n">lock_</span><span class="p">(</span><span class="n">writer</span><span class="p">.</span><span class="n">lock_</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">writer</span><span class="p">.</span><span class="n">lock_</span> <span class="o">=</span> <span class="n">nullptr</span><span class="p">;</span>
+      <span class="k">if</span> <span class="p">(</span><span class="n">lock_</span><span class="p">)</span> <span class="n">lock_</span><span class="o">-&gt;</span><span class="n">unlock_and_lock_shared</span><span class="p">();</span>
+    <span class="p">}</span>
+
+    <span class="n">ReadHolder</span><span class="o">&amp;</span> <span class="n">operator</span><span class="o">=</span><span class="p">(</span><span class="n">ReadHolder</span><span class="o">&amp;&amp;</span> <span class="n">other</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">using</span> <span class="n">std</span><span class="o">::</span><span class="n">swap</span><span class="p">;</span>
+      <span class="n">swap</span><span class="p">(</span><span class="n">lock_</span><span class="p">,</span> <span class="n">other</span><span class="p">.</span><span class="n">lock_</span><span class="p">);</span>
+      <span class="k">return</span> <span class="o">*</span><span class="n">this</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="n">ReadHolder</span><span class="p">(</span><span class="k">const</span> <span class="n">ReadHolder</span><span class="o">&amp;</span> <span class="n">other</span><span class="p">)</span> <span class="o">=</span> <span class="n">delete</span><span class="p">;</span>
+    <span class="n">ReadHolder</span><span class="o">&amp;</span> <span class="n">operator</span><span class="o">=</span><span class="p">(</span><span class="k">const</span> <span class="n">ReadHolder</span><span class="o">&amp;</span> <span class="n">other</span><span class="p">)</span> <span class="o">=</span> <span class="n">delete</span><span class="p">;</span>
+
+    <span class="o">~</span><span class="n">ReadHolder</span><span class="p">()</span> <span class="p">{</span> <span class="k">if</span> <span class="p">(</span><span class="n">lock_</span><span class="p">)</span> <span class="n">lock_</span><span class="o">-&gt;</span><span class="n">unlock_shared</span><span class="p">();</span> <span class="p">}</span>
+
+    <span class="kt">void</span> <span class="n">reset</span><span class="p">(</span><span class="n">RWSpinLock</span><span class="o">*</span> <span class="n">lock</span> <span class="o">=</span> <span class="n">nullptr</span><span class="p">)</span> <span class="p">{</span>
+      <span class="k">if</span> <span class="p">(</span><span class="n">lock</span> <span class="o">==</span> <span class="n">lock_</span><span class="p">)</span> <span class="k">return</span><span class="p">;</span>
+      <span class="k">if</span> <span class="p">(</span><span class="n">lock_</span><span class="p">)</span> <span class="n">lock_</span><span class="o">-&gt;</span><span class="n">unlock_shared</span><span class="p">();</span>
+      <span class="n">lock_</span> <span class="o">=</span> <span class="n">lock</span><span class="p">;</span>
+      <span class="k">if</span> <span class="p">(</span><span class="n">lock_</span><span class="p">)</span> <span class="n">lock_</span><span class="o">-&gt;</span><span class="n">lock_shared</span><span class="p">();</span>
+    <span class="p">}</span>
+
+    <span class="kt">void</span> <span class="n">swap</span><span class="p">(</span><span class="n">ReadHolder</span><span class="o">*</span> <span class="n">other</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">std</span><span class="o">::</span><span class="n">swap</span><span class="p">(</span><span class="n">lock_</span><span class="p">,</span> <span class="n">other</span><span class="o">-&gt;</span><span class="n">lock_</span><span class="p">);</span>
+    <span class="p">}</span>
+
+   <span class="nl">private:</span>
+    <span class="n">friend</span> <span class="n">class</span> <span class="n">UpgradedHolder</span><span class="p">;</span>
+    <span class="n">friend</span> <span class="n">class</span> <span class="n">WriteHolder</span><span class="p">;</span>
+    <span class="n">RWSpinLock</span><span class="o">*</span> <span class="n">lock_</span><span class="p">;</span>
+  <span class="p">};</span>
+
+  <span class="n">class</span> <span class="n">UpgradedHolder</span> <span class="p">{</span>
+   <span class="nl">public:</span>
+    <span class="n">explicit</span> <span class="n">UpgradedHolder</span><span class="p">(</span><span class="n">RWSpinLock</span><span class="o">*</span> <span class="n">lock</span> <span class="o">=</span> <span class="n">nullptr</span><span class="p">)</span> <span class="o">:</span> <span class="n">lock_</span><span class="p">(</span><span class="n">lock</span><span class="p">)</span> <span class="p">{</span>
+      <span class="k">if</span> <span class="p">(</span><span class="n">lock_</span><span class="p">)</span> <span class="n">lock_</span><span class="o">-&gt;</span><span class="n">lock_upgrade</span><span class="p">();</span>
+    <span class="p">}</span>
+
+    <span class="n">explicit</span> <span class="n">UpgradedHolder</span><span class="p">(</span><span class="n">RWSpinLock</span><span class="o">&amp;</span> <span class="n">lock</span><span class="p">)</span> <span class="o">:</span> <span class="n">lock_</span><span class="p">(</span><span class="o">&amp;</span><span class="n">lock</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">lock_</span><span class="o">-&gt;</span><span class="n">lock_upgrade</span><span class="p">();</span>
+    <span class="p">}</span>
+
+    <span class="n">explicit</span> <span class="n">UpgradedHolder</span><span class="p">(</span><span class="n">ReadHolder</span><span class="o">&amp;&amp;</span> <span class="n">reader</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">lock_</span> <span class="o">=</span> <span class="n">reader</span><span class="p">.</span><span class="n">lock_</span><span class="p">;</span>
+      <span class="n">reader</span><span class="p">.</span><span class="n">lock_</span> <span class="o">=</span> <span class="n">nullptr</span><span class="p">;</span>
+      <span class="k">if</span> <span class="p">(</span><span class="n">lock_</span><span class="p">)</span> <span class="n">lock_</span><span class="o">-&gt;</span><span class="n">unlock_shared_and_lock_upgrade</span><span class="p">();</span>
+    <span class="p">}</span>
+
+    <span class="n">explicit</span> <span class="n">UpgradedHolder</span><span class="p">(</span><span class="n">WriteHolder</span><span class="o">&amp;&amp;</span> <span class="n">writer</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">lock_</span> <span class="o">=</span> <span class="n">writer</span><span class="p">.</span><span class="n">lock_</span><span class="p">;</span>
+      <span class="n">writer</span><span class="p">.</span><span class="n">lock_</span> <span class="o">=</span> <span class="n">nullptr</span><span class="p">;</span>
+      <span class="k">if</span> <span class="p">(</span><span class="n">lock_</span><span class="p">)</span> <span class="n">lock_</span><span class="o">-&gt;</span><span class="n">unlock_and_lock_upgrade</span><span class="p">();</span>
+    <span class="p">}</span>
+
+    <span class="n">UpgradedHolder</span><span class="p">(</span><span class="n">UpgradedHolder</span><span class="o">&amp;&amp;</span> <span class="n">other</span><span class="p">)</span> <span class="o">:</span> <span class="n">lock_</span><span class="p">(</span><span class="n">other</span><span class="p">.</span><span class="n">lock_</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">other</span><span class="p">.</span><span class="n">lock_</span> <span class="o">=</span> <span class="n">nullptr</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="n">UpgradedHolder</span><span class="o">&amp;</span> <span class="n">operator</span> <span class="o">=</span><span class="p">(</span><span class="n">UpgradedHolder</span><span class="o">&amp;&amp;</span> <span class="n">other</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">using</span> <span class="n">std</span><span class="o">::</span><span class="n">swap</span><span class="p">;</span>
+      <span class="n">swap</span><span class="p">(</span><span class="n">lock_</span><span class="p">,</span> <span class="n">other</span><span class="p">.</span><span class="n">lock_</span><span class="p">);</span>
+      <span class="k">return</span> <span class="o">*</span><span class="n">this</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="n">UpgradedHolder</span><span class="p">(</span><span class="k">const</span> <span class="n">UpgradedHolder</span><span class="o">&amp;</span> <span class="n">other</span><span class="p">)</span> <span class="o">=</span> <span class="n">delete</span><span class="p">;</span>
+    <span class="n">UpgradedHolder</span><span class="o">&amp;</span> <span class="n">operator</span> <span class="o">=</span><span class="p">(</span><span class="k">const</span> <span class="n">UpgradedHolder</span><span class="o">&amp;</span> <span class="n">other</span><span class="p">)</span> <span class="o">=</span> <span class="n">delete</span><span class="p">;</span>
+
+    <span class="o">~</span><span class="n">UpgradedHolder</span><span class="p">()</span> <span class="p">{</span> <span class="k">if</span> <span class="p">(</span><span class="n">lock_</span><span class="p">)</span> <span class="n">lock_</span><span class="o">-&gt;</span><span class="n">unlock_upgrade</span><span class="p">();</span> <span class="p">}</span>
+
+    <span class="kt">void</span> <span class="n">reset</span><span class="p">(</span><span class="n">RWSpinLock</span><span class="o">*</span> <span class="n">lock</span> <span class="o">=</span> <span class="n">nullptr</span><span class="p">)</span> <span class="p">{</span>
+      <span class="k">if</span> <span class="p">(</span><span class="n">lock</span> <span class="o">==</span> <span class="n">lock_</span><span class="p">)</span> <span class="k">return</span><span class="p">;</span>
+      <span class="k">if</span> <span class="p">(</span><span class="n">lock_</span><span class="p">)</span> <span class="n">lock_</span><span class="o">-&gt;</span><span class="n">unlock_upgrade</span><span class="p">();</span>
+      <span class="n">lock_</span> <span class="o">=</span> <span class="n">lock</span><span class="p">;</span>
+      <span class="k">if</span> <span class="p">(</span><span class="n">lock_</span><span class="p">)</span> <span class="n">lock_</span><span class="o">-&gt;</span><span class="n">lock_upgrade</span><span class="p">();</span>
+    <span class="p">}</span>
+
+    <span class="kt">void</span> <span class="n">swap</span><span class="p">(</span><span class="n">UpgradedHolder</span><span class="o">*</span> <span class="n">other</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">using</span> <span class="n">std</span><span class="o">::</span><span class="n">swap</span><span class="p">;</span>
+      <span class="n">swap</span><span class="p">(</span><span class="n">lock_</span><span class="p">,</span> <span class="n">other</span><span class="o">-&gt;</span><span class="n">lock_</span><span class="p">);</span>
+    <span class="p">}</span>
+
+   <span class="nl">private:</span>
+    <span class="n">friend</span> <span class="n">class</span> <span class="n">WriteHolder</span><span class="p">;</span>
+    <span class="n">friend</span> <span class="n">class</span> <span class="n">ReadHolder</span><span class="p">;</span>
+    <span class="n">RWSpinLock</span><span class="o">*</span> <span class="n">lock_</span><span class="p">;</span>
+  <span class="p">};</span>
+
+  <span class="n">class</span> <span class="n">WriteHolder</span> <span class="p">{</span>
+   <span class="nl">public:</span>
+    <span class="n">explicit</span> <span class="n">WriteHolder</span><span class="p">(</span><span class="n">RWSpinLock</span><span class="o">*</span> <span class="n">lock</span> <span class="o">=</span> <span class="n">nullptr</span><span class="p">)</span> <span class="o">:</span> <span class="n">lock_</span><span class="p">(</span><span class="n">lock</span><span class="p">)</span> <span class="p">{</span>
+      <span class="k">if</span> <span class="p">(</span><span class="n">lock_</span><span class="p">)</span> <span class="n">lock_</span><span class="o">-&gt;</span><span class="n">lock</span><span class="p">();</span>
+    <span class="p">}</span>
+
+    <span class="n">explicit</span> <span class="n">WriteHolder</span><span class="p">(</span><span class="n">RWSpinLock</span><span class="o">&amp;</span> <span class="n">lock</span><span class="p">)</span> <span class="o">:</span> <span class="n">lock_</span><span class="p">(</span><span class="o">&amp;</span><span class="n">lock</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">lock_</span><span class="o">-&gt;</span><span class="n">lock</span><span class="p">();</span>
+    <span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-19"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-19">&#182;</a></div><p>promoted from an upgrade lock holder</p></td><td class="code"><div class="highlight"><pre>    <span class="n">explicit</span> <span class="n">WriteHolder</span><span class="p">(</span><span class="n">UpgradedHolder</span><span class="o">&amp;&amp;</span> <span class="n">upgraded</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">lock_</span> <span class="o">=</span> <span class="n">upgraded</span><span class="p">.</span><span class="n">lock_</span><span class="p">;</span>
+      <span class="n">upgraded</span><span class="p">.</span><span class="n">lock_</span> <span class="o">=</span> <span class="n">nullptr</span><span class="p">;</span>
+      <span class="k">if</span> <span class="p">(</span><span class="n">lock_</span><span class="p">)</span> <span class="n">lock_</span><span class="o">-&gt;</span><span class="n">unlock_upgrade_and_lock</span><span class="p">();</span>
+    <span class="p">}</span>
+
+    <span class="n">WriteHolder</span><span class="p">(</span><span class="n">WriteHolder</span><span class="o">&amp;&amp;</span> <span class="n">other</span><span class="p">)</span> <span class="o">:</span> <span class="n">lock_</span><span class="p">(</span><span class="n">other</span><span class="p">.</span><span class="n">lock_</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">other</span><span class="p">.</span><span class="n">lock_</span> <span class="o">=</span> <span class="n">nullptr</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="n">WriteHolder</span><span class="o">&amp;</span> <span class="n">operator</span> <span class="o">=</span><span class="p">(</span><span class="n">WriteHolder</span><span class="o">&amp;&amp;</span> <span class="n">other</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">using</span> <span class="n">std</span><span class="o">::</span><span class="n">swap</span><span class="p">;</span>
+      <span class="n">swap</span><span class="p">(</span><span class="n">lock_</span><span class="p">,</span> <span class="n">other</span><span class="p">.</span><span class="n">lock_</span><span class="p">);</span>
+      <span class="k">return</span> <span class="o">*</span><span class="n">this</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="n">WriteHolder</span><span class="p">(</span><span class="k">const</span> <span class="n">WriteHolder</span><span class="o">&amp;</span> <span class="n">other</span><span class="p">)</span> <span class="o">=</span> <span class="n">delete</span><span class="p">;</span>
+    <span class="n">WriteHolder</span><span class="o">&amp;</span> <span class="n">operator</span> <span class="o">=</span><span class="p">(</span><span class="k">const</span> <span class="n">WriteHolder</span><span class="o">&amp;</span> <span class="n">other</span><span class="p">)</span> <span class="o">=</span> <span class="n">delete</span><span class="p">;</span>
+
+    <span class="o">~</span><span class="n">WriteHolder</span> <span class="p">()</span> <span class="p">{</span> <span class="k">if</span> <span class="p">(</span><span class="n">lock_</span><span class="p">)</span> <span class="n">lock_</span><span class="o">-&gt;</span><span class="n">unlock</span><span class="p">();</span> <span class="p">}</span>
+
+    <span class="kt">void</span> <span class="n">reset</span><span class="p">(</span><span class="n">RWSpinLock</span><span class="o">*</span> <span class="n">lock</span> <span class="o">=</span> <span class="n">nullptr</span><span class="p">)</span> <span class="p">{</span>
+      <span class="k">if</span> <span class="p">(</span><span class="n">lock</span> <span class="o">==</span> <span class="n">lock_</span><span class="p">)</span> <span class="k">return</span><span class="p">;</span>
+      <span class="k">if</span> <span class="p">(</span><span class="n">lock_</span><span class="p">)</span> <span class="n">lock_</span><span class="o">-&gt;</span><span class="n">unlock</span><span class="p">();</span>
+      <span class="n">lock_</span> <span class="o">=</span> <span class="n">lock</span><span class="p">;</span>
+      <span class="k">if</span> <span class="p">(</span><span class="n">lock_</span><span class="p">)</span> <span class="n">lock_</span><span class="o">-&gt;</span><span class="n">lock</span><span class="p">();</span>
+    <span class="p">}</span>
+
+    <span class="kt">void</span> <span class="n">swap</span><span class="p">(</span><span class="n">WriteHolder</span><span class="o">*</span> <span class="n">other</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">using</span> <span class="n">std</span><span class="o">::</span><span class="n">swap</span><span class="p">;</span>
+      <span class="n">swap</span><span class="p">(</span><span class="n">lock_</span><span class="p">,</span> <span class="n">other</span><span class="o">-&gt;</span><span class="n">lock_</span><span class="p">);</span>
+    <span class="p">}</span>
+
+   <span class="nl">private:</span>
+    <span class="n">friend</span> <span class="n">class</span> <span class="n">ReadHolder</span><span class="p">;</span>
+    <span class="n">friend</span> <span class="n">class</span> <span class="n">UpgradedHolder</span><span class="p">;</span>
+    <span class="n">RWSpinLock</span><span class="o">*</span> <span class="n">lock_</span><span class="p">;</span>
+  <span class="p">};</span></pre></div></td></tr>
+
+
+<tr id="section-20"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-20">&#182;</a></div><p>Synchronized&lt;> adaptors</p></td><td class="code"><div class="highlight"><pre>  <span class="n">friend</span> <span class="kt">void</span> <span class="nf">acquireRead</span><span class="p">(</span><span class="n">RWSpinLock</span><span class="o">&amp;</span> <span class="n">l</span><span class="p">)</span> <span class="p">{</span> <span class="k">return</span> <span class="n">l</span><span class="p">.</span><span class="n">lock_shared</span><span class="p">();</span> <span class="p">}</span>
+  <span class="n">friend</span> <span class="kt">void</span> <span class="nf">acquireReadWrite</span><span class="p">(</span><span class="n">RWSpinLock</span><span class="o">&amp;</span> <span class="n">l</span><span class="p">)</span> <span class="p">{</span> <span class="k">return</span> <span class="n">l</span><span class="p">.</span><span class="n">lock</span><span class="p">();</span> <span class="p">}</span>
+  <span class="n">friend</span> <span class="kt">void</span> <span class="nf">releaseRead</span><span class="p">(</span><span class="n">RWSpinLock</span><span class="o">&amp;</span> <span class="n">l</span><span class="p">)</span> <span class="p">{</span> <span class="k">return</span> <span class="n">l</span><span class="p">.</span><span class="n">unlock_shared</span><span class="p">();</span> <span class="p">}</span>
+  <span class="n">friend</span> <span class="kt">void</span> <span class="nf">releaseReadWrite</span><span class="p">(</span><span class="n">RWSpinLock</span><span class="o">&amp;</span> <span class="n">l</span><span class="p">)</span> <span class="p">{</span> <span class="k">return</span> <span class="n">l</span><span class="p">.</span><span class="n">unlock</span><span class="p">();</span> <span class="p">}</span>
+
+ <span class="nl">private:</span>
+  <span class="n">std</span><span class="o">::</span><span class="n">atomic</span><span class="o">&lt;</span><span class="kt">int32_t</span><span class="o">&gt;</span> <span class="n">bits_</span><span class="p">;</span>
+<span class="p">};</span>
+
+
+<span class="cp">#ifdef RW_SPINLOCK_USE_X86_INTRINSIC_</span></pre></div></td></tr>
+
+
+<tr id="section-21"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-21">&#182;</a></div><p>A more balanced Read-Write spin lock implemented based on GCC intrinsics.</p></td><td class="code"><div class="highlight"><pre><span class="n">namespace</span> <span class="n">detail</span> <span class="p">{</span>
+<span class="n">template</span> <span class="o">&lt;</span><span class="kt">size_t</span> <span class="n">kBitWidth</span><span class="o">&gt;</span> <span class="k">struct</span> <span class="n">RWTicketIntTrait</span> <span class="p">{</span>
+  <span class="n">static_assert</span><span class="p">(</span><span class="n">kBitWidth</span> <span class="o">==</span> <span class="mi">32</span> <span class="o">||</span> <span class="n">kBitWidth</span> <span class="o">==</span> <span class="mi">64</span><span class="p">,</span>
+      <span class="s">&quot;bit width has to be either 32 or 64 &quot;</span><span class="p">);</span>
+<span class="p">};</span>
+
+<span class="n">template</span> <span class="o">&lt;&gt;</span>
+<span class="k">struct</span> <span class="n">RWTicketIntTrait</span><span class="o">&lt;</span><span class="mi">64</span><span class="o">&gt;</span> <span class="p">{</span>
+  <span class="k">typedef</span> <span class="kt">uint64_t</span> <span class="n">FullInt</span><span class="p">;</span>
+  <span class="k">typedef</span> <span class="kt">uint32_t</span> <span class="n">HalfInt</span><span class="p">;</span>
+  <span class="k">typedef</span> <span class="kt">uint16_t</span> <span class="n">QuarterInt</span><span class="p">;</span>
+
+<span class="cp">#ifdef __SSE2__</span>
+  <span class="k">static</span> <span class="n">__m128i</span> <span class="nf">make128</span><span class="p">(</span><span class="k">const</span> <span class="kt">uint16_t</span> <span class="n">v</span><span class="p">[</span><span class="mi">4</span><span class="p">])</span> <span class="p">{</span>
+    <span class="k">return</span> <span class="n">_mm_set_epi16</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">v</span><span class="p">[</span><span class="mi">3</span><span class="p">],</span> <span class="n">v</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span> <span class="n">v</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">v</span><span class="p">[</span><span class="mi">0</span><span class="p">]);</span>
+  <span class="p">}</span>
+  <span class="k">static</span> <span class="kr">inline</span> <span class="n">__m128i</span> <span class="nf">fromInteger</span><span class="p">(</span><span class="kt">uint64_t</span> <span class="n">from</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">return</span> <span class="n">_mm_cvtsi64_si128</span><span class="p">(</span><span class="n">from</span><span class="p">);</span>
+  <span class="p">}</span>
+  <span class="k">static</span> <span class="kr">inline</span> <span class="kt">uint64_t</span> <span class="nf">toInteger</span><span class="p">(</span><span class="n">__m128i</span> <span class="n">in</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">return</span> <span class="n">_mm_cvtsi128_si64</span><span class="p">(</span><span class="n">in</span><span class="p">);</span>
+  <span class="p">}</span>
+  <span class="k">static</span> <span class="kr">inline</span> <span class="kt">uint64_t</span> <span class="nf">addParallel</span><span class="p">(</span><span class="n">__m128i</span> <span class="n">in</span><span class="p">,</span> <span class="n">__m128i</span> <span class="n">kDelta</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">return</span> <span class="n">toInteger</span><span class="p">(</span><span class="n">_mm_add_epi16</span><span class="p">(</span><span class="n">in</span><span class="p">,</span> <span class="n">kDelta</span><span class="p">));</span>
+  <span class="p">}</span>
+<span class="cp">#endif</span>
+<span class="p">};</span>
+
+<span class="n">template</span> <span class="o">&lt;&gt;</span>
+<span class="k">struct</span> <span class="n">RWTicketIntTrait</span><span class="o">&lt;</span><span class="mi">32</span><span class="o">&gt;</span> <span class="p">{</span>
+  <span class="k">typedef</span> <span class="kt">uint32_t</span> <span class="n">FullInt</span><span class="p">;</span>
+  <span class="k">typedef</span> <span class="kt">uint16_t</span> <span class="n">HalfInt</span><span class="p">;</span>
+  <span class="k">typedef</span> <span class="kt">uint8_t</span> <span class="n">QuarterInt</span><span class="p">;</span>
+
+<span class="cp">#ifdef __SSE2__</span>
+  <span class="k">static</span> <span class="n">__m128i</span> <span class="nf">make128</span><span class="p">(</span><span class="k">const</span> <span class="kt">uint8_t</span> <span class="n">v</span><span class="p">[</span><span class="mi">4</span><span class="p">])</span> <span class="p">{</span>
+    <span class="k">return</span> <span class="n">_mm_set_epi8</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span>
+        <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">v</span><span class="p">[</span><span class="mi">3</span><span class="p">],</span> <span class="n">v</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span> <span class="n">v</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">v</span><span class="p">[</span><span class="mi">0</span><span class="p">]);</span>
+  <span class="p">}</span>
+  <span class="k">static</span> <span class="kr">inline</span> <span class="n">__m128i</span> <span class="nf">fromInteger</span><span class="p">(</span><span class="kt">uint32_t</span> <span class="n">from</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">return</span> <span class="n">_mm_cvtsi32_si128</span><span class="p">(</span><span class="n">from</span><span class="p">);</span>
+  <span class="p">}</span>
+  <span class="k">static</span> <span class="kr">inline</span> <span class="kt">uint32_t</span> <span class="nf">toInteger</span><span class="p">(</span><span class="n">__m128i</span> <span class="n">in</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">return</span> <span class="n">_mm_cvtsi128_si32</span><span class="p">(</span><span class="n">in</span><span class="p">);</span>
+  <span class="p">}</span>
+  <span class="k">static</span> <span class="kr">inline</span> <span class="kt">uint32_t</span> <span class="nf">addParallel</span><span class="p">(</span><span class="n">__m128i</span> <span class="n">in</span><span class="p">,</span> <span class="n">__m128i</span> <span class="n">kDelta</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">return</span> <span class="n">toInteger</span><span class="p">(</span><span class="n">_mm_add_epi8</span><span class="p">(</span><span class="n">in</span><span class="p">,</span> <span class="n">kDelta</span><span class="p">));</span>
+  <span class="p">}</span>
+<span class="cp">#endif</span>
+<span class="p">};</span>
+<span class="p">}</span>  <span class="c1">// detail</span>
+
+
+<span class="n">template</span><span class="o">&lt;</span><span class="kt">size_t</span> <span class="n">kBitWidth</span><span class="p">,</span> <span class="n">bool</span> <span class="n">kFavorWriter</span><span class="o">=</span><span class="nb">false</span><span class="o">&gt;</span>
+<span class="n">class</span> <span class="n">RWTicketSpinLockT</span> <span class="o">:</span> <span class="n">boost</span><span class="o">::</span><span class="n">noncopyable</span> <span class="p">{</span>
+  <span class="k">typedef</span> <span class="n">detail</span><span class="o">::</span><span class="n">RWTicketIntTrait</span><span class="o">&lt;</span><span class="n">kBitWidth</span><span class="o">&gt;</span> <span class="n">IntTraitType</span><span class="p">;</span>
+  <span class="k">typedef</span> <span class="kr">typename</span> <span class="n">detail</span><span class="o">::</span><span class="n">RWTicketIntTrait</span><span class="o">&lt;</span><span class="n">kBitWidth</span><span class="o">&gt;::</span><span class="n">FullInt</span> <span class="n">FullInt</span><span class="p">;</span>
+  <span class="k">typedef</span> <span class="kr">typename</span> <span class="n">detail</span><span class="o">::</span><span class="n">RWTicketIntTrait</span><span class="o">&lt;</span><span class="n">kBitWidth</span><span class="o">&gt;::</span><span class="n">HalfInt</span> <span class="n">HalfInt</span><span class="p">;</span>
+  <span class="k">typedef</span> <span class="kr">typename</span> <span class="n">detail</span><span class="o">::</span><span class="n">RWTicketIntTrait</span><span class="o">&lt;</span><span class="n">kBitWidth</span><span class="o">&gt;::</span><span class="n">QuarterInt</span>
+    <span class="n">QuarterInt</span><span class="p">;</span>
+
+  <span class="k">union</span> <span class="n">RWTicket</span> <span class="p">{</span>
+    <span class="n">FullInt</span> <span class="n">whole</span><span class="p">;</span>
+    <span class="n">HalfInt</span> <span class="n">readWrite</span><span class="p">;</span>
+    <span class="n">__extension__</span> <span class="k">struct</span> <span class="p">{</span>
+      <span class="n">QuarterInt</span> <span class="n">write</span><span class="p">;</span>
+      <span class="n">QuarterInt</span> <span class="n">read</span><span class="p">;</span>
+      <span class="n">QuarterInt</span> <span class="n">users</span><span class="p">;</span>
+    <span class="p">};</span>
+  <span class="p">}</span> <span class="n">ticket</span><span class="p">;</span>
+
+ <span class="nl">private:</span> <span class="c1">// Some x64-specific utilities for atomic access to ticket.</span>
+  <span class="n">template</span><span class="o">&lt;</span><span class="n">class</span> <span class="n">T</span><span class="o">&gt;</span> <span class="k">static</span> <span class="n">T</span> <span class="n">load_acquire</span><span class="p">(</span><span class="n">T</span><span class="o">*</span> <span class="n">addr</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">T</span> <span class="n">t</span> <span class="o">=</span> <span class="o">*</span><span class="n">addr</span><span class="p">;</span> <span class="c1">// acquire barrier</span>
+    <span class="n">asm</span> <span class="k">volatile</span><span class="p">(</span><span class="s">&quot;&quot;</span> <span class="o">:</span> <span class="o">:</span> <span class="o">:</span> <span class="s">&quot;memory&quot;</span><span class="p">);</span>
+    <span class="k">return</span> <span class="n">t</span><span class="p">;</span>
+  <span class="p">}</span>
+
+  <span class="n">template</span><span class="o">&lt;</span><span class="n">class</span> <span class="n">T</span><span class="o">&gt;</span>
+  <span class="k">static</span> <span class="kt">void</span> <span class="n">store_release</span><span class="p">(</span><span class="n">T</span><span class="o">*</span> <span class="n">addr</span><span class="p">,</span> <span class="n">T</span> <span class="n">v</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">asm</span> <span class="k">volatile</span><span class="p">(</span><span class="s">&quot;&quot;</span> <span class="o">:</span> <span class="o">:</span> <span class="o">:</span> <span class="s">&quot;memory&quot;</span><span class="p">);</span>
+    <span class="o">*</span><span class="n">addr</span> <span class="o">=</span> <span class="n">v</span><span class="p">;</span> <span class="c1">// release barrier</span>
+  <span class="p">}</span>
+
+ <span class="nl">public:</span>
+
+  <span class="n">RWTicketSpinLockT</span><span class="p">()</span> <span class="p">{</span>
+    <span class="n">store_release</span><span class="p">(</span><span class="o">&amp;</span><span class="n">ticket</span><span class="p">.</span><span class="n">whole</span><span class="p">,</span> <span class="n">FullInt</span><span class="p">(</span><span class="mi">0</span><span class="p">));</span>
+  <span class="p">}</span>
+
+  <span class="kt">void</span> <span class="n">lock</span><span class="p">()</span> <span class="p">{</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">kFavorWriter</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">writeLockAggressive</span><span class="p">();</span>
+    <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+      <span class="n">writeLockNice</span><span class="p">();</span>
+    <span class="p">}</span>
+  <span class="p">}</span>
+
+  <span class="cm">/*</span>
+<span class="cm">   * Both try_lock and try_lock_shared diverge in our implementation from the</span>
+<span class="cm">   * lock algorithm described in the link above.</span>
+<span class="cm">   *</span>
+<span class="cm">   * In the read case, it is undesirable that the readers could wait</span>
+<span class="cm">   * for another reader (before increasing ticket.read in the other</span>
+<span class="cm">   * implementation).  Our approach gives up on</span>
+<span class="cm">   * first-come-first-serve, but our benchmarks showed improve</span>
+<span class="cm">   * performance for both readers and writers under heavily contended</span>
+<span class="cm">   * cases, particularly when the number of threads exceeds the number</span>
+<span class="cm">   * of logical CPUs.</span>
+<span class="cm">   *</span>
+<span class="cm">   * We have writeLockAggressive() using the original implementation</span>
+<span class="cm">   * for a writer, which gives some advantage to the writer over the</span>
+<span class="cm">   * readers---for that path it is guaranteed that the writer will</span>
+<span class="cm">   * acquire the lock after all the existing readers exit.</span>
+<span class="cm">   */</span>
+  <span class="n">bool</span> <span class="n">try_lock</span><span class="p">()</span> <span class="p">{</span>
+    <span class="n">RWTicket</span> <span class="n">t</span><span class="p">;</span>
+    <span class="n">FullInt</span> <span class="n">old</span> <span class="o">=</span> <span class="n">t</span><span class="p">.</span><span class="n">whole</span> <span class="o">=</span> <span class="n">load_acquire</span><span class="p">(</span><span class="o">&amp;</span><span class="n">ticket</span><span class="p">.</span><span class="n">whole</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">t</span><span class="p">.</span><span class="n">users</span> <span class="o">!=</span> <span class="n">t</span><span class="p">.</span><span class="n">write</span><span class="p">)</span> <span class="k">return</span> <span class="nb">false</span><span class="p">;</span>
+    <span class="o">++</span><span class="n">t</span><span class="p">.</span><span class="n">users</span><span class="p">;</span>
+    <span class="k">return</span> <span class="n">__sync_bool_compare_and_swap</span><span class="p">(</span><span class="o">&amp;</span><span class="n">ticket</span><span class="p">.</span><span class="n">whole</span><span class="p">,</span> <span class="n">old</span><span class="p">,</span> <span class="n">t</span><span class="p">.</span><span class="n">whole</span><span class="p">);</span>
+  <span class="p">}</span>
+
+  <span class="cm">/*</span>
+<span class="cm">   * Call this if you want to prioritize writer to avoid starvation.</span>
+<span class="cm">   * Unlike writeLockNice, immediately acquires the write lock when</span>
+<span class="cm">   * the existing readers (arriving before the writer) finish their</span>
+<span class="cm">   * turns.</span>
+<span class="cm">   */</span>
+  <span class="kt">void</span> <span class="n">writeLockAggressive</span><span class="p">()</span> <span class="p">{</span>
+    <span class="n">QuarterInt</span> <span class="n">val</span> <span class="o">=</span> <span class="n">__sync_fetch_and_add</span><span class="p">(</span><span class="o">&amp;</span><span class="n">ticket</span><span class="p">.</span><span class="n">users</span><span class="p">,</span> <span class="mi">1</span><span class="p">);</span>
+    <span class="k">while</span> <span class="p">(</span><span class="n">val</span> <span class="o">!=</span> <span class="n">load_acquire</span><span class="p">(</span><span class="o">&amp;</span><span class="n">ticket</span><span class="p">.</span><span class="n">write</span><span class="p">))</span> <span class="p">{</span>
+      <span class="n">asm</span> <span class="k">volatile</span><span class="p">(</span><span class="s">&quot;pause&quot;</span><span class="p">);</span>
+    <span class="p">}</span>
+  <span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-22"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-22">&#182;</a></div><p>Call this when the writer should be nicer to the readers.</p></td><td class="code"><div class="highlight"><pre>  <span class="kt">void</span> <span class="n">writeLockNice</span><span class="p">()</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-23"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-23">&#182;</a></div><p>Here it doesn't cpu-relax the writer.</p>
+
+<p>This is because usually we have many more readers than the
+writers, so the writer has less chance to get the lock when
+there are a lot of competing readers.  The aggressive spinning
+can help to avoid starving writers.</p></td><td class="code"><div class="highlight"><pre>    <span class="k">while</span> <span class="p">(</span><span class="o">!</span><span class="n">try_lock</span><span class="p">())</span> <span class="p">{}</span>
+  <span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-24"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-24">&#182;</a></div><p>Atomically unlock the write-lock from writer and acquire the read-lock.</p></td><td class="code"><div class="highlight"><pre>  <span class="kt">void</span> <span class="n">unlock_and_lock_shared</span><span class="p">()</span> <span class="p">{</span>
+    <span class="n">QuarterInt</span> <span class="n">val</span> <span class="o">=</span> <span class="n">__sync_fetch_and_add</span><span class="p">(</span><span class="o">&amp;</span><span class="n">ticket</span><span class="p">.</span><span class="n">read</span><span class="p">,</span> <span class="mi">1</span><span class="p">);</span>
+  <span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-25"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-25">&#182;</a></div><p>Release writer permission on the lock.</p></td><td class="code"><div class="highlight"><pre>  <span class="kt">void</span> <span class="n">unlock</span><span class="p">()</span> <span class="p">{</span>
+    <span class="n">RWTicket</span> <span class="n">t</span><span class="p">;</span>
+    <span class="n">t</span><span class="p">.</span><span class="n">whole</span> <span class="o">=</span> <span class="n">load_acquire</span><span class="p">(</span><span class="o">&amp;</span><span class="n">ticket</span><span class="p">.</span><span class="n">whole</span><span class="p">);</span>
+    <span class="n">FullInt</span> <span class="n">old</span> <span class="o">=</span> <span class="n">t</span><span class="p">.</span><span class="n">whole</span><span class="p">;</span>
+
+<span class="cp">#ifdef __SSE2__</span></pre></div></td></tr>
+
+
+<tr id="section-26"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-26">&#182;</a></div><p>SSE2 can reduce the lock and unlock overhead by 10%</p></td><td class="code"><div class="highlight"><pre>    <span class="k">static</span> <span class="k">const</span> <span class="n">QuarterInt</span> <span class="n">kDeltaBuf</span><span class="p">[</span><span class="mi">4</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span> <span class="p">};</span>   <span class="c1">// write/read/user</span>
+    <span class="k">static</span> <span class="k">const</span> <span class="n">__m128i</span> <span class="n">kDelta</span> <span class="o">=</span> <span class="n">IntTraitType</span><span class="o">::</span><span class="n">make128</span><span class="p">(</span><span class="n">kDeltaBuf</span><span class="p">);</span>
+    <span class="n">__m128i</span> <span class="n">m</span> <span class="o">=</span> <span class="n">IntTraitType</span><span class="o">::</span><span class="n">fromInteger</span><span class="p">(</span><span class="n">old</span><span class="p">);</span>
+    <span class="n">t</span><span class="p">.</span><span class="n">whole</span> <span class="o">=</span> <span class="n">IntTraitType</span><span class="o">::</span><span class="n">addParallel</span><span class="p">(</span><span class="n">m</span><span class="p">,</span> <span class="n">kDelta</span><span class="p">);</span>
+<span class="cp">#else</span>
+    <span class="o">++</span><span class="n">t</span><span class="p">.</span><span class="n">read</span><span class="p">;</span>
+    <span class="o">++</span><span class="n">t</span><span class="p">.</span><span class="n">write</span><span class="p">;</span>
+<span class="cp">#endif</span>
+    <span class="n">store_release</span><span class="p">(</span><span class="o">&amp;</span><span class="n">ticket</span><span class="p">.</span><span class="n">readWrite</span><span class="p">,</span> <span class="n">t</span><span class="p">.</span><span class="n">readWrite</span><span class="p">);</span>
+  <span class="p">}</span>
+
+  <span class="kt">void</span> <span class="n">lock_shared</span><span class="p">()</span> <span class="p">{</span>
+    <span class="k">while</span> <span class="p">(</span><span class="o">!</span><span class="n">LIKELY</span><span class="p">(</span><span class="n">try_lock_shared</span><span class="p">()))</span> <span class="p">{</span>
+      <span class="n">asm</span> <span class="k">volatile</span><span class="p">(</span><span class="s">&quot;pause&quot;</span><span class="p">);</span>
+    <span class="p">}</span>
+  <span class="p">}</span>
+
+  <span class="n">bool</span> <span class="n">try_lock_shared</span><span class="p">()</span> <span class="p">{</span>
+    <span class="n">RWTicket</span> <span class="n">t</span><span class="p">,</span> <span class="n">old</span><span class="p">;</span>
+    <span class="n">old</span><span class="p">.</span><span class="n">whole</span> <span class="o">=</span> <span class="n">t</span><span class="p">.</span><span class="n">whole</span> <span class="o">=</span> <span class="n">load_acquire</span><span class="p">(</span><span class="o">&amp;</span><span class="n">ticket</span><span class="p">.</span><span class="n">whole</span><span class="p">);</span>
+    <span class="n">old</span><span class="p">.</span><span class="n">users</span> <span class="o">=</span> <span class="n">old</span><span class="p">.</span><span class="n">read</span><span class="p">;</span>
+<span class="cp">#ifdef  __SSE2__</span></pre></div></td></tr>
+
+
+<tr id="section-27"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-27">&#182;</a></div><p>SSE2 may reduce the total lock and unlock overhead by 10%</p></td><td class="code"><div class="highlight"><pre>    <span class="k">static</span> <span class="k">const</span> <span class="n">QuarterInt</span> <span class="n">kDeltaBuf</span><span class="p">[</span><span class="mi">4</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">0</span> <span class="p">};</span>   <span class="c1">// write/read/user</span>
+    <span class="k">static</span> <span class="k">const</span> <span class="n">__m128i</span> <span class="n">kDelta</span> <span class="o">=</span> <span class="n">IntTraitType</span><span class="o">::</span><span class="n">make128</span><span class="p">(</span><span class="n">kDeltaBuf</span><span class="p">);</span>
+    <span class="n">__m128i</span> <span class="n">m</span> <span class="o">=</span> <span class="n">IntTraitType</span><span class="o">::</span><span class="n">fromInteger</span><span class="p">(</span><span class="n">old</span><span class="p">.</span><span class="n">whole</span><span class="p">);</span>
+    <span class="n">t</span><span class="p">.</span><span class="n">whole</span> <span class="o">=</span> <span class="n">IntTraitType</span><span class="o">::</span><span class="n">addParallel</span><span class="p">(</span><span class="n">m</span><span class="p">,</span> <span class="n">kDelta</span><span class="p">);</span>
+<span class="cp">#else</span>
+    <span class="o">++</span><span class="n">t</span><span class="p">.</span><span class="n">read</span><span class="p">;</span>
+    <span class="o">++</span><span class="n">t</span><span class="p">.</span><span class="n">users</span><span class="p">;</span>
+<span class="cp">#endif</span>
+    <span class="k">return</span> <span class="n">__sync_bool_compare_and_swap</span><span class="p">(</span><span class="o">&amp;</span><span class="n">ticket</span><span class="p">.</span><span class="n">whole</span><span class="p">,</span> <span class="n">old</span><span class="p">.</span><span class="n">whole</span><span class="p">,</span> <span class="n">t</span><span class="p">.</span><span class="n">whole</span><span class="p">);</span>
+  <span class="p">}</span>
+
+  <span class="kt">void</span> <span class="n">unlock_shared</span><span class="p">()</span> <span class="p">{</span>
+    <span class="n">QuarterInt</span> <span class="n">val</span> <span class="o">=</span> <span class="n">__sync_fetch_and_add</span><span class="p">(</span><span class="o">&amp;</span><span class="n">ticket</span><span class="p">.</span><span class="n">write</span><span class="p">,</span> <span class="mi">1</span><span class="p">);</span>
+  <span class="p">}</span>
+
+  <span class="n">class</span> <span class="n">WriteHolder</span><span class="p">;</span>
+
+  <span class="k">typedef</span> <span class="n">RWTicketSpinLockT</span><span class="o">&lt;</span><span class="n">kBitWidth</span><span class="p">,</span> <span class="n">kFavorWriter</span><span class="o">&gt;</span> <span class="n">RWSpinLock</span><span class="p">;</span>
+  <span class="n">class</span> <span class="n">ReadHolder</span> <span class="o">:</span> <span class="n">boost</span><span class="o">::</span><span class="n">noncopyable</span> <span class="p">{</span>
+   <span class="nl">public:</span>
+    <span class="n">explicit</span> <span class="n">ReadHolder</span><span class="p">(</span><span class="n">RWSpinLock</span> <span class="o">*</span><span class="n">lock</span> <span class="o">=</span> <span class="n">nullptr</span><span class="p">)</span> <span class="o">:</span>
+      <span class="n">lock_</span><span class="p">(</span><span class="n">lock</span><span class="p">)</span> <span class="p">{</span>
+      <span class="k">if</span> <span class="p">(</span><span class="n">lock_</span><span class="p">)</span> <span class="n">lock_</span><span class="o">-&gt;</span><span class="n">lock_shared</span><span class="p">();</span>
+    <span class="p">}</span>
+
+    <span class="n">explicit</span> <span class="n">ReadHolder</span><span class="p">(</span><span class="n">RWSpinLock</span> <span class="o">&amp;</span><span class="n">lock</span><span class="p">)</span> <span class="o">:</span> <span class="n">lock_</span> <span class="p">(</span><span class="o">&amp;</span><span class="n">lock</span><span class="p">)</span> <span class="p">{</span>
+      <span class="k">if</span> <span class="p">(</span><span class="n">lock_</span><span class="p">)</span> <span class="n">lock_</span><span class="o">-&gt;</span><span class="n">lock_shared</span><span class="p">();</span>
+    <span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-28"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-28">&#182;</a></div><p>atomically unlock the write-lock from writer and acquire the read-lock</p></td><td class="code"><div class="highlight"><pre>    <span class="n">explicit</span> <span class="n">ReadHolder</span><span class="p">(</span><span class="n">WriteHolder</span> <span class="o">*</span><span class="n">writer</span><span class="p">)</span> <span class="o">:</span> <span class="n">lock_</span><span class="p">(</span><span class="n">nullptr</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">std</span><span class="o">::</span><span class="n">swap</span><span class="p">(</span><span class="n">this</span><span class="o">-&gt;</span><span class="n">lock_</span><span class="p">,</span> <span class="n">writer</span><span class="o">-&gt;</span><span class="n">lock_</span><span class="p">);</span>
+      <span class="k">if</span> <span class="p">(</span><span class="n">lock_</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">lock_</span><span class="o">-&gt;</span><span class="n">unlock_and_lock_shared</span><span class="p">();</span>
+      <span class="p">}</span>
+    <span class="p">}</span>
+
+    <span class="o">~</span><span class="n">ReadHolder</span><span class="p">()</span> <span class="p">{</span>
+      <span class="k">if</span> <span class="p">(</span><span class="n">lock_</span><span class="p">)</span> <span class="n">lock_</span><span class="o">-&gt;</span><span class="n">unlock_shared</span><span class="p">();</span>
+    <span class="p">}</span>
+
+    <span class="kt">void</span> <span class="n">reset</span><span class="p">(</span><span class="n">RWSpinLock</span> <span class="o">*</span><span class="n">lock</span> <span class="o">=</span> <span class="n">nullptr</span><span class="p">)</span> <span class="p">{</span>
+      <span class="k">if</span> <span class="p">(</span><span class="n">lock_</span><span class="p">)</span> <span class="n">lock_</span><span class="o">-&gt;</span><span class="n">unlock_shared</span><span class="p">();</span>
+      <span class="n">lock_</span> <span class="o">=</span> <span class="n">lock</span><span class="p">;</span>
+      <span class="k">if</span> <span class="p">(</span><span class="n">lock_</span><span class="p">)</span> <span class="n">lock_</span><span class="o">-&gt;</span><span class="n">lock_shared</span><span class="p">();</span>
+    <span class="p">}</span>
+
+    <span class="kt">void</span> <span class="n">swap</span><span class="p">(</span><span class="n">ReadHolder</span> <span class="o">*</span><span class="n">other</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">std</span><span class="o">::</span><span class="n">swap</span><span class="p">(</span><span class="n">this</span><span class="o">-&gt;</span><span class="n">lock_</span><span class="p">,</span> <span class="n">other</span><span class="o">-&gt;</span><span class="n">lock_</span><span class="p">);</span>
+    <span class="p">}</span>
+
+   <span class="nl">private:</span>
+    <span class="n">RWSpinLock</span> <span class="o">*</span><span class="n">lock_</span><span class="p">;</span>
+  <span class="p">};</span>
+
+  <span class="n">class</span> <span class="n">WriteHolder</span> <span class="o">:</span> <span class="n">boost</span><span class="o">::</span><span class="n">noncopyable</span> <span class="p">{</span>
+   <span class="nl">public:</span>
+    <span class="n">explicit</span> <span class="n">WriteHolder</span><span class="p">(</span><span class="n">RWSpinLock</span> <span class="o">*</span><span class="n">lock</span> <span class="o">=</span> <span class="n">nullptr</span><span class="p">)</span> <span class="o">:</span> <span class="n">lock_</span><span class="p">(</span><span class="n">lock</span><span class="p">)</span> <span class="p">{</span>
+      <span class="k">if</span> <span class="p">(</span><span class="n">lock_</span><span class="p">)</span> <span class="n">lock_</span><span class="o">-&gt;</span><span class="n">lock</span><span class="p">();</span>
+    <span class="p">}</span>
+    <span class="n">explicit</span> <span class="n">WriteHolder</span><span class="p">(</span><span class="n">RWSpinLock</span> <span class="o">&amp;</span><span class="n">lock</span><span class="p">)</span> <span class="o">:</span> <span class="n">lock_</span> <span class="p">(</span><span class="o">&amp;</span><span class="n">lock</span><span class="p">)</span> <span class="p">{</span>
+      <span class="k">if</span> <span class="p">(</span><span class="n">lock_</span><span class="p">)</span> <span class="n">lock_</span><span class="o">-&gt;</span><span class="n">lock</span><span class="p">();</span>
+    <span class="p">}</span>
+
+    <span class="o">~</span><span class="n">WriteHolder</span><span class="p">()</span> <span class="p">{</span>
+      <span class="k">if</span> <span class="p">(</span><span class="n">lock_</span><span class="p">)</span> <span class="n">lock_</span><span class="o">-&gt;</span><span class="n">unlock</span><span class="p">();</span>
+    <span class="p">}</span>
+
+    <span class="kt">void</span> <span class="n">reset</span><span class="p">(</span><span class="n">RWSpinLock</span> <span class="o">*</span><span class="n">lock</span> <span class="o">=</span> <span class="n">nullptr</span><span class="p">)</span> <span class="p">{</span>
+      <span class="k">if</span> <span class="p">(</span><span class="n">lock</span> <span class="o">==</span> <span class="n">lock_</span><span class="p">)</span> <span class="k">return</span><span class="p">;</span>
+      <span class="k">if</span> <span class="p">(</span><span class="n">lock_</span><span class="p">)</span> <span class="n">lock_</span><span class="o">-&gt;</span><span class="n">unlock</span><span class="p">();</span>
+      <span class="n">lock_</span> <span class="o">=</span> <span class="n">lock</span><span class="p">;</span>
+      <span class="k">if</span> <span class="p">(</span><span class="n">lock_</span><span class="p">)</span> <span class="n">lock_</span><span class="o">-&gt;</span><span class="n">lock</span><span class="p">();</span>
+    <span class="p">}</span>
+
+    <span class="kt">void</span> <span class="n">swap</span><span class="p">(</span><span class="n">WriteHolder</span> <span class="o">*</span><span class="n">other</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">std</span><span class="o">::</span><span class="n">swap</span><span class="p">(</span><span class="n">this</span><span class="o">-&gt;</span><span class="n">lock_</span><span class="p">,</span> <span class="n">other</span><span class="o">-&gt;</span><span class="n">lock_</span><span class="p">);</span>
+    <span class="p">}</span>
+
+   <span class="nl">private:</span>
+    <span class="n">friend</span> <span class="n">class</span> <span class="n">ReadHolder</span><span class="p">;</span>
+    <span class="n">RWSpinLock</span> <span class="o">*</span><span class="n">lock_</span><span class="p">;</span>
+  <span class="p">};</span></pre></div></td></tr>
+
+
+<tr id="section-29"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-29">&#182;</a></div><p>Synchronized&lt;> adaptors.</p></td><td class="code"><div class="highlight"><pre>  <span class="n">friend</span> <span class="kt">void</span> <span class="nf">acquireRead</span><span class="p">(</span><span class="n">RWTicketSpinLockT</span><span class="o">&amp;</span> <span class="n">mutex</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">mutex</span><span class="p">.</span><span class="n">lock_shared</span><span class="p">();</span>
+  <span class="p">}</span>
+  <span class="n">friend</span> <span class="kt">void</span> <span class="nf">acquireReadWrite</span><span class="p">(</span><span class="n">RWTicketSpinLockT</span><span class="o">&amp;</span> <span class="n">mutex</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">mutex</span><span class="p">.</span><span class="n">lock</span><span class="p">();</span>
+  <span class="p">}</span>
+  <span class="n">friend</span> <span class="n">bool</span> <span class="nf">acquireReadWrite</span><span class="p">(</span><span class="n">RWTicketSpinLockT</span><span class="o">&amp;</span> <span class="n">mutex</span><span class="p">,</span>
+                               <span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">milliseconds</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">mutex</span><span class="p">.</span><span class="n">lock</span><span class="p">();</span>
+    <span class="k">return</span> <span class="nb">true</span><span class="p">;</span>
+  <span class="p">}</span>
+  <span class="n">friend</span> <span class="kt">void</span> <span class="nf">releaseRead</span><span class="p">(</span><span class="n">RWTicketSpinLockT</span><span class="o">&amp;</span> <span class="n">mutex</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">mutex</span><span class="p">.</span><span class="n">unlock_shared</span><span class="p">();</span>
+  <span class="p">}</span>
+  <span class="n">friend</span> <span class="kt">void</span> <span class="nf">releaseReadWrite</span><span class="p">(</span><span class="n">RWTicketSpinLockT</span><span class="o">&amp;</span> <span class="n">mutex</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">mutex</span><span class="p">.</span><span class="n">unlock</span><span class="p">();</span>
+  <span class="p">}</span>
+<span class="p">};</span>
+
+<span class="k">typedef</span> <span class="n">RWTicketSpinLockT</span><span class="o">&lt;</span><span class="mi">32</span><span class="o">&gt;</span> <span class="n">RWTicketSpinLock32</span><span class="p">;</span>
+<span class="k">typedef</span> <span class="n">RWTicketSpinLockT</span><span class="o">&lt;</span><span class="mi">64</span><span class="o">&gt;</span> <span class="n">RWTicketSpinLock64</span><span class="p">;</span>
+
+<span class="cp">#endif  </span><span class="c1">// RW_SPINLOCK_USE_X86_INTRINSIC_</span>
+
+<span class="p">}</span>  <span class="c1">// namespace folly</span>
+
+<span class="cp">#ifdef RW_SPINLOCK_USE_X86_INTRINSIC_</span>
+<span class="cp">#undef RW_SPINLOCK_USE_X86_INTRINSIC_</span>
+<span class="cp">#endif</span>
+
+<span class="cp">#endif  </span><span class="c1">// FOLLY_RWSPINLOCK_H_</span>
+
+</pre></div></td></tr>
+
+</tbody>
+</table>
+</div>
+
+</body>
+<script>docas={repo:"joekychen/folly",depth:1}</script>
+<script>document.write('<script src=' + ('__proto__' in {} ? 'http://cdnjs.cloudflare.com/ajax/libs/zepto/1.0rc1/zepto.min.js' : 'https://ajax.googleapis.com/ajax/libs/jquery/1.7.2/jquery.min.js')+'><\\/script>')</script>
+<script src="http://baoshan.github.com/moment/min/moment.min.js"></script>
+<script src="../javascript/docco.min.js"></script>
+</html>

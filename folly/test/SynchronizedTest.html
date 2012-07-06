@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html><head><title>joekychen/folly » folly › test › SynchronizedTest.cpp
+
+</title>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+<meta name="generator" content="Docco">
+<link rel="stylesheet" media="all" href="../../stylesheets/docco.min.css" />
+
+
+</head>
+<body>
+<div id="container">
+<div id="background"></div>
+<table cellpadding="0" cellspacing="0">
+<thead><tr><th class="docs"><a id="home" href="../../index.html"></a><h1>SynchronizedTest.cpp</h1></th><th class="code"></th></tr></thead>
+<tbody>
+
+
+<tr id="section-1"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-1">&#182;</a></div></td><td class="code"><div class="highlight"><pre><span class="cm">/*</span>
+<span class="cm"> * Copyright 2012 Facebook, Inc.</span>
+<span class="cm"> *</span>
+<span class="cm"> * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span class="cm"> * you may not use this file except in compliance with the License.</span>
+<span class="cm"> * You may obtain a copy of the License at</span>
+<span class="cm"> *</span>
+<span class="cm"> *   http://www.apache.org/licenses/LICENSE-2.0</span>
+<span class="cm"> *</span>
+<span class="cm"> * Unless required by applicable law or agreed to in writing, software</span>
+<span class="cm"> * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span class="cm"> * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span class="cm"> * See the License for the specific language governing permissions and</span>
+<span class="cm"> * limitations under the License.</span>
+<span class="cm"> */</span></pre></div></td></tr>
+
+
+<tr id="section-2"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-2">&#182;</a></div><p>@author: Andrei Alexandrescu (aalexandre)</p></td><td class="code"><div class="highlight"><pre></pre></div></td></tr>
+
+
+<tr id="section-3"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-3">&#182;</a></div><p>Test bed for folly/Synchronized.h</p></td><td class="code"><div class="highlight"><pre><span class="cp">#include &quot;folly/Synchronized.h&quot;</span>
+<span class="cp">#include &quot;folly/RWSpinLock.h&quot;</span>
+<span class="cp">#include &quot;folly/test/SynchronizedTestLib.h&quot;</span>
+<span class="cp">#include &lt;gtest/gtest.h&gt;</span>
+
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">Synchronized</span><span class="p">,</span> <span class="n">Basic</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">testBasic</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">mutex</span><span class="o">&gt;</span><span class="p">();</span>
+  <span class="n">testBasic</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">recursive_mutex</span><span class="o">&gt;</span><span class="p">();</span>
+  <span class="n">testBasic</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">timed_mutex</span><span class="o">&gt;</span><span class="p">();</span>
+  <span class="n">testBasic</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">recursive_timed_mutex</span><span class="o">&gt;</span><span class="p">();</span>
+
+  <span class="n">testBasic</span><span class="o">&lt;</span><span class="n">folly</span><span class="o">::</span><span class="n">RWTicketSpinLock32</span><span class="o">&gt;</span><span class="p">();</span>
+
+  <span class="n">testBasic</span><span class="o">&lt;</span><span class="n">boost</span><span class="o">::</span><span class="n">mutex</span><span class="o">&gt;</span><span class="p">();</span>
+  <span class="n">testBasic</span><span class="o">&lt;</span><span class="n">boost</span><span class="o">::</span><span class="n">recursive_mutex</span><span class="o">&gt;</span><span class="p">();</span>
+  <span class="n">testBasic</span><span class="o">&lt;</span><span class="n">boost</span><span class="o">::</span><span class="n">shared_mutex</span><span class="o">&gt;</span><span class="p">();</span>
+  <span class="n">testBasic</span><span class="o">&lt;</span><span class="n">boost</span><span class="o">::</span><span class="n">timed_mutex</span><span class="o">&gt;</span><span class="p">();</span>
+  <span class="n">testBasic</span><span class="o">&lt;</span><span class="n">boost</span><span class="o">::</span><span class="n">recursive_timed_mutex</span><span class="o">&gt;</span><span class="p">();</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">Synchronized</span><span class="p">,</span> <span class="n">Concurrency</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">testConcurrency</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">mutex</span><span class="o">&gt;</span><span class="p">();</span>
+  <span class="n">testConcurrency</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">recursive_mutex</span><span class="o">&gt;</span><span class="p">();</span>
+  <span class="n">testConcurrency</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">timed_mutex</span><span class="o">&gt;</span><span class="p">();</span>
+  <span class="n">testConcurrency</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">recursive_timed_mutex</span><span class="o">&gt;</span><span class="p">();</span>
+
+  <span class="n">testConcurrency</span><span class="o">&lt;</span><span class="n">folly</span><span class="o">::</span><span class="n">RWTicketSpinLock32</span><span class="o">&gt;</span><span class="p">();</span>
+
+  <span class="n">testConcurrency</span><span class="o">&lt;</span><span class="n">boost</span><span class="o">::</span><span class="n">mutex</span><span class="o">&gt;</span><span class="p">();</span>
+  <span class="n">testConcurrency</span><span class="o">&lt;</span><span class="n">boost</span><span class="o">::</span><span class="n">recursive_mutex</span><span class="o">&gt;</span><span class="p">();</span>
+  <span class="n">testConcurrency</span><span class="o">&lt;</span><span class="n">boost</span><span class="o">::</span><span class="n">shared_mutex</span><span class="o">&gt;</span><span class="p">();</span>
+  <span class="n">testConcurrency</span><span class="o">&lt;</span><span class="n">boost</span><span class="o">::</span><span class="n">timed_mutex</span><span class="o">&gt;</span><span class="p">();</span>
+  <span class="n">testConcurrency</span><span class="o">&lt;</span><span class="n">boost</span><span class="o">::</span><span class="n">recursive_timed_mutex</span><span class="o">&gt;</span><span class="p">();</span>
+<span class="p">}</span>
+
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">Synchronized</span><span class="p">,</span> <span class="n">DualLocking</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">testDualLocking</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">mutex</span><span class="o">&gt;</span><span class="p">();</span>
+  <span class="n">testDualLocking</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">recursive_mutex</span><span class="o">&gt;</span><span class="p">();</span>
+  <span class="n">testDualLocking</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">timed_mutex</span><span class="o">&gt;</span><span class="p">();</span>
+  <span class="n">testDualLocking</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">recursive_timed_mutex</span><span class="o">&gt;</span><span class="p">();</span>
+
+  <span class="n">testDualLocking</span><span class="o">&lt;</span><span class="n">folly</span><span class="o">::</span><span class="n">RWTicketSpinLock32</span><span class="o">&gt;</span><span class="p">();</span>
+
+  <span class="n">testDualLocking</span><span class="o">&lt;</span><span class="n">boost</span><span class="o">::</span><span class="n">mutex</span><span class="o">&gt;</span><span class="p">();</span>
+  <span class="n">testDualLocking</span><span class="o">&lt;</span><span class="n">boost</span><span class="o">::</span><span class="n">recursive_mutex</span><span class="o">&gt;</span><span class="p">();</span>
+  <span class="n">testDualLocking</span><span class="o">&lt;</span><span class="n">boost</span><span class="o">::</span><span class="n">shared_mutex</span><span class="o">&gt;</span><span class="p">();</span>
+  <span class="n">testDualLocking</span><span class="o">&lt;</span><span class="n">boost</span><span class="o">::</span><span class="n">timed_mutex</span><span class="o">&gt;</span><span class="p">();</span>
+  <span class="n">testDualLocking</span><span class="o">&lt;</span><span class="n">boost</span><span class="o">::</span><span class="n">recursive_timed_mutex</span><span class="o">&gt;</span><span class="p">();</span>
+<span class="p">}</span>
+
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">Synchronized</span><span class="p">,</span> <span class="n">DualLockingWithConst</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">testDualLockingWithConst</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">mutex</span><span class="o">&gt;</span><span class="p">();</span>
+  <span class="n">testDualLockingWithConst</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">recursive_mutex</span><span class="o">&gt;</span><span class="p">();</span>
+  <span class="n">testDualLockingWithConst</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">timed_mutex</span><span class="o">&gt;</span><span class="p">();</span>
+  <span class="n">testDualLockingWithConst</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">recursive_timed_mutex</span><span class="o">&gt;</span><span class="p">();</span>
+
+  <span class="n">testDualLockingWithConst</span><span class="o">&lt;</span><span class="n">folly</span><span class="o">::</span><span class="n">RWTicketSpinLock32</span><span class="o">&gt;</span><span class="p">();</span>
+
+  <span class="n">testDualLockingWithConst</span><span class="o">&lt;</span><span class="n">boost</span><span class="o">::</span><span class="n">mutex</span><span class="o">&gt;</span><span class="p">();</span>
+  <span class="n">testDualLockingWithConst</span><span class="o">&lt;</span><span class="n">boost</span><span class="o">::</span><span class="n">recursive_mutex</span><span class="o">&gt;</span><span class="p">();</span>
+  <span class="n">testDualLockingWithConst</span><span class="o">&lt;</span><span class="n">boost</span><span class="o">::</span><span class="n">shared_mutex</span><span class="o">&gt;</span><span class="p">();</span>
+  <span class="n">testDualLockingWithConst</span><span class="o">&lt;</span><span class="n">boost</span><span class="o">::</span><span class="n">timed_mutex</span><span class="o">&gt;</span><span class="p">();</span>
+  <span class="n">testDualLockingWithConst</span><span class="o">&lt;</span><span class="n">boost</span><span class="o">::</span><span class="n">recursive_timed_mutex</span><span class="o">&gt;</span><span class="p">();</span>
+<span class="p">}</span>
+
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">Synchronized</span><span class="p">,</span> <span class="n">TimedSynchronized</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">testTimedSynchronized</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">timed_mutex</span><span class="o">&gt;</span><span class="p">();</span>
+  <span class="n">testTimedSynchronized</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">recursive_timed_mutex</span><span class="o">&gt;</span><span class="p">();</span>
+
+  <span class="n">testTimedSynchronized</span><span class="o">&lt;</span><span class="n">boost</span><span class="o">::</span><span class="n">timed_mutex</span><span class="o">&gt;</span><span class="p">();</span>
+  <span class="n">testTimedSynchronized</span><span class="o">&lt;</span><span class="n">boost</span><span class="o">::</span><span class="n">recursive_timed_mutex</span><span class="o">&gt;</span><span class="p">();</span>
+  <span class="n">testTimedSynchronized</span><span class="o">&lt;</span><span class="n">boost</span><span class="o">::</span><span class="n">shared_mutex</span><span class="o">&gt;</span><span class="p">();</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">Synchronized</span><span class="p">,</span> <span class="n">ConstCopy</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">testConstCopy</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">timed_mutex</span><span class="o">&gt;</span><span class="p">();</span>
+  <span class="n">testConstCopy</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">recursive_timed_mutex</span><span class="o">&gt;</span><span class="p">();</span>
+
+  <span class="n">testConstCopy</span><span class="o">&lt;</span><span class="n">boost</span><span class="o">::</span><span class="n">timed_mutex</span><span class="o">&gt;</span><span class="p">();</span>
+  <span class="n">testConstCopy</span><span class="o">&lt;</span><span class="n">boost</span><span class="o">::</span><span class="n">recursive_timed_mutex</span><span class="o">&gt;</span><span class="p">();</span>
+  <span class="n">testConstCopy</span><span class="o">&lt;</span><span class="n">boost</span><span class="o">::</span><span class="n">shared_mutex</span><span class="o">&gt;</span><span class="p">();</span>
+<span class="p">}</span>
+
+</pre></div></td></tr>
+
+</tbody>
+</table>
+</div>
+
+</body>
+<script>docas={repo:"joekychen/folly",depth:2}</script>
+<script>document.write('<script src=' + ('__proto__' in {} ? 'http://cdnjs.cloudflare.com/ajax/libs/zepto/1.0rc1/zepto.min.js' : 'https://ajax.googleapis.com/ajax/libs/jquery/1.7.2/jquery.min.js')+'><\\/script>')</script>
+<script src="http://baoshan.github.com/moment/min/moment.min.js"></script>
+<script src="../../javascript/docco.min.js"></script>
+</html>

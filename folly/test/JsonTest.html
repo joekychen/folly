@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html><head><title>joekychen/folly » folly › test › JsonTest.cpp
+
+</title>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+<meta name="generator" content="Docco">
+<link rel="stylesheet" media="all" href="../../stylesheets/docco.min.css" />
+
+
+</head>
+<body>
+<div id="container">
+<div id="background"></div>
+<table cellpadding="0" cellspacing="0">
+<thead><tr><th class="docs"><a id="home" href="../../index.html"></a><h1>JsonTest.cpp</h1></th><th class="code"></th></tr></thead>
+<tbody>
+
+
+<tr id="section-1"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-1">&#182;</a></div></td><td class="code"><div class="highlight"><pre><span class="cm">/*</span>
+<span class="cm"> * Copyright 2012 Facebook, Inc.</span>
+<span class="cm"> *</span>
+<span class="cm"> * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span class="cm"> * you may not use this file except in compliance with the License.</span>
+<span class="cm"> * You may obtain a copy of the License at</span>
+<span class="cm"> *</span>
+<span class="cm"> *   http://www.apache.org/licenses/LICENSE-2.0</span>
+<span class="cm"> *</span>
+<span class="cm"> * Unless required by applicable law or agreed to in writing, software</span>
+<span class="cm"> * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span class="cm"> * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span class="cm"> * See the License for the specific language governing permissions and</span>
+<span class="cm"> * limitations under the License.</span>
+<span class="cm"> */</span>
+
+<span class="cp">#include &quot;folly/json.h&quot;</span>
+<span class="cp">#include &lt;gtest/gtest.h&gt;</span>
+<span class="cp">#include &lt;gflags/gflags.h&gt;</span>
+<span class="cp">#include &lt;cmath&gt;</span>
+<span class="cp">#include &lt;limits&gt;</span>
+<span class="cp">#include &lt;iostream&gt;</span>
+<span class="cp">#include &lt;boost/next_prior.hpp&gt;</span>
+<span class="cp">#include &quot;folly/Benchmark.h&quot;</span>
+
+<span class="k">using</span> <span class="n">folly</span><span class="o">::</span><span class="n">dynamic</span><span class="p">;</span>
+<span class="k">using</span> <span class="n">folly</span><span class="o">::</span><span class="n">parseJson</span><span class="p">;</span>
+<span class="k">using</span> <span class="n">folly</span><span class="o">::</span><span class="n">toJson</span><span class="p">;</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">Json</span><span class="p">,</span> <span class="n">Unicode</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">auto</span> <span class="n">val</span> <span class="o">=</span> <span class="n">parseJson</span><span class="p">(</span><span class="s">&quot;</span><span class="se">\&quot;</span><span class="s">I \u2665 UTF-8</span><span class="se">\&quot;</span><span class="s">&quot;</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;I \u2665 UTF-8&quot;</span><span class="p">,</span> <span class="n">val</span><span class="p">.</span><span class="n">asString</span><span class="p">());</span>
+  <span class="n">val</span> <span class="o">=</span> <span class="n">parseJson</span><span class="p">(</span><span class="s">&quot;</span><span class="se">\&quot;</span><span class="s">I </span><span class="se">\\</span><span class="s">u2665 UTF-8</span><span class="se">\&quot;</span><span class="s">&quot;</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;I \u2665 UTF-8&quot;</span><span class="p">,</span> <span class="n">val</span><span class="p">.</span><span class="n">asString</span><span class="p">());</span>
+  <span class="n">val</span> <span class="o">=</span> <span class="n">parseJson</span><span class="p">(</span><span class="s">&quot;</span><span class="se">\&quot;</span><span class="s">I \U0001D11E playing in G-clef</span><span class="se">\&quot;</span><span class="s">&quot;</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;I \U0001D11E playing in G-clef&quot;</span><span class="p">,</span> <span class="n">val</span><span class="p">.</span><span class="n">asString</span><span class="p">());</span>
+
+  <span class="n">val</span> <span class="o">=</span> <span class="n">parseJson</span><span class="p">(</span><span class="s">&quot;</span><span class="se">\&quot;</span><span class="s">I </span><span class="se">\\</span><span class="s">uD834</span><span class="se">\\</span><span class="s">uDD1E playing in G-clef</span><span class="se">\&quot;</span><span class="s">&quot;</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;I \U0001D11E playing in G-clef&quot;</span><span class="p">,</span> <span class="n">val</span><span class="p">.</span><span class="n">asString</span><span class="p">());</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">Json</span><span class="p">,</span> <span class="n">Parse</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">auto</span> <span class="n">num</span> <span class="o">=</span> <span class="n">parseJson</span><span class="p">(</span><span class="s">&quot;12&quot;</span><span class="p">);</span>
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">num</span><span class="p">.</span><span class="n">isInt</span><span class="p">());</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">num</span><span class="p">,</span> <span class="mi">12</span><span class="p">);</span>
+  <span class="n">num</span> <span class="o">=</span> <span class="n">parseJson</span><span class="p">(</span><span class="s">&quot;12e5&quot;</span><span class="p">);</span>
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">num</span><span class="p">.</span><span class="n">isDouble</span><span class="p">());</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">num</span><span class="p">,</span> <span class="mf">12e5</span><span class="p">);</span>
+  <span class="k">auto</span> <span class="n">numAs1</span> <span class="o">=</span> <span class="n">num</span><span class="p">.</span><span class="n">asDouble</span><span class="p">();</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">numAs1</span><span class="p">,</span> <span class="mf">12e5</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">num</span><span class="p">,</span> <span class="mf">12e5</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">num</span><span class="p">,</span> <span class="mi">1200000</span><span class="p">);</span>
+
+  <span class="k">auto</span> <span class="n">largeNumber</span> <span class="o">=</span> <span class="n">parseJson</span><span class="p">(</span><span class="s">&quot;4611686018427387904&quot;</span><span class="p">);</span>
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">largeNumber</span><span class="p">.</span><span class="n">isInt</span><span class="p">());</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">largeNumber</span><span class="p">,</span> <span class="mi">4611686018427387904L</span><span class="p">);</span>
+
+  <span class="k">auto</span> <span class="n">negative</span> <span class="o">=</span> <span class="n">parseJson</span><span class="p">(</span><span class="s">&quot;-123&quot;</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">negative</span><span class="p">,</span> <span class="o">-</span><span class="mi">123</span><span class="p">);</span>
+
+  <span class="k">auto</span> <span class="n">bfalse</span> <span class="o">=</span> <span class="n">parseJson</span><span class="p">(</span><span class="s">&quot;false&quot;</span><span class="p">);</span>
+  <span class="k">auto</span> <span class="n">btrue</span> <span class="o">=</span> <span class="n">parseJson</span><span class="p">(</span><span class="s">&quot;true&quot;</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">bfalse</span><span class="p">,</span> <span class="kc">false</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">btrue</span><span class="p">,</span> <span class="kc">true</span><span class="p">);</span>
+
+  <span class="k">auto</span> <span class="n">null</span> <span class="o">=</span> <span class="n">parseJson</span><span class="p">(</span><span class="s">&quot;null&quot;</span><span class="p">);</span>
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">null</span> <span class="o">==</span> <span class="n">nullptr</span><span class="p">);</span>
+
+  <span class="k">auto</span> <span class="n">doub1</span> <span class="o">=</span> <span class="n">parseJson</span><span class="p">(</span><span class="s">&quot;12.0&quot;</span><span class="p">);</span>
+  <span class="k">auto</span> <span class="n">doub2</span> <span class="o">=</span> <span class="n">parseJson</span><span class="p">(</span><span class="s">&quot;12e2&quot;</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">doub1</span><span class="p">,</span> <span class="mf">12.0</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">doub2</span><span class="p">,</span> <span class="mf">12e2</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">numeric_limits</span><span class="o">&lt;</span><span class="kt">double</span><span class="o">&gt;::</span><span class="n">infinity</span><span class="p">(),</span>
+            <span class="n">parseJson</span><span class="p">(</span><span class="s">&quot;Infinity&quot;</span><span class="p">).</span><span class="n">asDouble</span><span class="p">());</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="o">-</span><span class="n">std</span><span class="o">::</span><span class="n">numeric_limits</span><span class="o">&lt;</span><span class="kt">double</span><span class="o">&gt;::</span><span class="n">infinity</span><span class="p">(),</span>
+            <span class="n">parseJson</span><span class="p">(</span><span class="s">&quot;-Infinity&quot;</span><span class="p">).</span><span class="n">asDouble</span><span class="p">());</span>
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">isnan</span><span class="p">(</span><span class="n">parseJson</span><span class="p">(</span><span class="s">&quot;NaN&quot;</span><span class="p">).</span><span class="n">asDouble</span><span class="p">()));</span>
+  <span class="n">EXPECT_THROW</span><span class="p">(</span><span class="n">parseJson</span><span class="p">(</span><span class="s">&quot;infinity&quot;</span><span class="p">),</span> <span class="n">std</span><span class="o">::</span><span class="n">runtime_error</span><span class="p">);</span>
+  <span class="n">EXPECT_THROW</span><span class="p">(</span><span class="n">parseJson</span><span class="p">(</span><span class="s">&quot;inf&quot;</span><span class="p">),</span> <span class="n">std</span><span class="o">::</span><span class="n">runtime_error</span><span class="p">);</span>
+  <span class="n">EXPECT_THROW</span><span class="p">(</span><span class="n">parseJson</span><span class="p">(</span><span class="s">&quot;nan&quot;</span><span class="p">),</span> <span class="n">std</span><span class="o">::</span><span class="n">runtime_error</span><span class="p">);</span>
+
+  <span class="k">auto</span> <span class="n">array</span> <span class="o">=</span> <span class="n">parseJson</span><span class="p">(</span>
+    <span class="s">&quot;[12,false, false  , null , [12e4,32, [], 12]]&quot;</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">array</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="mi">5</span><span class="p">);</span>
+  <span class="k">if</span> <span class="p">(</span><span class="n">array</span><span class="p">.</span><span class="n">size</span><span class="p">()</span> <span class="o">==</span> <span class="mi">5</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">boost</span><span class="o">::</span><span class="n">prior</span><span class="p">(</span><span class="n">array</span><span class="p">.</span><span class="n">end</span><span class="p">())</span><span class="o">-&gt;</span><span class="n">size</span><span class="p">(),</span> <span class="mi">4</span><span class="p">);</span>
+  <span class="p">}</span>
+
+  <span class="kt">bool</span> <span class="n">caught</span> <span class="o">=</span> <span class="kc">false</span><span class="p">;</span>
+  <span class="k">try</span> <span class="p">{</span>
+    <span class="n">parseJson</span><span class="p">(</span><span class="s">&quot;</span><span class="se">\n</span><span class="s">[12,</span><span class="se">\n\n</span><span class="s">notvalidjson&quot;</span><span class="p">);</span>
+  <span class="p">}</span> <span class="k">catch</span> <span class="p">(</span><span class="k">const</span> <span class="n">std</span><span class="o">::</span><span class="n">exception</span><span class="o">&amp;</span> <span class="n">e</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">caught</span> <span class="o">=</span> <span class="kc">true</span><span class="p">;</span>
+  <span class="p">}</span>
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">caught</span><span class="p">);</span>
+
+  <span class="n">caught</span> <span class="o">=</span> <span class="kc">false</span><span class="p">;</span>
+  <span class="k">try</span> <span class="p">{</span>
+    <span class="n">parseJson</span><span class="p">(</span><span class="s">&quot;12e2e2&quot;</span><span class="p">);</span>
+  <span class="p">}</span> <span class="k">catch</span> <span class="p">(</span><span class="k">const</span> <span class="n">std</span><span class="o">::</span><span class="n">exception</span><span class="o">&amp;</span> <span class="n">e</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">caught</span> <span class="o">=</span> <span class="kc">true</span><span class="p">;</span>
+  <span class="p">}</span>
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">caught</span><span class="p">);</span>
+
+  <span class="n">caught</span> <span class="o">=</span> <span class="kc">false</span><span class="p">;</span>
+  <span class="k">try</span> <span class="p">{</span>
+    <span class="n">parseJson</span><span class="p">(</span><span class="s">&quot;{</span><span class="se">\&quot;</span><span class="s">foo</span><span class="se">\&quot;</span><span class="s">:12,</span><span class="se">\&quot;</span><span class="s">bar</span><span class="se">\&quot;</span><span class="s">:42} </span><span class="se">\&quot;</span><span class="s">something</span><span class="se">\&quot;</span><span class="s">&quot;</span><span class="p">);</span>
+  <span class="p">}</span> <span class="k">catch</span> <span class="p">(</span><span class="k">const</span> <span class="n">std</span><span class="o">::</span><span class="n">exception</span><span class="o">&amp;</span> <span class="n">e</span><span class="p">)</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-2"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-2">&#182;</a></div><p>incomplete parse</p></td><td class="code"><div class="highlight"><pre>    <span class="n">caught</span> <span class="o">=</span> <span class="kc">true</span><span class="p">;</span>
+  <span class="p">}</span>
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">caught</span><span class="p">);</span>
+
+  <span class="n">dynamic</span> <span class="n">anotherVal</span> <span class="o">=</span> <span class="n">dynamic</span><span class="o">::</span><span class="n">object</span>
+    <span class="p">(</span><span class="s">&quot;foo&quot;</span><span class="p">,</span> <span class="s">&quot;bar&quot;</span><span class="p">)</span>
+    <span class="p">(</span><span class="s">&quot;junk&quot;</span><span class="p">,</span> <span class="mi">12</span><span class="p">)</span>
+    <span class="p">(</span><span class="s">&quot;another&quot;</span><span class="p">,</span> <span class="mf">32.2</span><span class="p">)</span>
+    <span class="p">(</span><span class="s">&quot;a&quot;</span><span class="p">,</span>
+      <span class="p">{</span>
+        <span class="n">dynamic</span><span class="o">::</span><span class="n">object</span><span class="p">(</span><span class="s">&quot;a&quot;</span><span class="p">,</span> <span class="s">&quot;b&quot;</span><span class="p">)</span>
+                       <span class="p">(</span><span class="s">&quot;c&quot;</span><span class="p">,</span> <span class="s">&quot;d&quot;</span><span class="p">),</span>
+        <span class="mf">12.5</span><span class="p">,</span>
+        <span class="s">&quot;Yo Dawg&quot;</span><span class="p">,</span>
+        <span class="p">{</span> <span class="s">&quot;heh&quot;</span> <span class="p">},</span>
+        <span class="n">nullptr</span>
+      <span class="p">}</span>
+    <span class="p">)</span>
+    <span class="p">;</span></pre></div></td></tr>
+
+
+<tr id="section-3"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-3">&#182;</a></div><p>Print then parse and get the same thing, hopefully.</p></td><td class="code"><div class="highlight"><pre>  <span class="k">auto</span> <span class="n">value</span> <span class="o">=</span> <span class="n">parseJson</span><span class="p">(</span><span class="n">toJson</span><span class="p">(</span><span class="n">anotherVal</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">anotherVal</span><span class="p">);</span></pre></div></td></tr>
+
+
+<tr id="section-4"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-4">&#182;</a></div><p>Test an object with non-string values.</p></td><td class="code"><div class="highlight"><pre>  <span class="n">dynamic</span> <span class="n">something</span> <span class="o">=</span> <span class="n">folly</span><span class="o">::</span><span class="n">parseJson</span><span class="p">(</span>
+    <span class="s">&quot;{</span><span class="se">\&quot;</span><span class="s">old_value</span><span class="se">\&quot;</span><span class="s">:40,</span><span class="se">\&quot;</span><span class="s">changed</span><span class="se">\&quot;</span><span class="s">:true,</span><span class="se">\&quot;</span><span class="s">opened</span><span class="se">\&quot;</span><span class="s">:false}&quot;</span><span class="p">);</span>
+  <span class="n">dynamic</span> <span class="n">expected</span> <span class="o">=</span> <span class="n">dynamic</span><span class="o">::</span><span class="n">object</span>
+    <span class="p">(</span><span class="s">&quot;old_value&quot;</span><span class="p">,</span> <span class="mi">40</span><span class="p">)</span>
+    <span class="p">(</span><span class="s">&quot;changed&quot;</span><span class="p">,</span> <span class="kc">true</span><span class="p">)</span>
+    <span class="p">(</span><span class="s">&quot;opened&quot;</span><span class="p">,</span> <span class="kc">false</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">something</span><span class="p">,</span> <span class="n">expected</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">Json</span><span class="p">,</span> <span class="n">JavascriptSafe</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">auto</span> <span class="n">badDouble</span> <span class="o">=</span> <span class="p">(</span><span class="mi">1ll</span> <span class="o">&lt;&lt;</span> <span class="mi">63ll</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span><span class="p">;</span>
+  <span class="n">dynamic</span> <span class="n">badDyn</span> <span class="o">=</span> <span class="n">badDouble</span><span class="p">;</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">folly</span><span class="o">::</span><span class="n">toJson</span><span class="p">(</span><span class="n">badDouble</span><span class="p">),</span> <span class="n">folly</span><span class="o">::</span><span class="n">to</span><span class="o">&lt;</span><span class="n">folly</span><span class="o">::</span><span class="n">fbstring</span><span class="o">&gt;</span><span class="p">(</span><span class="n">badDouble</span><span class="p">));</span>
+  <span class="n">folly</span><span class="o">::</span><span class="n">json</span><span class="o">::</span><span class="n">serialization_opts</span> <span class="n">opts</span><span class="p">;</span>
+  <span class="n">opts</span><span class="p">.</span><span class="n">javascript_safe</span> <span class="o">=</span> <span class="kc">true</span><span class="p">;</span>
+  <span class="n">EXPECT_ANY_THROW</span><span class="p">(</span><span class="n">folly</span><span class="o">::</span><span class="n">json</span><span class="o">::</span><span class="n">serialize</span><span class="p">(</span><span class="n">badDouble</span><span class="p">,</span> <span class="n">opts</span><span class="p">));</span>
+
+  <span class="k">auto</span> <span class="n">okDouble</span> <span class="o">=</span> <span class="mi">1ll</span> <span class="o">&lt;&lt;</span> <span class="mi">63ll</span><span class="p">;</span>
+  <span class="n">dynamic</span> <span class="n">okDyn</span> <span class="o">=</span> <span class="n">okDouble</span><span class="p">;</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">folly</span><span class="o">::</span><span class="n">toJson</span><span class="p">(</span><span class="n">okDouble</span><span class="p">),</span> <span class="n">folly</span><span class="o">::</span><span class="n">to</span><span class="o">&lt;</span><span class="n">folly</span><span class="o">::</span><span class="n">fbstring</span><span class="o">&gt;</span><span class="p">(</span><span class="n">okDouble</span><span class="p">));</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">Json</span><span class="p">,</span> <span class="n">Produce</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">auto</span> <span class="n">value</span> <span class="o">=</span> <span class="n">parseJson</span><span class="p">(</span><span class="n">R</span><span class="s">&quot;( &quot;</span><span class="n">f</span><span class="err">\</span><span class="s">&quot;oo&quot;</span> <span class="p">)</span><span class="s">&quot;);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">toJson</span><span class="p">(</span><span class="n">value</span><span class="p">),</span> <span class="n">R</span><span class="s">&quot;(&quot;</span><span class="n">f</span><span class="err">\</span><span class="s">&quot;oo&quot;</span><span class="p">)</span><span class="s">&quot;);</span>
+  <span class="n">value</span> <span class="o">=</span> <span class="n">parseJson</span><span class="p">(</span><span class="s">&quot;</span><span class="se">\&quot;</span><span class="s">Control code: </span><span class="se">\001</span><span class="s"> </span><span class="se">\002</span><span class="s"> </span><span class="se">\x1f\&quot;</span><span class="s">&quot;</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">toJson</span><span class="p">(</span><span class="n">value</span><span class="p">),</span> <span class="n">R</span><span class="s">&quot;(&quot;</span><span class="n">Control</span> <span class="nl">code:</span> <span class="err">\</span><span class="n">u0001</span> <span class="err">\</span><span class="n">u0002</span> <span class="err">\</span><span class="n">u001f</span><span class="s">&quot;)&quot;</span><span class="p">);</span>
+
+  <span class="kt">bool</span> <span class="n">caught</span> <span class="o">=</span> <span class="kc">false</span><span class="p">;</span>
+  <span class="k">try</span> <span class="p">{</span>
+    <span class="n">dynamic</span> <span class="n">d</span> <span class="o">=</span> <span class="n">dynamic</span><span class="o">::</span><span class="n">object</span><span class="p">;</span>
+    <span class="n">d</span><span class="p">[</span><span class="s">&quot;abc&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s">&quot;xyz&quot;</span><span class="p">;</span>
+    <span class="n">d</span><span class="p">[</span><span class="mf">42.33</span><span class="p">]</span> <span class="o">=</span> <span class="s">&quot;asd&quot;</span><span class="p">;</span>
+    <span class="k">auto</span> <span class="n">str</span> <span class="o">=</span> <span class="n">toJson</span><span class="p">(</span><span class="n">d</span><span class="p">);</span>
+  <span class="p">}</span> <span class="k">catch</span> <span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">exception</span> <span class="k">const</span><span class="o">&amp;</span> <span class="n">e</span><span class="p">)</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-5"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-5">&#182;</a></div><p>We're not allowed to have non-string keys in json.</p></td><td class="code"><div class="highlight"><pre>    <span class="n">caught</span> <span class="o">=</span> <span class="kc">true</span><span class="p">;</span>
+  <span class="p">}</span>
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">caught</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">Json</span><span class="p">,</span> <span class="n">JsonNonAsciiEncoding</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">folly</span><span class="o">::</span><span class="n">json</span><span class="o">::</span><span class="n">serialization_opts</span> <span class="n">opts</span><span class="p">;</span>
+  <span class="n">opts</span><span class="p">.</span><span class="n">encode_non_ascii</span> <span class="o">=</span> <span class="kc">true</span><span class="p">;</span></pre></div></td></tr>
+
+
+<tr id="section-6"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-6">&#182;</a></div><p>simple tests</p></td><td class="code"><div class="highlight"><pre>  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">folly</span><span class="o">::</span><span class="n">json</span><span class="o">::</span><span class="n">serialize</span><span class="p">(</span><span class="s">&quot;</span><span class="se">\x1f</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">opts</span><span class="p">),</span> <span class="n">R</span><span class="s">&quot;(&quot;</span><span class="err">\</span><span class="n">u001f</span><span class="s">&quot;)&quot;</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">folly</span><span class="o">::</span><span class="n">json</span><span class="o">::</span><span class="n">serialize</span><span class="p">(</span><span class="s">&quot;</span><span class="se">\xc2\xa2</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">opts</span><span class="p">),</span> <span class="n">R</span><span class="s">&quot;(&quot;</span><span class="err">\</span><span class="n">u00a2</span><span class="s">&quot;)&quot;</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">folly</span><span class="o">::</span><span class="n">json</span><span class="o">::</span><span class="n">serialize</span><span class="p">(</span><span class="s">&quot;</span><span class="se">\xe2\x82\xac</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">opts</span><span class="p">),</span> <span class="n">R</span><span class="s">&quot;(&quot;</span><span class="err">\</span><span class="n">u20ac</span><span class="s">&quot;)&quot;</span><span class="p">);</span></pre></div></td></tr>
+
+
+<tr id="section-7"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-7">&#182;</a></div><p>multiple unicode encodings</p></td><td class="code"><div class="highlight"><pre>  <span class="n">EXPECT_EQ</span><span class="p">(</span>
+    <span class="n">folly</span><span class="o">::</span><span class="n">json</span><span class="o">::</span><span class="n">serialize</span><span class="p">(</span><span class="s">&quot;</span><span class="se">\x1f\xe2\x82\xac</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">opts</span><span class="p">),</span>
+    <span class="n">R</span><span class="s">&quot;(&quot;</span><span class="err">\</span><span class="n">u001f</span><span class="err">\</span><span class="n">u20ac</span><span class="s">&quot;)&quot;</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span>
+    <span class="n">folly</span><span class="o">::</span><span class="n">json</span><span class="o">::</span><span class="n">serialize</span><span class="p">(</span><span class="s">&quot;</span><span class="se">\x1f\xc2\xa2\xe2\x82\xac</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">opts</span><span class="p">),</span>
+    <span class="n">R</span><span class="s">&quot;(&quot;</span><span class="err">\</span><span class="n">u001f</span><span class="err">\</span><span class="n">u00a2</span><span class="err">\</span><span class="n">u20ac</span><span class="s">&quot;)&quot;</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span>
+    <span class="n">folly</span><span class="o">::</span><span class="n">json</span><span class="o">::</span><span class="n">serialize</span><span class="p">(</span><span class="s">&quot;</span><span class="se">\xc2\x80\xef\xbf\xbf</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">opts</span><span class="p">),</span>
+    <span class="n">R</span><span class="s">&quot;(&quot;</span><span class="err">\</span><span class="n">u0080</span><span class="err">\</span><span class="n">uffff</span><span class="s">&quot;)&quot;</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span>
+    <span class="n">folly</span><span class="o">::</span><span class="n">json</span><span class="o">::</span><span class="n">serialize</span><span class="p">(</span><span class="s">&quot;</span><span class="se">\xe0\xa0\x80\xdf\xbf</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">opts</span><span class="p">),</span>
+    <span class="n">R</span><span class="s">&quot;(&quot;</span><span class="err">\</span><span class="n">u0800</span><span class="err">\</span><span class="n">u07ff</span><span class="s">&quot;)&quot;</span><span class="p">);</span></pre></div></td></tr>
+
+
+<tr id="section-8"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-8">&#182;</a></div><p>first possible sequence of a certain length</p></td><td class="code"><div class="highlight"><pre>  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">folly</span><span class="o">::</span><span class="n">json</span><span class="o">::</span><span class="n">serialize</span><span class="p">(</span><span class="s">&quot;</span><span class="se">\xc2\x80</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">opts</span><span class="p">),</span> <span class="n">R</span><span class="s">&quot;(&quot;</span><span class="err">\</span><span class="n">u0080</span><span class="s">&quot;)&quot;</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">folly</span><span class="o">::</span><span class="n">json</span><span class="o">::</span><span class="n">serialize</span><span class="p">(</span><span class="s">&quot;</span><span class="se">\xe0\xa0\x80</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">opts</span><span class="p">),</span> <span class="n">R</span><span class="s">&quot;(&quot;</span><span class="err">\</span><span class="n">u0800</span><span class="s">&quot;)&quot;</span><span class="p">);</span></pre></div></td></tr>
+
+
+<tr id="section-9"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-9">&#182;</a></div><p>last possible sequence of a certain length</p></td><td class="code"><div class="highlight"><pre>  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">folly</span><span class="o">::</span><span class="n">json</span><span class="o">::</span><span class="n">serialize</span><span class="p">(</span><span class="s">&quot;</span><span class="se">\xdf\xbf</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">opts</span><span class="p">),</span> <span class="n">R</span><span class="s">&quot;(&quot;</span><span class="err">\</span><span class="n">u07ff</span><span class="s">&quot;)&quot;</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">folly</span><span class="o">::</span><span class="n">json</span><span class="o">::</span><span class="n">serialize</span><span class="p">(</span><span class="s">&quot;</span><span class="se">\xef\xbf\xbf</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">opts</span><span class="p">),</span> <span class="n">R</span><span class="s">&quot;(&quot;</span><span class="err">\</span><span class="n">uffff</span><span class="s">&quot;)&quot;</span><span class="p">);</span></pre></div></td></tr>
+
+
+<tr id="section-10"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-10">&#182;</a></div><p>other boundary conditions</p></td><td class="code"><div class="highlight"><pre>  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">folly</span><span class="o">::</span><span class="n">json</span><span class="o">::</span><span class="n">serialize</span><span class="p">(</span><span class="s">&quot;</span><span class="se">\xed\x9f\xbf</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">opts</span><span class="p">),</span> <span class="n">R</span><span class="s">&quot;(&quot;</span><span class="err">\</span><span class="n">ud7ff</span><span class="s">&quot;)&quot;</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">folly</span><span class="o">::</span><span class="n">json</span><span class="o">::</span><span class="n">serialize</span><span class="p">(</span><span class="s">&quot;</span><span class="se">\xee\x80\x80</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">opts</span><span class="p">),</span> <span class="n">R</span><span class="s">&quot;(&quot;</span><span class="err">\</span><span class="n">ue000</span><span class="s">&quot;)&quot;</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">folly</span><span class="o">::</span><span class="n">json</span><span class="o">::</span><span class="n">serialize</span><span class="p">(</span><span class="s">&quot;</span><span class="se">\xef\xbf\xbd</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">opts</span><span class="p">),</span> <span class="n">R</span><span class="s">&quot;(&quot;</span><span class="err">\</span><span class="n">ufffd</span><span class="s">&quot;)&quot;</span><span class="p">);</span></pre></div></td></tr>
+
+
+<tr id="section-11"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-11">&#182;</a></div><p>incomplete sequences</p></td><td class="code"><div class="highlight"><pre>  <span class="n">EXPECT_ANY_THROW</span><span class="p">(</span><span class="n">folly</span><span class="o">::</span><span class="n">json</span><span class="o">::</span><span class="n">serialize</span><span class="p">(</span><span class="s">&quot;a</span><span class="se">\xed\x9f</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">opts</span><span class="p">));</span>
+  <span class="n">EXPECT_ANY_THROW</span><span class="p">(</span><span class="n">folly</span><span class="o">::</span><span class="n">json</span><span class="o">::</span><span class="n">serialize</span><span class="p">(</span><span class="s">&quot;b</span><span class="se">\xee\x80</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">opts</span><span class="p">));</span>
+  <span class="n">EXPECT_ANY_THROW</span><span class="p">(</span><span class="n">folly</span><span class="o">::</span><span class="n">json</span><span class="o">::</span><span class="n">serialize</span><span class="p">(</span><span class="s">&quot;c</span><span class="se">\xef\xbf</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">opts</span><span class="p">));</span></pre></div></td></tr>
+
+
+<tr id="section-12"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-12">&#182;</a></div><p>impossible bytes</p></td><td class="code"><div class="highlight"><pre>  <span class="n">EXPECT_ANY_THROW</span><span class="p">(</span><span class="n">folly</span><span class="o">::</span><span class="n">json</span><span class="o">::</span><span class="n">serialize</span><span class="p">(</span><span class="s">&quot;</span><span class="se">\xfe</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">opts</span><span class="p">));</span>
+  <span class="n">EXPECT_ANY_THROW</span><span class="p">(</span><span class="n">folly</span><span class="o">::</span><span class="n">json</span><span class="o">::</span><span class="n">serialize</span><span class="p">(</span><span class="s">&quot;</span><span class="se">\xff</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">opts</span><span class="p">));</span></pre></div></td></tr>
+
+
+<tr id="section-13"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-13">&#182;</a></div><p>Sample overlong sequences</p></td><td class="code"><div class="highlight"><pre>  <span class="n">EXPECT_ANY_THROW</span><span class="p">(</span><span class="n">folly</span><span class="o">::</span><span class="n">json</span><span class="o">::</span><span class="n">serialize</span><span class="p">(</span><span class="s">&quot;</span><span class="se">\xc0\xaf</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">opts</span><span class="p">));</span>
+  <span class="n">EXPECT_ANY_THROW</span><span class="p">(</span><span class="n">folly</span><span class="o">::</span><span class="n">json</span><span class="o">::</span><span class="n">serialize</span><span class="p">(</span><span class="s">&quot;</span><span class="se">\xe0\x80\xaf</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">opts</span><span class="p">));</span></pre></div></td></tr>
+
+
+<tr id="section-14"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-14">&#182;</a></div><p>Maximum overlong sequences</p></td><td class="code"><div class="highlight"><pre>  <span class="n">EXPECT_ANY_THROW</span><span class="p">(</span><span class="n">folly</span><span class="o">::</span><span class="n">json</span><span class="o">::</span><span class="n">serialize</span><span class="p">(</span><span class="s">&quot;</span><span class="se">\xc1\xbf</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">opts</span><span class="p">));</span>
+  <span class="n">EXPECT_ANY_THROW</span><span class="p">(</span><span class="n">folly</span><span class="o">::</span><span class="n">json</span><span class="o">::</span><span class="n">serialize</span><span class="p">(</span><span class="s">&quot;</span><span class="se">\x30\x9f\xbf</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">opts</span><span class="p">));</span></pre></div></td></tr>
+
+
+<tr id="section-15"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-15">&#182;</a></div><p>illegal code positions</p></td><td class="code"><div class="highlight"><pre>  <span class="n">EXPECT_ANY_THROW</span><span class="p">(</span><span class="n">folly</span><span class="o">::</span><span class="n">json</span><span class="o">::</span><span class="n">serialize</span><span class="p">(</span><span class="s">&quot;</span><span class="se">\xed\xa0\x80</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">opts</span><span class="p">));</span>
+  <span class="n">EXPECT_ANY_THROW</span><span class="p">(</span><span class="n">folly</span><span class="o">::</span><span class="n">json</span><span class="o">::</span><span class="n">serialize</span><span class="p">(</span><span class="s">&quot;</span><span class="se">\xed\xbf\xbf</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">opts</span><span class="p">));</span></pre></div></td></tr>
+
+
+<tr id="section-16"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-16">&#182;</a></div><p>Overlong representation of NUL character</p></td><td class="code"><div class="highlight"><pre>  <span class="n">EXPECT_ANY_THROW</span><span class="p">(</span><span class="n">folly</span><span class="o">::</span><span class="n">json</span><span class="o">::</span><span class="n">serialize</span><span class="p">(</span><span class="s">&quot;</span><span class="se">\xc0\x80</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">opts</span><span class="p">));</span>
+  <span class="n">EXPECT_ANY_THROW</span><span class="p">(</span><span class="n">folly</span><span class="o">::</span><span class="n">json</span><span class="o">::</span><span class="n">serialize</span><span class="p">(</span><span class="s">&quot;</span><span class="se">\xe0\x80\x80</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">opts</span><span class="p">));</span></pre></div></td></tr>
+
+
+<tr id="section-17"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-17">&#182;</a></div><p>Longer than 3 byte encodings</p></td><td class="code"><div class="highlight"><pre>  <span class="n">EXPECT_ANY_THROW</span><span class="p">(</span><span class="n">folly</span><span class="o">::</span><span class="n">json</span><span class="o">::</span><span class="n">serialize</span><span class="p">(</span><span class="s">&quot;</span><span class="se">\xf4\x8f\xbf\xbf</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">opts</span><span class="p">));</span>
+  <span class="n">EXPECT_ANY_THROW</span><span class="p">(</span><span class="n">folly</span><span class="o">::</span><span class="n">json</span><span class="o">::</span><span class="n">serialize</span><span class="p">(</span><span class="s">&quot;</span><span class="se">\xed\xaf\xbf\xed\xbf\xbf</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">opts</span><span class="p">));</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">Json</span><span class="p">,</span> <span class="n">UTF8Validation</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">folly</span><span class="o">::</span><span class="n">json</span><span class="o">::</span><span class="n">serialization_opts</span> <span class="n">opts</span><span class="p">;</span>
+  <span class="n">opts</span><span class="p">.</span><span class="n">validate_utf8</span> <span class="o">=</span> <span class="kc">true</span><span class="p">;</span></pre></div></td></tr>
+
+
+<tr id="section-18"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-18">&#182;</a></div><p>valid utf8 strings</p></td><td class="code"><div class="highlight"><pre>  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">folly</span><span class="o">::</span><span class="n">json</span><span class="o">::</span><span class="n">serialize</span><span class="p">(</span><span class="s">&quot;a</span><span class="se">\xc2\x80</span><span class="s">z&quot;</span><span class="p">,</span> <span class="n">opts</span><span class="p">),</span> <span class="n">R</span><span class="s">&quot;(&quot;</span><span class="n">a</span><span class="err">\</span><span class="n">u00c2</span><span class="err">\</span><span class="n">u0080z</span><span class="s">&quot;)&quot;</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span>
+    <span class="n">folly</span><span class="o">::</span><span class="n">json</span><span class="o">::</span><span class="n">serialize</span><span class="p">(</span><span class="s">&quot;a</span><span class="se">\xe0\xa0\x80</span><span class="s">z&quot;</span><span class="p">,</span> <span class="n">opts</span><span class="p">),</span>
+    <span class="n">R</span><span class="s">&quot;(&quot;</span><span class="n">a</span><span class="err">\</span><span class="n">u00e0</span><span class="err">\</span><span class="n">u00a0</span><span class="err">\</span><span class="n">u0080z</span><span class="s">&quot;)&quot;</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span>
+    <span class="n">folly</span><span class="o">::</span><span class="n">json</span><span class="o">::</span><span class="n">serialize</span><span class="p">(</span><span class="s">&quot;a</span><span class="se">\xe0\xa0\x80</span><span class="s">m</span><span class="se">\xc2\x80</span><span class="s">z&quot;</span><span class="p">,</span> <span class="n">opts</span><span class="p">),</span>
+    <span class="n">R</span><span class="s">&quot;(&quot;</span><span class="n">a</span><span class="err">\</span><span class="n">u00e0</span><span class="err">\</span><span class="n">u00a0</span><span class="err">\</span><span class="n">u0080m</span><span class="err">\</span><span class="n">u00c2</span><span class="err">\</span><span class="n">u0080z</span><span class="s">&quot;)&quot;</span><span class="p">);</span></pre></div></td></tr>
+
+
+<tr id="section-19"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-19">&#182;</a></div><p>test with invalid utf8</p></td><td class="code"><div class="highlight"><pre>  <span class="n">EXPECT_ANY_THROW</span><span class="p">(</span><span class="n">folly</span><span class="o">::</span><span class="n">json</span><span class="o">::</span><span class="n">serialize</span><span class="p">(</span><span class="s">&quot;a</span><span class="se">\xe0\xa0\x80</span><span class="s">z</span><span class="se">\xc0\x80</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">opts</span><span class="p">));</span>
+  <span class="n">EXPECT_ANY_THROW</span><span class="p">(</span><span class="n">folly</span><span class="o">::</span><span class="n">json</span><span class="o">::</span><span class="n">serialize</span><span class="p">(</span><span class="s">&quot;a</span><span class="se">\xe0\xa0\x80</span><span class="s">z</span><span class="se">\xe0\x80\x80</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">opts</span><span class="p">));</span>
+<span class="p">}</span>
+
+<span class="n">BENCHMARK</span><span class="p">(</span><span class="n">jsonSerialize</span><span class="p">,</span> <span class="n">iters</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">folly</span><span class="o">::</span><span class="n">json</span><span class="o">::</span><span class="n">serialization_opts</span> <span class="n">opts</span><span class="p">;</span>
+  <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">iters</span><span class="p">;</span> <span class="o">++</span><span class="n">i</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">folly</span><span class="o">::</span><span class="n">json</span><span class="o">::</span><span class="n">serialize</span><span class="p">(</span>
+      <span class="s">&quot;qwerty </span><span class="se">\xc2\x80</span><span class="s"> </span><span class="se">\xef\xbf\xbf</span><span class="s"> poiuy&quot;</span>
+      <span class="s">&quot;qwerty </span><span class="se">\xc2\x80</span><span class="s"> </span><span class="se">\xef\xbf\xbf</span><span class="s"> poiuy&quot;</span>
+      <span class="s">&quot;qwerty </span><span class="se">\xc2\x80</span><span class="s"> </span><span class="se">\xef\xbf\xbf</span><span class="s"> poiuy&quot;</span>
+      <span class="s">&quot;qwerty </span><span class="se">\xc2\x80</span><span class="s"> </span><span class="se">\xef\xbf\xbf</span><span class="s"> poiuy&quot;</span>
+      <span class="s">&quot;qwerty </span><span class="se">\xc2\x80</span><span class="s"> </span><span class="se">\xef\xbf\xbf</span><span class="s"> poiuy&quot;</span>
+      <span class="s">&quot;qwerty </span><span class="se">\xc2\x80</span><span class="s"> </span><span class="se">\xef\xbf\xbf</span><span class="s"> poiuy&quot;</span>
+      <span class="s">&quot;qwerty </span><span class="se">\xc2\x80</span><span class="s"> </span><span class="se">\xef\xbf\xbf</span><span class="s"> poiuy&quot;</span>
+      <span class="s">&quot;qwerty </span><span class="se">\xc2\x80</span><span class="s"> </span><span class="se">\xef\xbf\xbf</span><span class="s"> poiuy&quot;</span>
+      <span class="s">&quot;qwerty </span><span class="se">\xc2\x80</span><span class="s"> </span><span class="se">\xef\xbf\xbf</span><span class="s"> poiuy&quot;</span>
+      <span class="s">&quot;qwerty </span><span class="se">\xc2\x80</span><span class="s"> </span><span class="se">\xef\xbf\xbf</span><span class="s"> poiuy&quot;</span><span class="p">,</span>
+      <span class="n">opts</span><span class="p">);</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="n">BENCHMARK</span><span class="p">(</span><span class="n">jsonSerializeWithNonAsciiEncoding</span><span class="p">,</span> <span class="n">iters</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">folly</span><span class="o">::</span><span class="n">json</span><span class="o">::</span><span class="n">serialization_opts</span> <span class="n">opts</span><span class="p">;</span>
+  <span class="n">opts</span><span class="p">.</span><span class="n">encode_non_ascii</span> <span class="o">=</span> <span class="kc">true</span><span class="p">;</span>
+
+  <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">iters</span><span class="p">;</span> <span class="o">++</span><span class="n">i</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">folly</span><span class="o">::</span><span class="n">json</span><span class="o">::</span><span class="n">serialize</span><span class="p">(</span>
+      <span class="s">&quot;qwerty </span><span class="se">\xc2\x80</span><span class="s"> </span><span class="se">\xef\xbf\xbf</span><span class="s"> poiuy&quot;</span>
+      <span class="s">&quot;qwerty </span><span class="se">\xc2\x80</span><span class="s"> </span><span class="se">\xef\xbf\xbf</span><span class="s"> poiuy&quot;</span>
+      <span class="s">&quot;qwerty </span><span class="se">\xc2\x80</span><span class="s"> </span><span class="se">\xef\xbf\xbf</span><span class="s"> poiuy&quot;</span>
+      <span class="s">&quot;qwerty </span><span class="se">\xc2\x80</span><span class="s"> </span><span class="se">\xef\xbf\xbf</span><span class="s"> poiuy&quot;</span>
+      <span class="s">&quot;qwerty </span><span class="se">\xc2\x80</span><span class="s"> </span><span class="se">\xef\xbf\xbf</span><span class="s"> poiuy&quot;</span>
+      <span class="s">&quot;qwerty </span><span class="se">\xc2\x80</span><span class="s"> </span><span class="se">\xef\xbf\xbf</span><span class="s"> poiuy&quot;</span>
+      <span class="s">&quot;qwerty </span><span class="se">\xc2\x80</span><span class="s"> </span><span class="se">\xef\xbf\xbf</span><span class="s"> poiuy&quot;</span>
+      <span class="s">&quot;qwerty </span><span class="se">\xc2\x80</span><span class="s"> </span><span class="se">\xef\xbf\xbf</span><span class="s"> poiuy&quot;</span>
+      <span class="s">&quot;qwerty </span><span class="se">\xc2\x80</span><span class="s"> </span><span class="se">\xef\xbf\xbf</span><span class="s"> poiuy&quot;</span>
+      <span class="s">&quot;qwerty </span><span class="se">\xc2\x80</span><span class="s"> </span><span class="se">\xef\xbf\xbf</span><span class="s"> poiuy&quot;</span><span class="p">,</span>
+      <span class="n">opts</span><span class="p">);</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="n">BENCHMARK</span><span class="p">(</span><span class="n">jsonSerializeWithUtf8Validation</span><span class="p">,</span> <span class="n">iters</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">folly</span><span class="o">::</span><span class="n">json</span><span class="o">::</span><span class="n">serialization_opts</span> <span class="n">opts</span><span class="p">;</span>
+  <span class="n">opts</span><span class="p">.</span><span class="n">validate_utf8</span> <span class="o">=</span> <span class="kc">true</span><span class="p">;</span>
+
+  <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">iters</span><span class="p">;</span> <span class="o">++</span><span class="n">i</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">folly</span><span class="o">::</span><span class="n">json</span><span class="o">::</span><span class="n">serialize</span><span class="p">(</span>
+      <span class="s">&quot;qwerty </span><span class="se">\xc2\x80</span><span class="s"> </span><span class="se">\xef\xbf\xbf</span><span class="s"> poiuy&quot;</span>
+      <span class="s">&quot;qwerty </span><span class="se">\xc2\x80</span><span class="s"> </span><span class="se">\xef\xbf\xbf</span><span class="s"> poiuy&quot;</span>
+      <span class="s">&quot;qwerty </span><span class="se">\xc2\x80</span><span class="s"> </span><span class="se">\xef\xbf\xbf</span><span class="s"> poiuy&quot;</span>
+      <span class="s">&quot;qwerty </span><span class="se">\xc2\x80</span><span class="s"> </span><span class="se">\xef\xbf\xbf</span><span class="s"> poiuy&quot;</span>
+      <span class="s">&quot;qwerty </span><span class="se">\xc2\x80</span><span class="s"> </span><span class="se">\xef\xbf\xbf</span><span class="s"> poiuy&quot;</span>
+      <span class="s">&quot;qwerty </span><span class="se">\xc2\x80</span><span class="s"> </span><span class="se">\xef\xbf\xbf</span><span class="s"> poiuy&quot;</span>
+      <span class="s">&quot;qwerty </span><span class="se">\xc2\x80</span><span class="s"> </span><span class="se">\xef\xbf\xbf</span><span class="s"> poiuy&quot;</span>
+      <span class="s">&quot;qwerty </span><span class="se">\xc2\x80</span><span class="s"> </span><span class="se">\xef\xbf\xbf</span><span class="s"> poiuy&quot;</span>
+      <span class="s">&quot;qwerty </span><span class="se">\xc2\x80</span><span class="s"> </span><span class="se">\xef\xbf\xbf</span><span class="s"> poiuy&quot;</span>
+      <span class="s">&quot;qwerty </span><span class="se">\xc2\x80</span><span class="s"> </span><span class="se">\xef\xbf\xbf</span><span class="s"> poiuy&quot;</span><span class="p">,</span>
+      <span class="n">opts</span><span class="p">);</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="n">BENCHMARK</span><span class="p">(</span><span class="n">parseSmallStringWithUtf</span><span class="p">,</span> <span class="n">iters</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">iters</span> <span class="o">&lt;&lt;</span> <span class="mi">4</span><span class="p">;</span> <span class="o">++</span><span class="n">i</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">parseJson</span><span class="p">(</span><span class="s">&quot;</span><span class="se">\&quot;</span><span class="s">I </span><span class="se">\\</span><span class="s">u2665 UTF-8 thjasdhkjh blah blah blah</span><span class="se">\&quot;</span><span class="s">&quot;</span><span class="p">);</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="n">BENCHMARK</span><span class="p">(</span><span class="n">parseNormalString</span><span class="p">,</span> <span class="n">iters</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">iters</span> <span class="o">&lt;&lt;</span> <span class="mi">4</span><span class="p">;</span> <span class="o">++</span><span class="n">i</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">parseJson</span><span class="p">(</span><span class="s">&quot;</span><span class="se">\&quot;</span><span class="s">akjhfk jhkjlakjhfk jhkjlakjhfk jhkjl akjhfk</span><span class="se">\&quot;</span><span class="s">&quot;</span><span class="p">);</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="n">BENCHMARK</span><span class="p">(</span><span class="n">parseBigString</span><span class="p">,</span> <span class="n">iters</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">iters</span><span class="p">;</span> <span class="o">++</span><span class="n">i</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">parseJson</span><span class="p">(</span><span class="s">&quot;</span><span class="se">\&quot;</span><span class="s">&quot;</span>
+      <span class="s">&quot;akjhfk jhkjlakjhfk jhkjlakjhfk jhkjl akjhfk&quot;</span>
+      <span class="s">&quot;akjhfk jhkjlakjhfk jhkjlakjhfk jhkjl akjhfk&quot;</span>
+      <span class="s">&quot;akjhfk jhkjlakjhfk jhkjlakjhfk jhkjl akjhfk&quot;</span>
+      <span class="s">&quot;akjhfk jhkjlakjhfk jhkjlakjhfk jhkjl akjhfk&quot;</span>
+      <span class="s">&quot;akjhfk jhkjlakjhfk jhkjlakjhfk jhkjl akjhfk&quot;</span>
+      <span class="s">&quot;akjhfk jhkjlakjhfk jhkjlakjhfk jhkjl akjhfk&quot;</span>
+      <span class="s">&quot;akjhfk jhkjlakjhfk jhkjlakjhfk jhkjl akjhfk&quot;</span>
+      <span class="s">&quot;akjhfk jhkjlakjhfk jhkjlakjhfk jhkjl akjhfk&quot;</span>
+      <span class="s">&quot;akjhfk jhkjlakjhfk jhkjlakjhfk jhkjl akjhfk&quot;</span>
+      <span class="s">&quot;akjhfk jhkjlakjhfk jhkjlakjhfk jhkjl akjhfk&quot;</span>
+      <span class="s">&quot;akjhfk jhkjlakjhfk jhkjlakjhfk jhkjl akjhfk&quot;</span>
+      <span class="s">&quot;</span><span class="se">\&quot;</span><span class="s">&quot;</span><span class="p">);</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="kt">int</span> <span class="n">main</span><span class="p">(</span><span class="kt">int</span> <span class="n">argc</span><span class="p">,</span> <span class="kt">char</span><span class="o">**</span> <span class="n">argv</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">testing</span><span class="o">::</span><span class="n">InitGoogleTest</span><span class="p">(</span><span class="o">&amp;</span><span class="n">argc</span><span class="p">,</span> <span class="n">argv</span><span class="p">);</span>
+  <span class="n">google</span><span class="o">::</span><span class="n">ParseCommandLineFlags</span><span class="p">(</span><span class="o">&amp;</span><span class="n">argc</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">argv</span><span class="p">,</span> <span class="kc">true</span><span class="p">);</span>
+  <span class="k">if</span> <span class="p">(</span><span class="n">FLAGS_benchmark</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">folly</span><span class="o">::</span><span class="n">runBenchmarks</span><span class="p">();</span>
+  <span class="p">}</span>
+  <span class="k">return</span> <span class="n">RUN_ALL_TESTS</span><span class="p">();</span>
+<span class="p">}</span>
+
+</pre></div></td></tr>
+
+</tbody>
+</table>
+</div>
+
+</body>
+<script>docas={repo:"joekychen/folly",depth:2}</script>
+<script>document.write('<script src=' + ('__proto__' in {} ? 'http://cdnjs.cloudflare.com/ajax/libs/zepto/1.0rc1/zepto.min.js' : 'https://ajax.googleapis.com/ajax/libs/jquery/1.7.2/jquery.min.js')+'><\\/script>')</script>
+<script src="http://baoshan.github.com/moment/min/moment.min.js"></script>
+<script src="../../javascript/docco.min.js"></script>
+</html>

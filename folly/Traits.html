@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html><head><title>joekychen/folly » folly › Traits.h
+
+</title>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+<meta name="generator" content="Docco">
+<link rel="stylesheet" media="all" href="../stylesheets/docco.min.css" />
+
+
+</head>
+<body>
+<div id="container">
+<div id="background"></div>
+<table cellpadding="0" cellspacing="0">
+<thead><tr><th class="docs"><a id="home" href="../index.html"></a><h1>Traits.h</h1></th><th class="code"></th></tr></thead>
+<tbody>
+
+
+<tr id="section-1"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-1">&#182;</a></div></td><td class="code"><div class="highlight"><pre><span class="cm">/*</span>
+<span class="cm"> * Copyright 2012 Facebook, Inc.</span>
+<span class="cm"> *</span>
+<span class="cm"> * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span class="cm"> * you may not use this file except in compliance with the License.</span>
+<span class="cm"> * You may obtain a copy of the License at</span>
+<span class="cm"> *</span>
+<span class="cm"> *   http://www.apache.org/licenses/LICENSE-2.0</span>
+<span class="cm"> *</span>
+<span class="cm"> * Unless required by applicable law or agreed to in writing, software</span>
+<span class="cm"> * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span class="cm"> * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span class="cm"> * See the License for the specific language governing permissions and</span>
+<span class="cm"> * limitations under the License.</span>
+<span class="cm"> */</span></pre></div></td></tr>
+
+
+<tr id="section-2"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-2">&#182;</a></div><p>@author: Andrei Alexandrescu</p></td><td class="code"><div class="highlight"><pre><span class="cp">#ifndef FOLLY_BASE_TRAITS_H_</span>
+<span class="cp">#define FOLLY_BASE_TRAITS_H_</span>
+
+<span class="cp">#include &lt;boost/type_traits.hpp&gt;</span>
+<span class="cp">#include &lt;boost/mpl/and.hpp&gt;</span>
+<span class="cp">#include &lt;boost/mpl/not.hpp&gt;</span>
+<span class="cp">#include &lt;memory&gt;</span>
+<span class="cp">#include &lt;bits/c++config.h&gt;</span>
+
+<span class="n">namespace</span> <span class="n">folly</span> <span class="p">{</span>
+
+<span class="cm">/**</span>
+<span class="cm"> * IsRelocatable&lt;T&gt;::value describes the ability of moving around</span>
+<span class="cm"> * memory a value of type T by using memcpy (as opposed to the</span>
+<span class="cm"> * conservative approach of calling the copy constructor and then</span>
+<span class="cm"> * destroying the old temporary. Essentially for a relocatable type,</span>
+<span class="cm"> * the following two sequences of code should be semantically</span>
+<span class="cm"> * equivalent:</span>
+<span class="cm"> *</span>
+<span class="cm"> * void move1(T * from, T * to) {</span>
+<span class="cm"> *   new(to) T(from);</span>
+<span class="cm"> *   (*from).~T();</span>
+<span class="cm"> * }</span>
+<span class="cm"> *</span>
+<span class="cm"> * void move2(T * from, T * to) {</span>
+<span class="cm"> *   memcpy(from, to, sizeof(T));</span>
+<span class="cm"> * }</span>
+<span class="cm"> *</span>
+<span class="cm"> * Most C++ types are relocatable; the ones that aren&#39;t would include</span>
+<span class="cm"> * internal pointers or (very rarely) would need to update remote</span>
+<span class="cm"> * pointers to pointers tracking them. All C++ primitive types and</span>
+<span class="cm"> * type constructors are relocatable.</span>
+<span class="cm"> *</span>
+<span class="cm"> * This property can be used in a variety of optimizations. Currently</span>
+<span class="cm"> * fbvector uses this property intensively.</span>
+<span class="cm"> *</span>
+<span class="cm"> * The default conservatively assumes the type is not</span>
+<span class="cm"> * relocatable. Several specializations are defined for known</span>
+<span class="cm"> * types. You may want to add your own specializations. Do so in</span>
+<span class="cm"> * namespace folly and make sure you keep the specialization of</span>
+<span class="cm"> * IsRelocatable&lt;SomeStruct&gt; in the same header as SomeStruct.</span>
+<span class="cm"> */</span>
+<span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">T</span><span class="o">&gt;</span> <span class="k">struct</span> <span class="n">IsRelocatable</span> <span class="o">:</span> <span class="n">boost</span><span class="o">::</span><span class="n">mpl</span><span class="o">::</span><span class="n">not_</span><span class="o">&lt;</span><span class="n">boost</span><span class="o">::</span><span class="n">is_class</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;</span> <span class="o">&gt;</span>
+<span class="p">{};</span>
+
+<span class="p">}</span> <span class="c1">// namespace folly</span>
+
+<span class="cm">/**</span>
+<span class="cm"> * Use this macro ONLY inside namespace folly. When using it with a</span>
+<span class="cm"> * regular type, use it like this:</span>
+<span class="cm"> *</span>
+<span class="cm"> * // Make sure you&#39;re at namespace ::folly scope</span>
+<span class="cm"> * template&lt;&gt; FOLLY_ASSUME_RELOCATABLE(MyType)</span>
+<span class="cm"> *</span>
+<span class="cm"> * When using it with a template type, use it like this:</span>
+<span class="cm"> *</span>
+<span class="cm"> * // Make sure you&#39;re at namespace ::folly scope</span>
+<span class="cm"> * template&lt;class T, class T2&gt;</span>
+<span class="cm"> * FOLLY_ASSUME_RELOCATABLE(MyType&lt;T1, T2&gt;)</span>
+<span class="cm"> */</span>
+<span class="cp">#define FOLLY_ASSUME_RELOCATABLE(...) \</span>
+<span class="cp">  struct IsRelocatable&lt;  __VA_ARGS__ &gt; : ::boost::true_type {};</span>
+
+<span class="cm">/**</span>
+<span class="cm"> * Use this macro ONLY inside namespace boost. When using it with a</span>
+<span class="cm"> * regular type, use it like this:</span>
+<span class="cm"> *</span>
+<span class="cm"> * // Make sure you&#39;re at namespace ::boost scope</span>
+<span class="cm"> * template&lt;&gt; FOLLY_ASSUME_HAS_NOTHROW_CONSTRUCTOR(MyType)</span>
+<span class="cm"> *</span>
+<span class="cm"> * When using it with a template type, use it like this:</span>
+<span class="cm"> *</span>
+<span class="cm"> * // Make sure you&#39;re at namespace ::boost scope</span>
+<span class="cm"> * template&lt;class T, class T2&gt;</span>
+<span class="cm"> * FOLLY_ASSUME_HAS_NOTHROW_CONSTRUCTOR(MyType&lt;T1, T2&gt;)</span>
+<span class="cm"> */</span>
+<span class="cp">#define FOLLY_ASSUME_HAS_NOTHROW_CONSTRUCTOR(...) \</span>
+<span class="cp">  struct has_nothrow_constructor&lt;  __VA_ARGS__ &gt; : ::boost::true_type {};</span>
+
+<span class="cm">/**</span>
+<span class="cm"> * The FOLLY_ASSUME_FBVECTOR_COMPATIBLE* macros below encode two</span>
+<span class="cm"> * assumptions: first, that the type is relocatable per IsRelocatable</span>
+<span class="cm"> * above, and that it has a nothrow constructor. Most types can be</span>
+<span class="cm"> * assumed to satisfy both conditions, but it is the responsibility of</span>
+<span class="cm"> * the user to state that assumption. User-defined classes will not</span>
+<span class="cm"> * work with fbvector (see FBVector.h) unless they state this</span>
+<span class="cm"> * combination of properties.</span>
+<span class="cm"> *</span>
+<span class="cm"> * Use FOLLY_ASSUME_FBVECTOR_COMPATIBLE with regular types like this:</span>
+<span class="cm"> *</span>
+<span class="cm"> * FOLLY_ASSUME_FBVECTOR_COMPATIBLE(MyType)</span>
+<span class="cm"> *</span>
+<span class="cm"> * The versions FOLLY_ASSUME_FBVECTOR_COMPATIBLE_1, _2, _3, and _4</span>
+<span class="cm"> * allow using the macro for describing templatized classes with 1, 2,</span>
+<span class="cm"> * 3, and 4 template parameters respectively. For template classes</span>
+<span class="cm"> * just use the macro with the appropriate number and pass the name of</span>
+<span class="cm"> * the template to it. Example:</span>
+<span class="cm"> *</span>
+<span class="cm"> * template &lt;class T1, class T2&gt; class MyType { ... };</span>
+<span class="cm"> * ...</span>
+<span class="cm"> * // Make sure you&#39;re at global scope</span>
+<span class="cm"> * FOLLY_ASSUME_FBVECTOR_COMPATIBLE_2(MyType)</span>
+<span class="cm"> */</span></pre></div></td></tr>
+
+
+<tr id="section-3"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-3">&#182;</a></div><p>Use this macro ONLY at global level (no namespace)</p></td><td class="code"><div class="highlight"><pre><span class="cp">#define FOLLY_ASSUME_FBVECTOR_COMPATIBLE(...)                           \</span>
+<span class="cp">  namespace folly { template&lt;&gt; FOLLY_ASSUME_RELOCATABLE(__VA_ARGS__) }   \</span>
+<span class="cp">  namespace boost { \</span>
+<span class="cp">  template&lt;&gt; FOLLY_ASSUME_HAS_NOTHROW_CONSTRUCTOR(__VA_ARGS__) }</span></pre></div></td></tr>
+
+
+<tr id="section-4"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-4">&#182;</a></div><p>Use this macro ONLY at global level (no namespace)</p></td><td class="code"><div class="highlight"><pre><span class="cp">#define FOLLY_ASSUME_FBVECTOR_COMPATIBLE_1(...)                         \</span>
+<span class="cp">  namespace folly {                                                     \</span>
+<span class="cp">  template &lt;class T1&gt; FOLLY_ASSUME_RELOCATABLE(__VA_ARGS__&lt;T1&gt;) }       \</span>
+<span class="cp">    namespace boost {                                                   \</span>
+<span class="cp">    template &lt;class T1&gt; FOLLY_ASSUME_HAS_NOTHROW_CONSTRUCTOR(__VA_ARGS__&lt;T1&gt;) }</span></pre></div></td></tr>
+
+
+<tr id="section-5"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-5">&#182;</a></div><p>Use this macro ONLY at global level (no namespace)</p></td><td class="code"><div class="highlight"><pre><span class="cp">#define FOLLY_ASSUME_FBVECTOR_COMPATIBLE_2(...)                 \</span>
+<span class="cp">  namespace folly {                                             \</span>
+<span class="cp">  template &lt;class T1, class T2&gt;                                 \</span>
+<span class="cp">  FOLLY_ASSUME_RELOCATABLE(__VA_ARGS__&lt;T1, T2&gt;) }               \</span>
+<span class="cp">    namespace boost {                                           \</span>
+<span class="cp">    template &lt;class T1, class T2&gt;                               \</span>
+<span class="cp">    FOLLY_ASSUME_HAS_NOTHROW_CONSTRUCTOR(__VA_ARGS__&lt;T1, T2&gt;) }</span></pre></div></td></tr>
+
+
+<tr id="section-6"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-6">&#182;</a></div><p>Use this macro ONLY at global level (no namespace)</p></td><td class="code"><div class="highlight"><pre><span class="cp">#define FOLLY_ASSUME_FBVECTOR_COMPATIBLE_3(...)                         \</span>
+<span class="cp">  namespace folly {                                                     \</span>
+<span class="cp">  template &lt;class T1, class T2, class T3&gt;                               \</span>
+<span class="cp">  FOLLY_ASSUME_RELOCATABLE(__VA_ARGS__&lt;T1, T2, T3&gt;) }                   \</span>
+<span class="cp">    namespace boost {                                                   \</span>
+<span class="cp">    template &lt;class T1, class T2, class T3&gt;                             \</span>
+<span class="cp">    FOLLY_ASSUME_HAS_NOTHROW_CONSTRUCTOR(__VA_ARGS__&lt;T1, T2, T3&gt;) }</span></pre></div></td></tr>
+
+
+<tr id="section-7"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-7">&#182;</a></div><p>Use this macro ONLY at global level (no namespace)</p></td><td class="code"><div class="highlight"><pre><span class="cp">#define FOLLY_ASSUME_FBVECTOR_COMPATIBLE_4(...)                         \</span>
+<span class="cp">  namespace folly {                                                     \</span>
+<span class="cp">  template &lt;class T1, class T2, class T3, class T4&gt;                     \</span>
+<span class="cp">  FOLLY_ASSUME_RELOCATABLE(__VA_ARGS__&lt;T1, T2, T3, T4&gt;) }               \</span>
+<span class="cp">    namespace boost {                                                   \</span>
+<span class="cp">    template &lt;class T1, class T2, class T3, class T4&gt;                   \</span>
+<span class="cp">    FOLLY_ASSUME_HAS_NOTHROW_CONSTRUCTOR(__VA_ARGS__&lt;T1, T2, T3, T4&gt;) }</span>
+
+<span class="cm">/**</span>
+<span class="cm"> * Instantiate FOLLY_ASSUME_FBVECTOR_COMPATIBLE for a few types. It is</span>
+<span class="cm"> * safe to assume that pair is compatible if both of its components</span>
+<span class="cm"> * are. Furthermore, all STL containers can be assumed to comply,</span>
+<span class="cm"> * although that is not guaranteed by the standard.</span>
+<span class="cm"> */</span>
+
+<span class="n">namespace</span> <span class="n">std</span> <span class="p">{</span>
+
+<span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">T</span><span class="p">,</span> <span class="n">class</span> <span class="n">U</span><span class="o">&gt;</span>
+  <span class="n">class</span> <span class="n">pair</span><span class="p">;</span>
+<span class="cp">#ifndef _GLIBCXX_USE_FB</span>
+<span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">T</span><span class="p">,</span> <span class="n">class</span> <span class="n">R</span><span class="p">,</span> <span class="n">class</span> <span class="n">A</span><span class="o">&gt;</span>
+  <span class="n">class</span> <span class="n">basic_string</span><span class="p">;</span>
+<span class="cp">#else</span>
+<span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">T</span><span class="p">,</span> <span class="n">class</span> <span class="n">R</span><span class="p">,</span> <span class="n">class</span> <span class="n">A</span><span class="p">,</span> <span class="n">class</span> <span class="n">S</span><span class="o">&gt;</span>
+  <span class="n">class</span> <span class="n">basic_string</span><span class="p">;</span>
+<span class="cp">#endif</span>
+<span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">T</span><span class="p">,</span> <span class="n">class</span> <span class="n">A</span><span class="o">&gt;</span>
+  <span class="n">class</span> <span class="n">vector</span><span class="p">;</span>
+<span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">T</span><span class="p">,</span> <span class="n">class</span> <span class="n">A</span><span class="o">&gt;</span>
+  <span class="n">class</span> <span class="n">deque</span><span class="p">;</span>
+<span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">T</span><span class="p">,</span> <span class="n">class</span> <span class="n">A</span><span class="o">&gt;</span>
+  <span class="n">class</span> <span class="n">list</span><span class="p">;</span>
+<span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">T</span><span class="p">,</span> <span class="n">class</span> <span class="n">C</span><span class="p">,</span> <span class="n">class</span> <span class="n">A</span><span class="o">&gt;</span>
+  <span class="n">class</span> <span class="n">set</span><span class="p">;</span>
+<span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">K</span><span class="p">,</span> <span class="n">class</span> <span class="n">V</span><span class="p">,</span> <span class="n">class</span> <span class="n">C</span><span class="p">,</span> <span class="n">class</span> <span class="n">A</span><span class="o">&gt;</span>
+  <span class="n">class</span> <span class="n">map</span><span class="p">;</span>
+<span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">T</span><span class="o">&gt;</span>
+  <span class="n">class</span> <span class="n">shared_ptr</span><span class="p">;</span>
+
+<span class="p">}</span>
+
+<span class="n">namespace</span> <span class="n">boost</span> <span class="p">{</span>
+
+<span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">T</span><span class="o">&gt;</span> <span class="n">class</span> <span class="n">shared_ptr</span><span class="p">;</span>
+
+<span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">T</span><span class="p">,</span> <span class="n">class</span> <span class="n">U</span><span class="o">&gt;</span>
+<span class="k">struct</span> <span class="n">has_nothrow_constructor</span><span class="o">&lt;</span> <span class="n">std</span><span class="o">::</span><span class="n">pair</span><span class="o">&lt;</span><span class="n">T</span><span class="p">,</span> <span class="n">U</span><span class="o">&gt;</span> <span class="o">&gt;</span>
+    <span class="o">:</span> <span class="o">::</span><span class="n">boost</span><span class="o">::</span><span class="n">mpl</span><span class="o">::</span><span class="n">and_</span><span class="o">&lt;</span> <span class="n">has_nothrow_constructor</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;</span><span class="p">,</span>
+                          <span class="n">has_nothrow_constructor</span><span class="o">&lt;</span><span class="n">U</span><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="p">{};</span>
+
+<span class="p">}</span> <span class="c1">// namespace boost</span>
+
+<span class="n">namespace</span> <span class="n">folly</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-8"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-8">&#182;</a></div><p>STL commonly-used types</p></td><td class="code"><div class="highlight"><pre><span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">T</span><span class="p">,</span> <span class="n">class</span> <span class="n">U</span><span class="o">&gt;</span>
+<span class="k">struct</span> <span class="n">IsRelocatable</span><span class="o">&lt;</span>  <span class="n">std</span><span class="o">::</span><span class="n">pair</span><span class="o">&lt;</span><span class="n">T</span><span class="p">,</span> <span class="n">U</span><span class="o">&gt;</span> <span class="o">&gt;</span>
+    <span class="o">:</span> <span class="o">::</span><span class="n">boost</span><span class="o">::</span><span class="n">mpl</span><span class="o">::</span><span class="n">and_</span><span class="o">&lt;</span> <span class="n">IsRelocatable</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;</span><span class="p">,</span> <span class="n">IsRelocatable</span><span class="o">&lt;</span><span class="n">U</span><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="p">{};</span></pre></div></td></tr>
+
+
+<tr id="section-9"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-9">&#182;</a></div><p>Is T one of T1, T2, ..., Tn?</p></td><td class="code"><div class="highlight"><pre><span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">T</span><span class="p">,</span> <span class="n">class</span><span class="p">...</span> <span class="n">Ts</span><span class="o">&gt;</span>
+<span class="k">struct</span> <span class="n">IsOneOf</span> <span class="p">{</span>
+  <span class="k">enum</span> <span class="p">{</span> <span class="n">value</span> <span class="o">=</span> <span class="nb">false</span> <span class="p">};</span>
+<span class="p">};</span>
+
+<span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">T</span><span class="p">,</span> <span class="n">class</span> <span class="n">T1</span><span class="p">,</span> <span class="n">class</span><span class="p">...</span> <span class="n">Ts</span><span class="o">&gt;</span>
+<span class="k">struct</span> <span class="n">IsOneOf</span><span class="o">&lt;</span><span class="n">T</span><span class="p">,</span> <span class="n">T1</span><span class="p">,</span> <span class="n">Ts</span><span class="p">...</span><span class="o">&gt;</span> <span class="p">{</span>
+  <span class="k">enum</span> <span class="p">{</span> <span class="n">value</span> <span class="o">=</span> <span class="n">std</span><span class="o">::</span><span class="n">is_same</span><span class="o">&lt;</span><span class="n">T</span><span class="p">,</span> <span class="n">T1</span><span class="o">&gt;::</span><span class="n">value</span> <span class="o">||</span> <span class="n">IsOneOf</span><span class="o">&lt;</span><span class="n">T</span><span class="p">,</span> <span class="n">Ts</span><span class="p">...</span><span class="o">&gt;::</span><span class="n">value</span> <span class="p">};</span>
+<span class="p">};</span>
+
+<span class="p">}</span> <span class="c1">// namespace folly</span>
+
+<span class="n">FOLLY_ASSUME_FBVECTOR_COMPATIBLE_3</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">basic_string</span><span class="p">);</span>
+<span class="n">FOLLY_ASSUME_FBVECTOR_COMPATIBLE_2</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="p">);</span>
+<span class="n">FOLLY_ASSUME_FBVECTOR_COMPATIBLE_2</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">list</span><span class="p">);</span>
+<span class="n">FOLLY_ASSUME_FBVECTOR_COMPATIBLE_2</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">deque</span><span class="p">);</span>
+<span class="n">FOLLY_ASSUME_FBVECTOR_COMPATIBLE_4</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">map</span><span class="p">);</span>
+<span class="n">FOLLY_ASSUME_FBVECTOR_COMPATIBLE_3</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">set</span><span class="p">);</span>
+<span class="n">FOLLY_ASSUME_FBVECTOR_COMPATIBLE_2</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">unique_ptr</span><span class="p">);</span>
+<span class="n">FOLLY_ASSUME_FBVECTOR_COMPATIBLE_1</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">shared_ptr</span><span class="p">);</span>
+<span class="n">FOLLY_ASSUME_FBVECTOR_COMPATIBLE_1</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">function</span><span class="p">);</span></pre></div></td></tr>
+
+
+<tr id="section-10"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-10">&#182;</a></div><p>Boost</p></td><td class="code"><div class="highlight"><pre><span class="n">FOLLY_ASSUME_FBVECTOR_COMPATIBLE_1</span><span class="p">(</span><span class="n">boost</span><span class="o">::</span><span class="n">shared_ptr</span><span class="p">);</span>
+
+<span class="cp">#endif </span><span class="c1">//FOLLY_BASE_TRAITS_H_</span>
+
+</pre></div></td></tr>
+
+</tbody>
+</table>
+</div>
+
+</body>
+<script>docas={repo:"joekychen/folly",depth:1}</script>
+<script>document.write('<script src=' + ('__proto__' in {} ? 'http://cdnjs.cloudflare.com/ajax/libs/zepto/1.0rc1/zepto.min.js' : 'https://ajax.googleapis.com/ajax/libs/jquery/1.7.2/jquery.min.js')+'><\\/script>')</script>
+<script src="http://baoshan.github.com/moment/min/moment.min.js"></script>
+<script src="../javascript/docco.min.js"></script>
+</html>

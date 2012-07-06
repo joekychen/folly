@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html><head><title>joekychen/folly » folly › experimental › io › test › IOBufCursorTest.cpp
+
+</title>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+<meta name="generator" content="Docco">
+<link rel="stylesheet" media="all" href="../../../../stylesheets/docco.min.css" />
+
+
+</head>
+<body>
+<div id="container">
+<div id="background"></div>
+<table cellpadding="0" cellspacing="0">
+<thead><tr><th class="docs"><a id="home" href="../../../../index.html"></a><h1>IOBufCursorTest.cpp</h1></th><th class="code"></th></tr></thead>
+<tbody>
+
+
+<tr id="section-1"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-1">&#182;</a></div></td><td class="code"><div class="highlight"><pre><span class="cm">/*</span>
+<span class="cm"> * Copyright 2012 Facebook, Inc.</span>
+<span class="cm"> *</span>
+<span class="cm"> * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span class="cm"> * you may not use this file except in compliance with the License.</span>
+<span class="cm"> * You may obtain a copy of the License at</span>
+<span class="cm"> *</span>
+<span class="cm"> *   http://www.apache.org/licenses/LICENSE-2.0</span>
+<span class="cm"> *</span>
+<span class="cm"> * Unless required by applicable law or agreed to in writing, software</span>
+<span class="cm"> * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span class="cm"> * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span class="cm"> * See the License for the specific language governing permissions and</span>
+<span class="cm"> * limitations under the License.</span>
+<span class="cm"> */</span>
+
+<span class="cp">#include &quot;folly/experimental/io/IOBuf.h&quot;</span>
+
+<span class="cp">#include &lt;gflags/gflags.h&gt;</span>
+<span class="cp">#include &lt;boost/random.hpp&gt;</span>
+<span class="cp">#include &lt;gtest/gtest.h&gt;</span>
+<span class="cp">#include &quot;folly/Benchmark.h&quot;</span>
+<span class="cp">#include &quot;folly/Range.h&quot;</span>
+<span class="cp">#include &quot;folly/experimental/io/Cursor.h&quot;</span>
+
+<span class="n">DECLARE_bool</span><span class="p">(</span><span class="n">benchmark</span><span class="p">);</span>
+
+<span class="k">using</span> <span class="n">folly</span><span class="o">::</span><span class="n">IOBuf</span><span class="p">;</span>
+<span class="k">using</span> <span class="n">std</span><span class="o">::</span><span class="n">unique_ptr</span><span class="p">;</span>
+<span class="k">using</span> <span class="k">namespace</span> <span class="n">folly</span><span class="o">::</span><span class="n">io</span><span class="p">;</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">IOBuf</span><span class="p">,</span> <span class="n">RWCursor</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">unique_ptr</span><span class="o">&lt;</span><span class="n">IOBuf</span><span class="o">&gt;</span> <span class="n">iobuf1</span><span class="p">(</span><span class="n">IOBuf</span><span class="o">::</span><span class="n">create</span><span class="p">(</span><span class="mi">20</span><span class="p">));</span>
+  <span class="n">iobuf1</span><span class="o">-&gt;</span><span class="n">append</span><span class="p">(</span><span class="mi">20</span><span class="p">);</span>
+  <span class="n">unique_ptr</span><span class="o">&lt;</span><span class="n">IOBuf</span><span class="o">&gt;</span> <span class="n">iobuf2</span><span class="p">(</span><span class="n">IOBuf</span><span class="o">::</span><span class="n">create</span><span class="p">(</span><span class="mi">20</span><span class="p">));</span>
+  <span class="n">iobuf2</span><span class="o">-&gt;</span><span class="n">append</span><span class="p">(</span><span class="mi">20</span><span class="p">);</span>
+
+  <span class="n">IOBuf</span><span class="o">*</span> <span class="n">iob2ptr</span> <span class="o">=</span> <span class="n">iobuf2</span><span class="p">.</span><span class="n">get</span><span class="p">();</span>
+  <span class="n">iobuf1</span><span class="o">-&gt;</span><span class="n">prependChain</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">move</span><span class="p">(</span><span class="n">iobuf2</span><span class="p">));</span>
+
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">iobuf1</span><span class="o">-&gt;</span><span class="n">isChained</span><span class="p">());</span>
+
+  <span class="n">RWPrivateCursor</span> <span class="n">wcursor</span><span class="p">(</span><span class="n">iobuf1</span><span class="p">.</span><span class="n">get</span><span class="p">());</span>
+  <span class="n">Cursor</span> <span class="n">rcursor</span><span class="p">(</span><span class="n">iobuf1</span><span class="p">.</span><span class="n">get</span><span class="p">());</span>
+  <span class="n">wcursor</span><span class="p">.</span><span class="n">writeLE</span><span class="p">((</span><span class="n">uint64_t</span><span class="p">)</span><span class="mi">1</span><span class="p">);</span>
+  <span class="n">wcursor</span><span class="p">.</span><span class="n">writeLE</span><span class="p">((</span><span class="n">uint64_t</span><span class="p">)</span><span class="mi">1</span><span class="p">);</span>
+  <span class="n">wcursor</span><span class="p">.</span><span class="n">writeLE</span><span class="p">((</span><span class="n">uint64_t</span><span class="p">)</span><span class="mi">1</span><span class="p">);</span>
+  <span class="n">wcursor</span><span class="p">.</span><span class="n">write</span><span class="p">((</span><span class="n">uint8_t</span><span class="p">)</span><span class="mi">1</span><span class="p">);</span>
+
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">rcursor</span><span class="p">.</span><span class="n">readLE</span><span class="o">&lt;</span><span class="n">uint64_t</span><span class="o">&gt;</span><span class="p">());</span>
+  <span class="n">rcursor</span><span class="p">.</span><span class="n">skip</span><span class="p">(</span><span class="mi">8</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">rcursor</span><span class="p">.</span><span class="n">readLE</span><span class="o">&lt;</span><span class="n">uint32_t</span><span class="o">&gt;</span><span class="p">());</span>
+  <span class="n">rcursor</span><span class="p">.</span><span class="n">skip</span><span class="p">(</span><span class="mi">0</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">rcursor</span><span class="p">.</span><span class="n">read</span><span class="o">&lt;</span><span class="n">uint8_t</span><span class="o">&gt;</span><span class="p">());</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">rcursor</span><span class="p">.</span><span class="n">read</span><span class="o">&lt;</span><span class="n">uint8_t</span><span class="o">&gt;</span><span class="p">());</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">rcursor</span><span class="p">.</span><span class="n">read</span><span class="o">&lt;</span><span class="n">uint8_t</span><span class="o">&gt;</span><span class="p">());</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">rcursor</span><span class="p">.</span><span class="n">read</span><span class="o">&lt;</span><span class="n">uint8_t</span><span class="o">&gt;</span><span class="p">());</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">rcursor</span><span class="p">.</span><span class="n">read</span><span class="o">&lt;</span><span class="n">uint8_t</span><span class="o">&gt;</span><span class="p">());</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">IOBuf</span><span class="p">,</span> <span class="n">skip</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">unique_ptr</span><span class="o">&lt;</span><span class="n">IOBuf</span><span class="o">&gt;</span> <span class="n">iobuf1</span><span class="p">(</span><span class="n">IOBuf</span><span class="o">::</span><span class="n">create</span><span class="p">(</span><span class="mi">20</span><span class="p">));</span>
+  <span class="n">iobuf1</span><span class="o">-&gt;</span><span class="n">append</span><span class="p">(</span><span class="mi">20</span><span class="p">);</span>
+  <span class="n">RWPrivateCursor</span> <span class="n">wcursor</span><span class="p">(</span><span class="n">iobuf1</span><span class="p">.</span><span class="n">get</span><span class="p">());</span>
+  <span class="n">wcursor</span><span class="p">.</span><span class="n">write</span><span class="p">((</span><span class="n">uint8_t</span><span class="p">)</span><span class="mi">1</span><span class="p">);</span>
+  <span class="n">wcursor</span><span class="p">.</span><span class="n">write</span><span class="p">((</span><span class="n">uint8_t</span><span class="p">)</span><span class="mi">2</span><span class="p">);</span>
+  <span class="n">Cursor</span> <span class="n">cursor</span><span class="p">(</span><span class="n">iobuf1</span><span class="p">.</span><span class="n">get</span><span class="p">());</span>
+  <span class="n">cursor</span><span class="p">.</span><span class="n">skip</span><span class="p">(</span><span class="mi">1</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="n">cursor</span><span class="p">.</span><span class="n">read</span><span class="o">&lt;</span><span class="n">uint8_t</span><span class="o">&gt;</span><span class="p">());</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">IOBuf</span><span class="p">,</span> <span class="n">reset</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">unique_ptr</span><span class="o">&lt;</span><span class="n">IOBuf</span><span class="o">&gt;</span> <span class="n">iobuf1</span><span class="p">(</span><span class="n">IOBuf</span><span class="o">::</span><span class="n">create</span><span class="p">(</span><span class="mi">20</span><span class="p">));</span>
+  <span class="n">iobuf1</span><span class="o">-&gt;</span><span class="n">append</span><span class="p">(</span><span class="mi">20</span><span class="p">);</span>
+  <span class="n">RWPrivateCursor</span> <span class="n">wcursor</span><span class="p">(</span><span class="n">iobuf1</span><span class="p">.</span><span class="n">get</span><span class="p">());</span>
+  <span class="n">wcursor</span><span class="p">.</span><span class="n">write</span><span class="p">((</span><span class="n">uint8_t</span><span class="p">)</span><span class="mi">1</span><span class="p">);</span>
+  <span class="n">wcursor</span><span class="p">.</span><span class="n">write</span><span class="p">((</span><span class="n">uint8_t</span><span class="p">)</span><span class="mi">2</span><span class="p">);</span>
+  <span class="n">wcursor</span><span class="p">.</span><span class="n">reset</span><span class="p">(</span><span class="n">iobuf1</span><span class="p">.</span><span class="n">get</span><span class="p">());</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">wcursor</span><span class="p">.</span><span class="n">read</span><span class="o">&lt;</span><span class="n">uint8_t</span><span class="o">&gt;</span><span class="p">());</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">IOBuf</span><span class="p">,</span> <span class="n">copy_assign_convert</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">unique_ptr</span><span class="o">&lt;</span><span class="n">IOBuf</span><span class="o">&gt;</span> <span class="n">iobuf1</span><span class="p">(</span><span class="n">IOBuf</span><span class="o">::</span><span class="n">create</span><span class="p">(</span><span class="mi">20</span><span class="p">));</span>
+  <span class="n">iobuf1</span><span class="o">-&gt;</span><span class="n">append</span><span class="p">(</span><span class="mi">20</span><span class="p">);</span>
+  <span class="n">RWPrivateCursor</span> <span class="n">wcursor</span><span class="p">(</span><span class="n">iobuf1</span><span class="p">.</span><span class="n">get</span><span class="p">());</span>
+  <span class="n">RWPrivateCursor</span> <span class="n">cursor2</span><span class="p">(</span><span class="n">wcursor</span><span class="p">);</span>
+  <span class="n">RWPrivateCursor</span> <span class="n">cursor3</span><span class="p">(</span><span class="n">iobuf1</span><span class="p">.</span><span class="n">get</span><span class="p">());</span>
+
+  <span class="n">wcursor</span><span class="p">.</span><span class="n">write</span><span class="p">((</span><span class="n">uint8_t</span><span class="p">)</span><span class="mi">1</span><span class="p">);</span>
+  <span class="n">cursor3</span> <span class="o">=</span> <span class="n">wcursor</span><span class="p">;</span>
+  <span class="n">wcursor</span><span class="p">.</span><span class="n">write</span><span class="p">((</span><span class="n">uint8_t</span><span class="p">)</span><span class="mi">2</span><span class="p">);</span>
+  <span class="n">Cursor</span> <span class="n">cursor4</span><span class="p">(</span><span class="n">wcursor</span><span class="p">);</span>
+  <span class="n">RWPrivateCursor</span> <span class="n">cursor5</span><span class="p">(</span><span class="n">wcursor</span><span class="p">);</span>
+  <span class="n">wcursor</span><span class="p">.</span><span class="n">write</span><span class="p">((</span><span class="n">uint8_t</span><span class="p">)</span><span class="mi">3</span><span class="p">);</span>
+
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">cursor2</span><span class="p">.</span><span class="n">read</span><span class="o">&lt;</span><span class="n">uint8_t</span><span class="o">&gt;</span><span class="p">());</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="n">cursor3</span><span class="p">.</span><span class="n">read</span><span class="o">&lt;</span><span class="n">uint8_t</span><span class="o">&gt;</span><span class="p">());</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="n">cursor4</span><span class="p">.</span><span class="n">read</span><span class="o">&lt;</span><span class="n">uint8_t</span><span class="o">&gt;</span><span class="p">());</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">IOBuf</span><span class="p">,</span> <span class="n">overloading</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">unique_ptr</span><span class="o">&lt;</span><span class="n">IOBuf</span><span class="o">&gt;</span> <span class="n">iobuf1</span><span class="p">(</span><span class="n">IOBuf</span><span class="o">::</span><span class="n">create</span><span class="p">(</span><span class="mi">20</span><span class="p">));</span>
+  <span class="n">iobuf1</span><span class="o">-&gt;</span><span class="n">append</span><span class="p">(</span><span class="mi">20</span><span class="p">);</span>
+  <span class="n">RWPrivateCursor</span> <span class="n">wcursor</span><span class="p">(</span><span class="n">iobuf1</span><span class="p">.</span><span class="n">get</span><span class="p">());</span>
+  <span class="n">wcursor</span> <span class="o">+=</span> <span class="mi">1</span><span class="p">;</span>
+  <span class="n">wcursor</span><span class="p">.</span><span class="n">write</span><span class="p">((</span><span class="n">uint8_t</span><span class="p">)</span><span class="mi">1</span><span class="p">);</span>
+  <span class="n">Cursor</span> <span class="n">cursor</span><span class="p">(</span><span class="n">iobuf1</span><span class="p">.</span><span class="n">get</span><span class="p">());</span>
+  <span class="n">cursor</span> <span class="o">+=</span> <span class="mi">1</span><span class="p">;</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">cursor</span><span class="p">.</span><span class="n">read</span><span class="o">&lt;</span><span class="n">uint8_t</span><span class="o">&gt;</span><span class="p">());</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">IOBuf</span><span class="p">,</span> <span class="n">endian</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">unique_ptr</span><span class="o">&lt;</span><span class="n">IOBuf</span><span class="o">&gt;</span> <span class="n">iobuf1</span><span class="p">(</span><span class="n">IOBuf</span><span class="o">::</span><span class="n">create</span><span class="p">(</span><span class="mi">20</span><span class="p">));</span>
+  <span class="n">iobuf1</span><span class="o">-&gt;</span><span class="n">append</span><span class="p">(</span><span class="mi">20</span><span class="p">);</span>
+  <span class="n">RWPrivateCursor</span> <span class="n">wcursor</span><span class="p">(</span><span class="n">iobuf1</span><span class="p">.</span><span class="n">get</span><span class="p">());</span>
+  <span class="n">Cursor</span> <span class="n">rcursor</span><span class="p">(</span><span class="n">iobuf1</span><span class="p">.</span><span class="n">get</span><span class="p">());</span>
+  <span class="n">uint16_t</span> <span class="n">v</span> <span class="o">=</span> <span class="mi">1</span><span class="p">;</span>
+  <span class="n">int16_t</span> <span class="n">vu</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span><span class="p">;</span>
+  <span class="n">wcursor</span><span class="p">.</span><span class="n">writeBE</span><span class="p">(</span><span class="n">v</span><span class="p">);</span>
+  <span class="n">wcursor</span><span class="p">.</span><span class="n">writeBE</span><span class="p">(</span><span class="n">vu</span><span class="p">);</span></pre></div></td></tr>
+
+
+<tr id="section-2"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-2">&#182;</a></div><p>Try a couple combinations to ensure they were generated correctly</p></td><td class="code"><div class="highlight"><pre>  <span class="n">wcursor</span><span class="p">.</span><span class="n">writeBE</span><span class="p">(</span><span class="n">vu</span><span class="p">);</span>
+  <span class="n">wcursor</span><span class="p">.</span><span class="n">writeLE</span><span class="p">(</span><span class="n">vu</span><span class="p">);</span>
+  <span class="n">wcursor</span><span class="p">.</span><span class="n">writeLE</span><span class="p">(</span><span class="n">vu</span><span class="p">);</span>
+  <span class="n">wcursor</span><span class="p">.</span><span class="n">writeLE</span><span class="p">(</span><span class="n">v</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="n">rcursor</span><span class="p">.</span><span class="n">readBE</span><span class="o">&lt;</span><span class="n">uint16_t</span><span class="o">&gt;</span><span class="p">());</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">IOBuf</span><span class="p">,</span> <span class="n">Cursor</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">unique_ptr</span><span class="o">&lt;</span><span class="n">IOBuf</span><span class="o">&gt;</span> <span class="n">iobuf1</span><span class="p">(</span><span class="n">IOBuf</span><span class="o">::</span><span class="n">create</span><span class="p">(</span><span class="mi">1</span><span class="p">));</span>
+  <span class="n">iobuf1</span><span class="o">-&gt;</span><span class="n">append</span><span class="p">(</span><span class="mi">1</span><span class="p">);</span>
+  <span class="n">RWPrivateCursor</span> <span class="n">c</span><span class="p">(</span><span class="n">iobuf1</span><span class="p">.</span><span class="n">get</span><span class="p">());</span>
+  <span class="n">c</span><span class="p">.</span><span class="n">write</span><span class="p">((</span><span class="n">uint8_t</span><span class="p">)</span><span class="mi">40</span><span class="p">);</span> <span class="c1">// OK</span>
+  <span class="k">try</span> <span class="p">{</span>
+    <span class="n">c</span><span class="p">.</span><span class="n">write</span><span class="p">((</span><span class="n">uint8_t</span><span class="p">)</span><span class="mi">10</span><span class="p">);</span> <span class="c1">// Bad write, checked should except.</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="kc">true</span><span class="p">,</span> <span class="kc">false</span><span class="p">);</span>
+  <span class="p">}</span> <span class="k">catch</span> <span class="p">(...)</span> <span class="p">{</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">IOBuf</span><span class="p">,</span> <span class="n">UnshareCursor</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">uint8_t</span> <span class="n">buf</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+  <span class="n">unique_ptr</span><span class="o">&lt;</span><span class="n">IOBuf</span><span class="o">&gt;</span> <span class="n">iobuf1</span><span class="p">(</span><span class="n">IOBuf</span><span class="o">::</span><span class="n">wrapBuffer</span><span class="p">(</span><span class="o">&amp;</span><span class="n">buf</span><span class="p">,</span> <span class="mi">1</span><span class="p">));</span>
+  <span class="n">unique_ptr</span><span class="o">&lt;</span><span class="n">IOBuf</span><span class="o">&gt;</span> <span class="n">iobuf2</span><span class="p">(</span><span class="n">IOBuf</span><span class="o">::</span><span class="n">wrapBuffer</span><span class="p">(</span><span class="o">&amp;</span><span class="n">buf</span><span class="p">,</span> <span class="mi">1</span><span class="p">));</span>
+  <span class="n">RWUnshareCursor</span> <span class="n">c1</span><span class="p">(</span><span class="n">iobuf1</span><span class="p">.</span><span class="n">get</span><span class="p">());</span>
+  <span class="n">RWUnshareCursor</span> <span class="n">c2</span><span class="p">(</span><span class="n">iobuf2</span><span class="p">.</span><span class="n">get</span><span class="p">());</span>
+
+  <span class="n">c1</span><span class="p">.</span><span class="n">write</span><span class="p">((</span><span class="n">uint8_t</span><span class="p">)</span><span class="mi">10</span><span class="p">);</span> <span class="c1">// This should duplicate the two buffers.</span>
+  <span class="n">uint8_t</span> <span class="n">t</span> <span class="o">=</span> <span class="n">c2</span><span class="p">.</span><span class="n">read</span><span class="o">&lt;</span><span class="n">uint8_t</span><span class="o">&gt;</span><span class="p">();</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">t</span><span class="p">);</span>
+
+  <span class="n">iobuf1</span> <span class="o">=</span> <span class="n">IOBuf</span><span class="o">::</span><span class="n">wrapBuffer</span><span class="p">(</span><span class="o">&amp;</span><span class="n">buf</span><span class="p">,</span> <span class="mi">1</span><span class="p">);</span>
+  <span class="n">iobuf2</span> <span class="o">=</span> <span class="n">IOBuf</span><span class="o">::</span><span class="n">wrapBuffer</span><span class="p">(</span><span class="o">&amp;</span><span class="n">buf</span><span class="p">,</span> <span class="mi">1</span><span class="p">);</span>
+  <span class="n">RWPrivateCursor</span> <span class="n">c3</span><span class="p">(</span><span class="n">iobuf1</span><span class="p">.</span><span class="n">get</span><span class="p">());</span>
+  <span class="n">RWPrivateCursor</span> <span class="n">c4</span><span class="p">(</span><span class="n">iobuf2</span><span class="p">.</span><span class="n">get</span><span class="p">());</span>
+
+  <span class="n">c3</span><span class="p">.</span><span class="n">write</span><span class="p">((</span><span class="n">uint8_t</span><span class="p">)</span><span class="mi">10</span><span class="p">);</span> <span class="c1">// This should _not_ duplicate the two buffers.</span>
+  <span class="n">t</span> <span class="o">=</span> <span class="n">c4</span><span class="p">.</span><span class="n">read</span><span class="o">&lt;</span><span class="n">uint8_t</span><span class="o">&gt;</span><span class="p">();</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="n">t</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="k">namespace</span> <span class="p">{</span>
+<span class="kt">void</span> <span class="n">append</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">unique_ptr</span><span class="o">&lt;</span><span class="n">IOBuf</span><span class="o">&gt;&amp;</span> <span class="n">buf</span><span class="p">,</span> <span class="n">folly</span><span class="o">::</span><span class="n">StringPiece</span> <span class="n">data</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">EXPECT_LE</span><span class="p">(</span><span class="n">data</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="n">buf</span><span class="o">-&gt;</span><span class="n">tailroom</span><span class="p">());</span>
+  <span class="n">memcpy</span><span class="p">(</span><span class="n">buf</span><span class="o">-&gt;</span><span class="n">writableData</span><span class="p">(),</span> <span class="n">data</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span> <span class="n">data</span><span class="p">.</span><span class="n">size</span><span class="p">());</span>
+  <span class="n">buf</span><span class="o">-&gt;</span><span class="n">append</span><span class="p">(</span><span class="n">data</span><span class="p">.</span><span class="n">size</span><span class="p">());</span>
+<span class="p">}</span>
+
+<span class="kt">void</span> <span class="n">append</span><span class="p">(</span><span class="n">Appender</span><span class="o">&amp;</span> <span class="n">appender</span><span class="p">,</span> <span class="n">folly</span><span class="o">::</span><span class="n">StringPiece</span> <span class="n">data</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">appender</span><span class="p">.</span><span class="n">push</span><span class="p">(</span><span class="k">reinterpret_cast</span><span class="o">&lt;</span><span class="k">const</span> <span class="n">uint8_t</span><span class="o">*&gt;</span><span class="p">(</span><span class="n">data</span><span class="p">.</span><span class="n">data</span><span class="p">()),</span> <span class="n">data</span><span class="p">.</span><span class="n">size</span><span class="p">());</span>
+<span class="p">}</span>
+
+<span class="n">std</span><span class="o">::</span><span class="n">string</span> <span class="n">toString</span><span class="p">(</span><span class="k">const</span> <span class="n">IOBuf</span><span class="o">&amp;</span> <span class="n">buf</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">std</span><span class="o">::</span><span class="n">string</span> <span class="n">str</span><span class="p">;</span>
+  <span class="n">Cursor</span> <span class="n">cursor</span><span class="p">(</span><span class="o">&amp;</span><span class="n">buf</span><span class="p">);</span>
+  <span class="n">std</span><span class="o">::</span><span class="n">pair</span><span class="o">&lt;</span><span class="k">const</span> <span class="n">uint8_t</span><span class="o">*</span><span class="p">,</span> <span class="n">size_t</span><span class="o">&gt;</span> <span class="n">p</span><span class="p">;</span>
+  <span class="k">while</span> <span class="p">((</span><span class="n">p</span> <span class="o">=</span> <span class="n">cursor</span><span class="p">.</span><span class="n">peek</span><span class="p">()).</span><span class="n">second</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">str</span><span class="p">.</span><span class="n">append</span><span class="p">(</span><span class="k">reinterpret_cast</span><span class="o">&lt;</span><span class="k">const</span> <span class="kt">char</span><span class="o">*&gt;</span><span class="p">(</span><span class="n">p</span><span class="p">.</span><span class="n">first</span><span class="p">),</span> <span class="n">p</span><span class="p">.</span><span class="n">second</span><span class="p">);</span>
+    <span class="n">cursor</span><span class="p">.</span><span class="n">skip</span><span class="p">(</span><span class="n">p</span><span class="p">.</span><span class="n">second</span><span class="p">);</span>
+  <span class="p">}</span>
+  <span class="k">return</span> <span class="n">str</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="p">}</span>  <span class="c1">// namespace</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">IOBuf</span><span class="p">,</span> <span class="n">PullAndPeek</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">std</span><span class="o">::</span><span class="n">unique_ptr</span><span class="o">&lt;</span><span class="n">IOBuf</span><span class="o">&gt;</span> <span class="n">iobuf1</span><span class="p">(</span><span class="n">IOBuf</span><span class="o">::</span><span class="n">create</span><span class="p">(</span><span class="mi">10</span><span class="p">));</span>
+  <span class="n">append</span><span class="p">(</span><span class="n">iobuf1</span><span class="p">,</span> <span class="s">&quot;he&quot;</span><span class="p">);</span>
+  <span class="n">std</span><span class="o">::</span><span class="n">unique_ptr</span><span class="o">&lt;</span><span class="n">IOBuf</span><span class="o">&gt;</span> <span class="n">iobuf2</span><span class="p">(</span><span class="n">IOBuf</span><span class="o">::</span><span class="n">create</span><span class="p">(</span><span class="mi">10</span><span class="p">));</span>
+  <span class="n">append</span><span class="p">(</span><span class="n">iobuf2</span><span class="p">,</span> <span class="s">&quot;llo &quot;</span><span class="p">);</span>
+  <span class="n">std</span><span class="o">::</span><span class="n">unique_ptr</span><span class="o">&lt;</span><span class="n">IOBuf</span><span class="o">&gt;</span> <span class="n">iobuf3</span><span class="p">(</span><span class="n">IOBuf</span><span class="o">::</span><span class="n">create</span><span class="p">(</span><span class="mi">10</span><span class="p">));</span>
+  <span class="n">append</span><span class="p">(</span><span class="n">iobuf3</span><span class="p">,</span> <span class="s">&quot;world&quot;</span><span class="p">);</span>
+  <span class="n">iobuf1</span><span class="o">-&gt;</span><span class="n">prependChain</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">move</span><span class="p">(</span><span class="n">iobuf2</span><span class="p">));</span>
+  <span class="n">iobuf1</span><span class="o">-&gt;</span><span class="n">prependChain</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">move</span><span class="p">(</span><span class="n">iobuf3</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="n">iobuf1</span><span class="o">-&gt;</span><span class="n">countChainElements</span><span class="p">());</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">11</span><span class="p">,</span> <span class="n">iobuf1</span><span class="o">-&gt;</span><span class="n">computeChainDataLength</span><span class="p">());</span>
+
+  <span class="kt">char</span> <span class="n">buf</span><span class="p">[</span><span class="mi">12</span><span class="p">];</span>
+  <span class="n">memset</span><span class="p">(</span><span class="n">buf</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">buf</span><span class="p">));</span>
+  <span class="n">Cursor</span><span class="p">(</span><span class="n">iobuf1</span><span class="p">.</span><span class="n">get</span><span class="p">()).</span><span class="n">pull</span><span class="p">(</span><span class="n">buf</span><span class="p">,</span> <span class="mi">11</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;hello world&quot;</span><span class="p">,</span> <span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="p">(</span><span class="n">buf</span><span class="p">));</span>
+
+  <span class="n">memset</span><span class="p">(</span><span class="n">buf</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">buf</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">11</span><span class="p">,</span> <span class="n">Cursor</span><span class="p">(</span><span class="n">iobuf1</span><span class="p">.</span><span class="n">get</span><span class="p">()).</span><span class="n">pullAtMost</span><span class="p">(</span><span class="n">buf</span><span class="p">,</span> <span class="mi">20</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;hello world&quot;</span><span class="p">,</span> <span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="p">(</span><span class="n">buf</span><span class="p">));</span>
+
+  <span class="n">EXPECT_THROW</span><span class="p">({</span><span class="n">Cursor</span><span class="p">(</span><span class="n">iobuf1</span><span class="p">.</span><span class="n">get</span><span class="p">()).</span><span class="n">pull</span><span class="p">(</span><span class="n">buf</span><span class="p">,</span> <span class="mi">20</span><span class="p">);},</span>
+               <span class="n">std</span><span class="o">::</span><span class="n">out_of_range</span><span class="p">);</span>
+
+  <span class="p">{</span>
+    <span class="n">RWPrivateCursor</span> <span class="n">cursor</span><span class="p">(</span><span class="n">iobuf1</span><span class="p">.</span><span class="n">get</span><span class="p">());</span>
+    <span class="k">auto</span> <span class="n">p</span> <span class="o">=</span> <span class="n">cursor</span><span class="p">.</span><span class="n">peek</span><span class="p">();</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;he&quot;</span><span class="p">,</span> <span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="p">(</span><span class="k">reinterpret_cast</span><span class="o">&lt;</span><span class="k">const</span> <span class="kt">char</span><span class="o">*&gt;</span><span class="p">(</span><span class="n">p</span><span class="p">.</span><span class="n">first</span><span class="p">),</span>
+                                <span class="n">p</span><span class="p">.</span><span class="n">second</span><span class="p">));</span>
+    <span class="n">cursor</span><span class="p">.</span><span class="n">skip</span><span class="p">(</span><span class="n">p</span><span class="p">.</span><span class="n">second</span><span class="p">);</span>
+    <span class="n">p</span> <span class="o">=</span> <span class="n">cursor</span><span class="p">.</span><span class="n">peek</span><span class="p">();</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;llo &quot;</span><span class="p">,</span> <span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="p">(</span><span class="k">reinterpret_cast</span><span class="o">&lt;</span><span class="k">const</span> <span class="kt">char</span><span class="o">*&gt;</span><span class="p">(</span><span class="n">p</span><span class="p">.</span><span class="n">first</span><span class="p">),</span>
+                                  <span class="n">p</span><span class="p">.</span><span class="n">second</span><span class="p">));</span>
+    <span class="n">cursor</span><span class="p">.</span><span class="n">skip</span><span class="p">(</span><span class="n">p</span><span class="p">.</span><span class="n">second</span><span class="p">);</span>
+    <span class="n">p</span> <span class="o">=</span> <span class="n">cursor</span><span class="p">.</span><span class="n">peek</span><span class="p">();</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;world&quot;</span><span class="p">,</span> <span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="p">(</span><span class="k">reinterpret_cast</span><span class="o">&lt;</span><span class="k">const</span> <span class="kt">char</span><span class="o">*&gt;</span><span class="p">(</span><span class="n">p</span><span class="p">.</span><span class="n">first</span><span class="p">),</span>
+                                   <span class="n">p</span><span class="p">.</span><span class="n">second</span><span class="p">));</span>
+    <span class="n">cursor</span><span class="p">.</span><span class="n">skip</span><span class="p">(</span><span class="n">p</span><span class="p">.</span><span class="n">second</span><span class="p">);</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="n">iobuf1</span><span class="o">-&gt;</span><span class="n">countChainElements</span><span class="p">());</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">11</span><span class="p">,</span> <span class="n">iobuf1</span><span class="o">-&gt;</span><span class="n">computeChainDataLength</span><span class="p">());</span>
+  <span class="p">}</span>
+
+  <span class="p">{</span>
+    <span class="n">RWPrivateCursor</span> <span class="n">cursor</span><span class="p">(</span><span class="n">iobuf1</span><span class="p">.</span><span class="n">get</span><span class="p">());</span>
+    <span class="n">cursor</span><span class="p">.</span><span class="n">gather</span><span class="p">(</span><span class="mi">11</span><span class="p">);</span>
+    <span class="k">auto</span> <span class="n">p</span> <span class="o">=</span> <span class="n">cursor</span><span class="p">.</span><span class="n">peek</span><span class="p">();</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;hello world&quot;</span><span class="p">,</span> <span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="p">(</span><span class="k">reinterpret_cast</span><span class="o">&lt;</span><span class="k">const</span>
+                                         <span class="kt">char</span><span class="o">*&gt;</span><span class="p">(</span><span class="n">p</span><span class="p">.</span><span class="n">first</span><span class="p">),</span> <span class="n">p</span><span class="p">.</span><span class="n">second</span><span class="p">));</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">iobuf1</span><span class="o">-&gt;</span><span class="n">countChainElements</span><span class="p">());</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">11</span><span class="p">,</span> <span class="n">iobuf1</span><span class="o">-&gt;</span><span class="n">computeChainDataLength</span><span class="p">());</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">IOBuf</span><span class="p">,</span> <span class="n">Appender</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">std</span><span class="o">::</span><span class="n">unique_ptr</span><span class="o">&lt;</span><span class="n">IOBuf</span><span class="o">&gt;</span> <span class="n">head</span><span class="p">(</span><span class="n">IOBuf</span><span class="o">::</span><span class="n">create</span><span class="p">(</span><span class="mi">10</span><span class="p">));</span>
+  <span class="n">append</span><span class="p">(</span><span class="n">head</span><span class="p">,</span> <span class="s">&quot;hello&quot;</span><span class="p">);</span>
+
+  <span class="n">Appender</span> <span class="n">app</span><span class="p">(</span><span class="n">head</span><span class="p">.</span><span class="n">get</span><span class="p">(),</span> <span class="mi">10</span><span class="p">);</span>
+  <span class="n">uint32_t</span> <span class="n">cap</span> <span class="o">=</span> <span class="n">head</span><span class="o">-&gt;</span><span class="n">capacity</span><span class="p">();</span>
+  <span class="n">uint32_t</span> <span class="n">len1</span> <span class="o">=</span> <span class="n">app</span><span class="p">.</span><span class="n">length</span><span class="p">();</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">cap</span> <span class="o">-</span> <span class="mi">5</span><span class="p">,</span> <span class="n">len1</span><span class="p">);</span>
+  <span class="n">app</span><span class="p">.</span><span class="n">ensure</span><span class="p">(</span><span class="n">len1</span><span class="p">);</span>  <span class="c1">// won&#39;t grow</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">len1</span><span class="p">,</span> <span class="n">app</span><span class="p">.</span><span class="n">length</span><span class="p">());</span>
+  <span class="n">app</span><span class="p">.</span><span class="n">ensure</span><span class="p">(</span><span class="n">len1</span> <span class="o">+</span> <span class="mi">1</span><span class="p">);</span>  <span class="c1">// will grow</span>
+  <span class="n">EXPECT_LE</span><span class="p">(</span><span class="n">len1</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="n">app</span><span class="p">.</span><span class="n">length</span><span class="p">());</span>
+
+  <span class="n">append</span><span class="p">(</span><span class="n">app</span><span class="p">,</span> <span class="s">&quot; world&quot;</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;hello world&quot;</span><span class="p">,</span> <span class="n">toString</span><span class="p">(</span><span class="o">*</span><span class="n">head</span><span class="p">));</span>
+<span class="p">}</span>
+
+<span class="kt">int</span> <span class="n">benchmark_size</span> <span class="o">=</span> <span class="mi">1000</span><span class="p">;</span>
+<span class="n">unique_ptr</span><span class="o">&lt;</span><span class="n">IOBuf</span><span class="o">&gt;</span> <span class="n">iobuf_benchmark</span><span class="p">;</span>
+
+<span class="n">unique_ptr</span><span class="o">&lt;</span><span class="n">IOBuf</span><span class="o">&gt;</span> <span class="n">iobuf_read_benchmark</span><span class="p">;</span>
+
+<span class="k">template</span> <span class="o">&lt;</span><span class="k">class</span> <span class="nc">CursClass</span><span class="o">&gt;</span>
+<span class="kt">void</span> <span class="n">runBenchmark</span><span class="p">()</span> <span class="p">{</span>
+  <span class="n">CursClass</span> <span class="n">c</span><span class="p">(</span><span class="n">iobuf_benchmark</span><span class="p">.</span><span class="n">get</span><span class="p">());</span>
+
+  <span class="k">for</span><span class="p">(</span><span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">benchmark_size</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">c</span><span class="p">.</span><span class="n">write</span><span class="p">((</span><span class="n">uint8_t</span><span class="p">)</span><span class="mi">0</span><span class="p">);</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="n">BENCHMARK</span><span class="p">(</span><span class="n">rwPrivateCursorBenchmark</span><span class="p">,</span> <span class="n">iters</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">while</span> <span class="p">(</span><span class="o">--</span><span class="n">iters</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">runBenchmark</span><span class="o">&lt;</span><span class="n">RWPrivateCursor</span><span class="o">&gt;</span><span class="p">();</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="n">BENCHMARK</span><span class="p">(</span><span class="n">rwUnshareCursorBenchmark</span><span class="p">,</span> <span class="n">iters</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">while</span> <span class="p">(</span><span class="o">--</span><span class="n">iters</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">runBenchmark</span><span class="o">&lt;</span><span class="n">RWUnshareCursor</span><span class="o">&gt;</span><span class="p">();</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+
+<span class="n">BENCHMARK</span><span class="p">(</span><span class="n">cursorBenchmark</span><span class="p">,</span> <span class="n">iters</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">while</span> <span class="p">(</span><span class="o">--</span><span class="n">iters</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">Cursor</span> <span class="n">c</span><span class="p">(</span><span class="n">iobuf_read_benchmark</span><span class="p">.</span><span class="n">get</span><span class="p">());</span>
+    <span class="k">for</span><span class="p">(</span><span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">benchmark_size</span> <span class="p">;</span> <span class="n">i</span><span class="o">++</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">c</span><span class="p">.</span><span class="n">read</span><span class="o">&lt;</span><span class="n">uint8_t</span><span class="o">&gt;</span><span class="p">();</span>
+    <span class="p">}</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="n">BENCHMARK</span><span class="p">(</span><span class="n">skipBenchmark</span><span class="p">,</span> <span class="n">iters</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">uint8_t</span> <span class="n">buf</span><span class="p">;</span>
+  <span class="k">while</span> <span class="p">(</span><span class="o">--</span><span class="n">iters</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">Cursor</span> <span class="n">c</span><span class="p">(</span><span class="n">iobuf_read_benchmark</span><span class="p">.</span><span class="n">get</span><span class="p">());</span>
+    <span class="k">for</span><span class="p">(</span><span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">benchmark_size</span> <span class="p">;</span> <span class="n">i</span><span class="o">++</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">c</span><span class="p">.</span><span class="n">peek</span><span class="p">();</span>
+      <span class="n">c</span><span class="p">.</span><span class="n">skip</span><span class="p">(</span><span class="mi">1</span><span class="p">);</span>
+    <span class="p">}</span>
+  <span class="p">}</span>
+<span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-3"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-3">&#182;</a></div><p>fbmake opt
+<em>bin/folly/experimental/io/test/iobuf</em>cursor_test -benchmark</p>
+
+<h2>Benchmark                               Iters   Total t    t/iter iter/sec</h2>
+
+<p>rwPrivateCursorBenchmark               100000  142.9 ms  1.429 us  683.5 k
+rwUnshareCursorBenchmark               100000  309.3 ms  3.093 us  315.7 k
+cursorBenchmark                        100000  741.4 ms  7.414 us  131.7 k
+skipBenchmark                          100000  738.9 ms  7.389 us  132.2 k</p>
+
+<p>uname -a:</p>
+
+<p>Linux dev2159.snc6.facebook.com 2.6.33-7<em>fbk15</em>104e4d0 #1 SMP
+Tue Oct 19 22:40:30 PDT 2010 x86<em>64 x86</em>64 x86_64 GNU/Linux</p>
+
+<p>72GB RAM, 2 CPUs (Intel(R) Xeon(R) CPU L5630  @ 2.13GHz)
+hyperthreading disabled</p></td><td class="code"><div class="highlight"><pre><span class="kt">int</span> <span class="n">main</span><span class="p">(</span><span class="kt">int</span> <span class="n">argc</span><span class="p">,</span> <span class="kt">char</span><span class="o">**</span> <span class="n">argv</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">testing</span><span class="o">::</span><span class="n">InitGoogleTest</span><span class="p">(</span><span class="o">&amp;</span><span class="n">argc</span><span class="p">,</span> <span class="n">argv</span><span class="p">);</span>
+  <span class="n">google</span><span class="o">::</span><span class="n">ParseCommandLineFlags</span><span class="p">(</span><span class="o">&amp;</span><span class="n">argc</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">argv</span><span class="p">,</span> <span class="kc">true</span><span class="p">);</span>
+
+  <span class="k">auto</span> <span class="n">ret</span> <span class="o">=</span> <span class="n">RUN_ALL_TESTS</span><span class="p">();</span>
+
+  <span class="k">if</span> <span class="p">(</span><span class="n">ret</span> <span class="o">==</span> <span class="mi">0</span> <span class="o">&amp;&amp;</span> <span class="n">FLAGS_benchmark</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">iobuf_benchmark</span> <span class="o">=</span> <span class="n">IOBuf</span><span class="o">::</span><span class="n">create</span><span class="p">(</span><span class="n">benchmark_size</span><span class="p">);</span>
+    <span class="n">iobuf_benchmark</span><span class="o">-&gt;</span><span class="n">append</span><span class="p">(</span><span class="n">benchmark_size</span><span class="p">);</span>
+
+    <span class="n">iobuf_read_benchmark</span> <span class="o">=</span> <span class="n">IOBuf</span><span class="o">::</span><span class="n">create</span><span class="p">(</span><span class="mi">1</span><span class="p">);</span>
+    <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">benchmark_size</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">unique_ptr</span><span class="o">&lt;</span><span class="n">IOBuf</span><span class="o">&gt;</span> <span class="n">iobuf2</span><span class="p">(</span><span class="n">IOBuf</span><span class="o">::</span><span class="n">create</span><span class="p">(</span><span class="mi">1</span><span class="p">));</span>
+      <span class="n">iobuf2</span><span class="o">-&gt;</span><span class="n">append</span><span class="p">(</span><span class="mi">1</span><span class="p">);</span>
+      <span class="n">iobuf_read_benchmark</span><span class="o">-&gt;</span><span class="n">prependChain</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">move</span><span class="p">(</span><span class="n">iobuf2</span><span class="p">));</span>
+    <span class="p">}</span>
+
+    <span class="n">folly</span><span class="o">::</span><span class="n">runBenchmarks</span><span class="p">();</span>
+  <span class="p">}</span>
+
+  <span class="k">return</span> <span class="n">ret</span><span class="p">;</span>
+<span class="p">}</span>
+
+</pre></div></td></tr>
+
+</tbody>
+</table>
+</div>
+
+</body>
+<script>docas={repo:"joekychen/folly",depth:4}</script>
+<script>document.write('<script src=' + ('__proto__' in {} ? 'http://cdnjs.cloudflare.com/ajax/libs/zepto/1.0rc1/zepto.min.js' : 'https://ajax.googleapis.com/ajax/libs/jquery/1.7.2/jquery.min.js')+'><\\/script>')</script>
+<script src="http://baoshan.github.com/moment/min/moment.min.js"></script>
+<script src="../../../../javascript/docco.min.js"></script>
+</html>

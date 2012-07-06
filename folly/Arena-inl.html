@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html><head><title>joekychen/folly » folly › Arena-inl.h
+
+</title>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+<meta name="generator" content="Docco">
+<link rel="stylesheet" media="all" href="../stylesheets/docco.min.css" />
+
+
+</head>
+<body>
+<div id="container">
+<div id="background"></div>
+<table cellpadding="0" cellspacing="0">
+<thead><tr><th class="docs"><a id="home" href="../index.html"></a><h1>Arena-inl.h</h1></th><th class="code"></th></tr></thead>
+<tbody>
+
+
+<tr id="section-1"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-1">&#182;</a></div></td><td class="code"><div class="highlight"><pre><span class="cm">/*</span>
+<span class="cm"> * Copyright 2012 Facebook, Inc.</span>
+<span class="cm"> *</span>
+<span class="cm"> * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span class="cm"> * you may not use this file except in compliance with the License.</span>
+<span class="cm"> * You may obtain a copy of the License at</span>
+<span class="cm"> *</span>
+<span class="cm"> *   http://www.apache.org/licenses/LICENSE-2.0</span>
+<span class="cm"> *</span>
+<span class="cm"> * Unless required by applicable law or agreed to in writing, software</span>
+<span class="cm"> * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span class="cm"> * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span class="cm"> * See the License for the specific language governing permissions and</span>
+<span class="cm"> * limitations under the License.</span>
+<span class="cm"> */</span>
+
+<span class="cp">#ifndef FOLLY_ARENA_H_</span>
+<span class="cp">#error This file may only be included from Arena.h</span>
+<span class="cp">#endif</span></pre></div></td></tr>
+
+
+<tr id="section-2"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-2">&#182;</a></div><p>Implementation of Arena.h functions</p></td><td class="code"><div class="highlight"><pre><span class="n">namespace</span> <span class="n">folly</span> <span class="p">{</span>
+
+<span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">Alloc</span><span class="o">&gt;</span>
+<span class="n">std</span><span class="o">::</span><span class="n">pair</span><span class="o">&lt;</span><span class="kr">typename</span> <span class="n">Arena</span><span class="o">&lt;</span><span class="n">Alloc</span><span class="o">&gt;::</span><span class="n">Block</span><span class="o">*</span><span class="p">,</span> <span class="kt">size_t</span><span class="o">&gt;</span>
+<span class="n">Arena</span><span class="o">&lt;</span><span class="n">Alloc</span><span class="o">&gt;::</span><span class="n">Block</span><span class="o">::</span><span class="n">allocate</span><span class="p">(</span><span class="n">Alloc</span><span class="o">&amp;</span> <span class="n">alloc</span><span class="p">,</span> <span class="kt">size_t</span> <span class="n">size</span><span class="p">,</span> <span class="n">bool</span> <span class="n">allowSlack</span><span class="p">)</span> <span class="p">{</span>
+  <span class="kt">size_t</span> <span class="n">allocSize</span> <span class="o">=</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">Block</span><span class="p">)</span> <span class="o">+</span> <span class="n">size</span><span class="p">;</span>
+  <span class="k">if</span> <span class="p">(</span><span class="n">allowSlack</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">allocSize</span> <span class="o">=</span> <span class="n">ArenaAllocatorTraits</span><span class="o">&lt;</span><span class="n">Alloc</span><span class="o">&gt;::</span><span class="n">goodSize</span><span class="p">(</span><span class="n">alloc</span><span class="p">,</span> <span class="n">allocSize</span><span class="p">);</span>
+  <span class="p">}</span>
+
+  <span class="kt">void</span><span class="o">*</span> <span class="n">mem</span> <span class="o">=</span> <span class="n">alloc</span><span class="p">.</span><span class="n">allocate</span><span class="p">(</span><span class="n">allocSize</span><span class="p">);</span>
+  <span class="n">assert</span><span class="p">(</span><span class="n">isAligned</span><span class="p">(</span><span class="n">mem</span><span class="p">));</span>
+  <span class="k">return</span> <span class="n">std</span><span class="o">::</span><span class="n">make_pair</span><span class="p">(</span><span class="n">new</span> <span class="p">(</span><span class="n">mem</span><span class="p">)</span> <span class="n">Block</span><span class="p">(),</span> <span class="n">allocSize</span> <span class="o">-</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">Block</span><span class="p">));</span>
+<span class="p">}</span>
+
+<span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">Alloc</span><span class="o">&gt;</span>
+<span class="kt">void</span> <span class="n">Arena</span><span class="o">&lt;</span><span class="n">Alloc</span><span class="o">&gt;::</span><span class="n">Block</span><span class="o">::</span><span class="n">deallocate</span><span class="p">(</span><span class="n">Alloc</span><span class="o">&amp;</span> <span class="n">alloc</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">this</span><span class="o">-&gt;~</span><span class="n">Block</span><span class="p">();</span>
+  <span class="n">alloc</span><span class="p">.</span><span class="n">deallocate</span><span class="p">(</span><span class="n">this</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">Alloc</span><span class="o">&gt;</span>
+<span class="kt">void</span><span class="o">*</span> <span class="n">Arena</span><span class="o">&lt;</span><span class="n">Alloc</span><span class="o">&gt;::</span><span class="n">allocateSlow</span><span class="p">(</span><span class="kt">size_t</span> <span class="n">size</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">std</span><span class="o">::</span><span class="n">pair</span><span class="o">&lt;</span><span class="n">Block</span><span class="o">*</span><span class="p">,</span> <span class="kt">size_t</span><span class="o">&gt;</span> <span class="n">p</span><span class="p">;</span>
+  <span class="kt">char</span><span class="o">*</span> <span class="n">start</span><span class="p">;</span>
+  <span class="k">if</span> <span class="p">(</span><span class="n">size</span> <span class="o">&gt;</span> <span class="n">minBlockSize</span><span class="p">())</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-3"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-3">&#182;</a></div><p>Allocate a large block for this chunk only, put it at the back of the
+list so it doesn't get used for small allocations; don't change ptr_
+and end_, let them point into a normal block (or none, if they're
+null)</p></td><td class="code"><div class="highlight"><pre>    <span class="n">p</span> <span class="o">=</span> <span class="n">Block</span><span class="o">::</span><span class="n">allocate</span><span class="p">(</span><span class="n">alloc</span><span class="p">(),</span> <span class="n">size</span><span class="p">,</span> <span class="nb">false</span><span class="p">);</span>
+    <span class="n">start</span> <span class="o">=</span> <span class="n">p</span><span class="p">.</span><span class="n">first</span><span class="o">-&gt;</span><span class="n">start</span><span class="p">();</span>
+    <span class="n">blocks_</span><span class="p">.</span><span class="n">push_back</span><span class="p">(</span><span class="o">*</span><span class="n">p</span><span class="p">.</span><span class="n">first</span><span class="p">);</span>
+  <span class="p">}</span> <span class="k">else</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-4"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-4">&#182;</a></div><p>Allocate a normal sized block and carve out size bytes from it</p></td><td class="code"><div class="highlight"><pre>    <span class="n">p</span> <span class="o">=</span> <span class="n">Block</span><span class="o">::</span><span class="n">allocate</span><span class="p">(</span><span class="n">alloc</span><span class="p">(),</span> <span class="n">minBlockSize</span><span class="p">(),</span> <span class="nb">true</span><span class="p">);</span>
+    <span class="n">start</span> <span class="o">=</span> <span class="n">p</span><span class="p">.</span><span class="n">first</span><span class="o">-&gt;</span><span class="n">start</span><span class="p">();</span>
+    <span class="n">blocks_</span><span class="p">.</span><span class="n">push_front</span><span class="p">(</span><span class="o">*</span><span class="n">p</span><span class="p">.</span><span class="n">first</span><span class="p">);</span>
+    <span class="n">ptr_</span> <span class="o">=</span> <span class="n">start</span> <span class="o">+</span> <span class="n">size</span><span class="p">;</span>
+    <span class="n">end_</span> <span class="o">=</span> <span class="n">start</span> <span class="o">+</span> <span class="n">p</span><span class="p">.</span><span class="n">second</span><span class="p">;</span>
+  <span class="p">}</span>
+
+  <span class="n">assert</span><span class="p">(</span><span class="n">p</span><span class="p">.</span><span class="n">second</span> <span class="o">&gt;=</span> <span class="n">size</span><span class="p">);</span>
+  <span class="k">return</span> <span class="n">start</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">Alloc</span><span class="o">&gt;</span>
+<span class="kt">void</span> <span class="n">Arena</span><span class="o">&lt;</span><span class="n">Alloc</span><span class="o">&gt;::</span><span class="n">merge</span><span class="p">(</span><span class="n">Arena</span><span class="o">&lt;</span><span class="n">Alloc</span><span class="o">&gt;&amp;&amp;</span> <span class="n">other</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">blocks_</span><span class="p">.</span><span class="n">splice_after</span><span class="p">(</span><span class="n">blocks_</span><span class="p">.</span><span class="n">before_begin</span><span class="p">(),</span> <span class="n">other</span><span class="p">.</span><span class="n">blocks_</span><span class="p">);</span>
+  <span class="n">other</span><span class="p">.</span><span class="n">blocks_</span><span class="p">.</span><span class="n">clear</span><span class="p">();</span>
+  <span class="n">other</span><span class="p">.</span><span class="n">ptr_</span> <span class="o">=</span> <span class="n">other</span><span class="p">.</span><span class="n">end_</span> <span class="o">=</span> <span class="n">nullptr</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">Alloc</span><span class="o">&gt;</span>
+<span class="n">Arena</span><span class="o">&lt;</span><span class="n">Alloc</span><span class="o">&gt;::~</span><span class="n">Arena</span><span class="p">()</span> <span class="p">{</span>
+  <span class="k">auto</span> <span class="n">disposer</span> <span class="o">=</span> <span class="p">[</span><span class="n">this</span><span class="p">]</span> <span class="p">(</span><span class="n">Block</span><span class="o">*</span> <span class="n">b</span><span class="p">)</span> <span class="p">{</span> <span class="n">b</span><span class="o">-&gt;</span><span class="n">deallocate</span><span class="p">(</span><span class="n">this</span><span class="o">-&gt;</span><span class="n">alloc</span><span class="p">());</span> <span class="p">};</span>
+  <span class="k">while</span> <span class="p">(</span><span class="o">!</span><span class="n">blocks_</span><span class="p">.</span><span class="n">empty</span><span class="p">())</span> <span class="p">{</span>
+    <span class="n">blocks_</span><span class="p">.</span><span class="n">pop_front_and_dispose</span><span class="p">(</span><span class="n">disposer</span><span class="p">);</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="p">}</span>  <span class="c1">// namespace folly</span>
+
+</pre></div></td></tr>
+
+</tbody>
+</table>
+</div>
+
+</body>
+<script>docas={repo:"joekychen/folly",depth:1}</script>
+<script>document.write('<script src=' + ('__proto__' in {} ? 'http://cdnjs.cloudflare.com/ajax/libs/zepto/1.0rc1/zepto.min.js' : 'https://ajax.googleapis.com/ajax/libs/jquery/1.7.2/jquery.min.js')+'><\\/script>')</script>
+<script src="http://baoshan.github.com/moment/min/moment.min.js"></script>
+<script src="../javascript/docco.min.js"></script>
+</html>

@@ -1,0 +1,735 @@
+<!DOCTYPE html>
+<html><head><title>joekychen/folly » folly › test › ConvTest.cpp
+
+</title>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+<meta name="generator" content="Docco">
+<link rel="stylesheet" media="all" href="../../stylesheets/docco.min.css" />
+
+
+</head>
+<body>
+<div id="container">
+<div id="background"></div>
+<table cellpadding="0" cellspacing="0">
+<thead><tr><th class="docs"><a id="home" href="../../index.html"></a><h1>ConvTest.cpp</h1></th><th class="code"></th></tr></thead>
+<tbody>
+
+
+<tr id="section-1"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-1">&#182;</a></div></td><td class="code"><div class="highlight"><pre><span class="cm">/*</span>
+<span class="cm"> * Copyright 2012 Facebook, Inc.</span>
+<span class="cm"> *</span>
+<span class="cm"> * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span class="cm"> * you may not use this file except in compliance with the License.</span>
+<span class="cm"> * You may obtain a copy of the License at</span>
+<span class="cm"> *</span>
+<span class="cm"> *   http://www.apache.org/licenses/LICENSE-2.0</span>
+<span class="cm"> *</span>
+<span class="cm"> * Unless required by applicable law or agreed to in writing, software</span>
+<span class="cm"> * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span class="cm"> * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span class="cm"> * See the License for the specific language governing permissions and</span>
+<span class="cm"> * limitations under the License.</span>
+<span class="cm"> */</span>
+
+<span class="cp">#include &quot;folly/Benchmark.h&quot;</span>
+<span class="cp">#include &quot;folly/Conv.h&quot;</span>
+<span class="cp">#include &quot;folly/Foreach.h&quot;</span>
+<span class="cp">#include &lt;boost/lexical_cast.hpp&gt;</span>
+<span class="cp">#include &lt;gtest/gtest.h&gt;</span>
+<span class="cp">#include &lt;limits&gt;</span>
+<span class="cp">#include &lt;stdexcept&gt;</span>
+
+<span class="k">using</span> <span class="k">namespace</span> <span class="n">std</span><span class="p">;</span>
+<span class="k">using</span> <span class="k">namespace</span> <span class="n">folly</span><span class="p">;</span>
+
+<span class="k">static</span> <span class="n">int8_t</span> <span class="n">s8</span><span class="p">;</span>
+<span class="k">static</span> <span class="n">uint8_t</span> <span class="n">u8</span><span class="p">;</span>
+<span class="k">static</span> <span class="n">int16_t</span> <span class="n">s16</span><span class="p">;</span>
+<span class="k">static</span> <span class="n">uint16_t</span> <span class="n">u16</span><span class="p">;</span>
+<span class="k">static</span> <span class="n">int32_t</span> <span class="n">s32</span><span class="p">;</span>
+<span class="k">static</span> <span class="n">uint32_t</span> <span class="n">u32</span><span class="p">;</span>
+<span class="k">static</span> <span class="n">int64_t</span> <span class="n">s64</span><span class="p">;</span>
+<span class="k">static</span> <span class="n">uint64_t</span> <span class="n">u64</span><span class="p">;</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">Conv</span><span class="p">,</span> <span class="n">Integral2Integral</span><span class="p">)</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-2"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-2">&#182;</a></div><p>Same size, different signs</p></td><td class="code"><div class="highlight"><pre>  <span class="n">s64</span> <span class="o">=</span> <span class="n">numeric_limits</span><span class="o">&lt;</span><span class="n">uint8_t</span><span class="o">&gt;::</span><span class="n">max</span><span class="p">();</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">to</span><span class="o">&lt;</span><span class="n">uint8_t</span><span class="o">&gt;</span><span class="p">(</span><span class="n">s64</span><span class="p">),</span> <span class="n">s64</span><span class="p">);</span>
+
+  <span class="n">s64</span> <span class="o">=</span> <span class="n">numeric_limits</span><span class="o">&lt;</span><span class="n">int8_t</span><span class="o">&gt;::</span><span class="n">max</span><span class="p">();</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">to</span><span class="o">&lt;</span><span class="n">int8_t</span><span class="o">&gt;</span><span class="p">(</span><span class="n">s64</span><span class="p">),</span> <span class="n">s64</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">Conv</span><span class="p">,</span> <span class="n">Floating2Floating</span><span class="p">)</span> <span class="p">{</span>
+  <span class="kt">float</span> <span class="n">f1</span> <span class="o">=</span> <span class="mf">1e3</span><span class="p">;</span>
+  <span class="kt">double</span> <span class="n">d1</span> <span class="o">=</span> <span class="n">to</span><span class="o">&lt;</span><span class="kt">double</span><span class="o">&gt;</span><span class="p">(</span><span class="n">f1</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">f1</span><span class="p">,</span> <span class="n">d1</span><span class="p">);</span>
+
+  <span class="kt">double</span> <span class="n">d2</span> <span class="o">=</span> <span class="mf">23.0</span><span class="p">;</span>
+  <span class="k">auto</span> <span class="n">f2</span> <span class="o">=</span> <span class="n">to</span><span class="o">&lt;</span><span class="kt">float</span><span class="o">&gt;</span><span class="p">(</span><span class="n">d2</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="kt">double</span><span class="p">(</span><span class="n">f2</span><span class="p">),</span> <span class="n">d2</span><span class="p">);</span>
+
+  <span class="kt">double</span> <span class="n">invalidFloat</span> <span class="o">=</span> <span class="n">std</span><span class="o">::</span><span class="n">numeric_limits</span><span class="o">&lt;</span><span class="kt">double</span><span class="o">&gt;::</span><span class="n">max</span><span class="p">();</span>
+  <span class="n">EXPECT_ANY_THROW</span><span class="p">(</span><span class="n">to</span><span class="o">&lt;</span><span class="kt">float</span><span class="o">&gt;</span><span class="p">(</span><span class="n">invalidFloat</span><span class="p">));</span>
+  <span class="n">invalidFloat</span> <span class="o">=</span> <span class="o">-</span><span class="n">std</span><span class="o">::</span><span class="n">numeric_limits</span><span class="o">&lt;</span><span class="kt">double</span><span class="o">&gt;::</span><span class="n">max</span><span class="p">();</span>
+  <span class="n">EXPECT_ANY_THROW</span><span class="p">(</span><span class="n">to</span><span class="o">&lt;</span><span class="kt">float</span><span class="o">&gt;</span><span class="p">(</span><span class="n">invalidFloat</span><span class="p">));</span>
+
+  <span class="k">try</span> <span class="p">{</span>
+    <span class="k">auto</span> <span class="n">shouldWork</span> <span class="o">=</span> <span class="n">to</span><span class="o">&lt;</span><span class="kt">float</span><span class="o">&gt;</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">numeric_limits</span><span class="o">&lt;</span><span class="kt">double</span><span class="o">&gt;::</span><span class="n">min</span><span class="p">());</span></pre></div></td></tr>
+
+
+<tr id="section-3"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-3">&#182;</a></div><p>The value of `shouldWork' is an implementation defined choice
+between the following two alternatives.</p></td><td class="code"><div class="highlight"><pre>    <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">shouldWork</span> <span class="o">==</span> <span class="n">std</span><span class="o">::</span><span class="n">numeric_limits</span><span class="o">&lt;</span><span class="kt">float</span><span class="o">&gt;::</span><span class="n">min</span><span class="p">()</span> <span class="o">||</span>
+                <span class="n">shouldWork</span> <span class="o">==</span> <span class="mf">0.f</span><span class="p">);</span>
+  <span class="p">}</span> <span class="k">catch</span> <span class="p">(...)</span> <span class="p">{</span>
+    <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="kc">false</span><span class="p">);</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="k">template</span> <span class="o">&lt;</span><span class="k">class</span> <span class="nc">String</span><span class="o">&gt;</span>
+<span class="kt">void</span> <span class="n">testIntegral2String</span><span class="p">()</span> <span class="p">{</span>
+<span class="p">}</span>
+
+<span class="k">template</span> <span class="o">&lt;</span><span class="k">class</span> <span class="nc">String</span><span class="p">,</span> <span class="k">class</span> <span class="nc">Int</span><span class="p">,</span> <span class="n">class</span><span class="p">...</span> <span class="n">Ints</span><span class="o">&gt;</span>
+<span class="kt">void</span> <span class="n">testIntegral2String</span><span class="p">()</span> <span class="p">{</span>
+  <span class="k">typedef</span> <span class="k">typename</span> <span class="n">make_unsigned</span><span class="o">&lt;</span><span class="n">Int</span><span class="o">&gt;::</span><span class="n">type</span> <span class="n">Uint</span><span class="p">;</span>
+  <span class="k">typedef</span> <span class="k">typename</span> <span class="n">make_signed</span><span class="o">&lt;</span><span class="n">Int</span><span class="o">&gt;::</span><span class="n">type</span> <span class="n">Sint</span><span class="p">;</span>
+
+  <span class="n">Uint</span> <span class="n">value</span> <span class="o">=</span> <span class="mi">123</span><span class="p">;</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">to</span><span class="o">&lt;</span><span class="n">String</span><span class="o">&gt;</span><span class="p">(</span><span class="n">value</span><span class="p">),</span> <span class="s">&quot;123&quot;</span><span class="p">);</span>
+  <span class="n">Sint</span> <span class="n">svalue</span> <span class="o">=</span> <span class="mi">123</span><span class="p">;</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">to</span><span class="o">&lt;</span><span class="n">String</span><span class="o">&gt;</span><span class="p">(</span><span class="n">svalue</span><span class="p">),</span> <span class="s">&quot;123&quot;</span><span class="p">);</span>
+  <span class="n">svalue</span> <span class="o">=</span> <span class="o">-</span><span class="mi">123</span><span class="p">;</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">to</span><span class="o">&lt;</span><span class="n">String</span><span class="o">&gt;</span><span class="p">(</span><span class="n">svalue</span><span class="p">),</span> <span class="s">&quot;-123&quot;</span><span class="p">);</span>
+
+  <span class="n">value</span> <span class="o">=</span> <span class="n">numeric_limits</span><span class="o">&lt;</span><span class="n">Uint</span><span class="o">&gt;::</span><span class="n">min</span><span class="p">();</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">to</span><span class="o">&lt;</span><span class="n">Uint</span><span class="o">&gt;</span><span class="p">(</span><span class="n">to</span><span class="o">&lt;</span><span class="n">String</span><span class="o">&gt;</span><span class="p">(</span><span class="n">value</span><span class="p">)),</span> <span class="n">value</span><span class="p">);</span>
+  <span class="n">value</span> <span class="o">=</span> <span class="n">numeric_limits</span><span class="o">&lt;</span><span class="n">Uint</span><span class="o">&gt;::</span><span class="n">max</span><span class="p">();</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">to</span><span class="o">&lt;</span><span class="n">Uint</span><span class="o">&gt;</span><span class="p">(</span><span class="n">to</span><span class="o">&lt;</span><span class="n">String</span><span class="o">&gt;</span><span class="p">(</span><span class="n">value</span><span class="p">)),</span> <span class="n">value</span><span class="p">);</span>
+
+  <span class="n">svalue</span> <span class="o">=</span> <span class="n">numeric_limits</span><span class="o">&lt;</span><span class="n">Sint</span><span class="o">&gt;::</span><span class="n">min</span><span class="p">();</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">to</span><span class="o">&lt;</span><span class="n">Sint</span><span class="o">&gt;</span><span class="p">(</span><span class="n">to</span><span class="o">&lt;</span><span class="n">String</span><span class="o">&gt;</span><span class="p">(</span><span class="n">svalue</span><span class="p">)),</span> <span class="n">svalue</span><span class="p">);</span>
+  <span class="n">value</span> <span class="o">=</span> <span class="n">numeric_limits</span><span class="o">&lt;</span><span class="n">Sint</span><span class="o">&gt;::</span><span class="n">max</span><span class="p">();</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">to</span><span class="o">&lt;</span><span class="n">Sint</span><span class="o">&gt;</span><span class="p">(</span><span class="n">to</span><span class="o">&lt;</span><span class="n">String</span><span class="o">&gt;</span><span class="p">(</span><span class="n">svalue</span><span class="p">)),</span> <span class="n">svalue</span><span class="p">);</span>
+
+  <span class="n">testIntegral2String</span><span class="o">&lt;</span><span class="n">String</span><span class="p">,</span> <span class="n">Ints</span><span class="p">...</span><span class="o">&gt;</span><span class="p">();</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">Conv</span><span class="p">,</span> <span class="n">Integral2String</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">testIntegral2String</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="p">,</span> <span class="kt">char</span><span class="p">,</span> <span class="kt">short</span><span class="p">,</span> <span class="kt">int</span><span class="p">,</span> <span class="kt">long</span><span class="o">&gt;</span><span class="p">();</span>
+  <span class="n">testIntegral2String</span><span class="o">&lt;</span><span class="n">fbstring</span><span class="p">,</span> <span class="kt">char</span><span class="p">,</span> <span class="kt">short</span><span class="p">,</span> <span class="kt">int</span><span class="p">,</span> <span class="kt">long</span><span class="o">&gt;</span><span class="p">();</span>
+<span class="p">}</span>
+
+<span class="k">template</span> <span class="o">&lt;</span><span class="k">class</span> <span class="nc">String</span><span class="o">&gt;</span>
+<span class="kt">void</span> <span class="n">testString2Integral</span><span class="p">()</span> <span class="p">{</span>
+<span class="p">}</span>
+
+<span class="k">template</span> <span class="o">&lt;</span><span class="k">class</span> <span class="nc">String</span><span class="p">,</span> <span class="k">class</span> <span class="nc">Int</span><span class="p">,</span> <span class="n">class</span><span class="p">...</span> <span class="n">Ints</span><span class="o">&gt;</span>
+<span class="kt">void</span> <span class="n">testString2Integral</span><span class="p">()</span> <span class="p">{</span>
+  <span class="k">typedef</span> <span class="k">typename</span> <span class="n">make_unsigned</span><span class="o">&lt;</span><span class="n">Int</span><span class="o">&gt;::</span><span class="n">type</span> <span class="n">Uint</span><span class="p">;</span>
+  <span class="k">typedef</span> <span class="k">typename</span> <span class="n">make_signed</span><span class="o">&lt;</span><span class="n">Int</span><span class="o">&gt;::</span><span class="n">type</span> <span class="n">Sint</span><span class="p">;</span></pre></div></td></tr>
+
+
+<tr id="section-4"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-4">&#182;</a></div><p>Unsigned numbers small enough to fit in a signed type</p></td><td class="code"><div class="highlight"><pre>  <span class="k">static</span> <span class="k">const</span> <span class="n">String</span> <span class="n">strings</span><span class="p">[]</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s">&quot;0&quot;</span><span class="p">,</span>
+    <span class="s">&quot;00&quot;</span><span class="p">,</span>
+    <span class="s">&quot;2 &quot;</span><span class="p">,</span>
+    <span class="s">&quot; 84&quot;</span><span class="p">,</span>
+    <span class="s">&quot; </span><span class="se">\n</span><span class="s"> 123    </span><span class="se">\t\n</span><span class="s">&quot;</span><span class="p">,</span>
+    <span class="s">&quot; 127&quot;</span><span class="p">,</span>
+    <span class="s">&quot;0000000000000000000000000042&quot;</span>
+  <span class="p">};</span>
+  <span class="k">static</span> <span class="k">const</span> <span class="n">Uint</span> <span class="n">values</span><span class="p">[]</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="mi">0</span><span class="p">,</span>
+    <span class="mi">0</span><span class="p">,</span>
+    <span class="mi">2</span><span class="p">,</span>
+    <span class="mi">84</span><span class="p">,</span>
+    <span class="mi">123</span><span class="p">,</span>
+    <span class="mi">127</span><span class="p">,</span>
+    <span class="mi">42</span>
+  <span class="p">};</span>
+  <span class="n">FOR_EACH_RANGE</span> <span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">strings</span><span class="p">)</span> <span class="o">/</span> <span class="k">sizeof</span><span class="p">(</span><span class="o">*</span><span class="n">strings</span><span class="p">))</span> <span class="p">{</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">to</span><span class="o">&lt;</span><span class="n">Uint</span><span class="o">&gt;</span><span class="p">(</span><span class="n">strings</span><span class="p">[</span><span class="n">i</span><span class="p">]),</span> <span class="n">values</span><span class="p">[</span><span class="n">i</span><span class="p">]);</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">to</span><span class="o">&lt;</span><span class="n">Sint</span><span class="o">&gt;</span><span class="p">(</span><span class="n">strings</span><span class="p">[</span><span class="n">i</span><span class="p">]),</span> <span class="n">values</span><span class="p">[</span><span class="n">i</span><span class="p">]);</span>
+  <span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-5"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-5">&#182;</a></div><p>Unsigned numbers that won't fit in the signed variation</p></td><td class="code"><div class="highlight"><pre>  <span class="k">static</span> <span class="k">const</span> <span class="n">String</span> <span class="n">uStrings</span><span class="p">[]</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s">&quot; 128&quot;</span><span class="p">,</span>
+    <span class="s">&quot;213&quot;</span><span class="p">,</span>
+    <span class="s">&quot;255&quot;</span>
+  <span class="p">};</span>
+  <span class="k">static</span> <span class="k">const</span> <span class="n">Uint</span> <span class="n">uValues</span><span class="p">[]</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="mi">128</span><span class="p">,</span>
+    <span class="mi">213</span><span class="p">,</span>
+    <span class="mi">255</span>
+  <span class="p">};</span>
+  <span class="n">FOR_EACH_RANGE</span> <span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">uStrings</span><span class="p">)</span><span class="o">/</span><span class="k">sizeof</span><span class="p">(</span><span class="o">*</span><span class="n">uStrings</span><span class="p">))</span> <span class="p">{</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">to</span><span class="o">&lt;</span><span class="n">Uint</span><span class="o">&gt;</span><span class="p">(</span><span class="n">uStrings</span><span class="p">[</span><span class="n">i</span><span class="p">]),</span> <span class="n">uValues</span><span class="p">[</span><span class="n">i</span><span class="p">]);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="k">sizeof</span><span class="p">(</span><span class="n">Int</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">EXPECT_THROW</span><span class="p">(</span><span class="n">to</span><span class="o">&lt;</span><span class="n">Sint</span><span class="o">&gt;</span><span class="p">(</span><span class="n">uStrings</span><span class="p">[</span><span class="n">i</span><span class="p">]),</span> <span class="n">std</span><span class="o">::</span><span class="n">range_error</span><span class="p">);</span>
+    <span class="p">}</span>
+  <span class="p">}</span>
+
+  <span class="k">if</span> <span class="p">(</span><span class="k">sizeof</span><span class="p">(</span><span class="n">Int</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="mi">4</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">static</span> <span class="k">const</span> <span class="n">String</span> <span class="n">strings2</span><span class="p">[]</span> <span class="o">=</span> <span class="p">{</span>
+      <span class="s">&quot;256&quot;</span><span class="p">,</span>
+      <span class="s">&quot;6324 &quot;</span><span class="p">,</span>
+      <span class="s">&quot;63245675 &quot;</span><span class="p">,</span>
+      <span class="s">&quot;2147483647&quot;</span>
+    <span class="p">};</span>
+    <span class="k">static</span> <span class="k">const</span> <span class="n">Uint</span> <span class="n">values2</span><span class="p">[]</span> <span class="o">=</span> <span class="p">{</span>
+      <span class="p">(</span><span class="n">Uint</span><span class="p">)</span><span class="mi">256</span><span class="p">,</span>
+      <span class="p">(</span><span class="n">Uint</span><span class="p">)</span><span class="mi">6324</span><span class="p">,</span>
+      <span class="p">(</span><span class="n">Uint</span><span class="p">)</span><span class="mi">63245675</span><span class="p">,</span>
+      <span class="p">(</span><span class="n">Uint</span><span class="p">)</span><span class="mi">2147483647</span>
+    <span class="p">};</span>
+    <span class="n">FOR_EACH_RANGE</span> <span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">strings2</span><span class="p">)</span><span class="o">/</span><span class="k">sizeof</span><span class="p">(</span><span class="o">*</span><span class="n">strings2</span><span class="p">))</span> <span class="p">{</span>
+      <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">to</span><span class="o">&lt;</span><span class="n">Uint</span><span class="o">&gt;</span><span class="p">(</span><span class="n">strings2</span><span class="p">[</span><span class="n">i</span><span class="p">]),</span> <span class="n">values2</span><span class="p">[</span><span class="n">i</span><span class="p">]);</span>
+      <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">to</span><span class="o">&lt;</span><span class="n">Sint</span><span class="o">&gt;</span><span class="p">(</span><span class="n">strings2</span><span class="p">[</span><span class="n">i</span><span class="p">]),</span> <span class="n">values2</span><span class="p">[</span><span class="n">i</span><span class="p">]);</span>
+    <span class="p">}</span>
+
+    <span class="k">static</span> <span class="k">const</span> <span class="n">String</span> <span class="n">uStrings2</span><span class="p">[]</span> <span class="o">=</span> <span class="p">{</span>
+      <span class="s">&quot;2147483648&quot;</span><span class="p">,</span>
+      <span class="s">&quot;3147483648&quot;</span><span class="p">,</span>
+      <span class="s">&quot;4147483648&quot;</span><span class="p">,</span>
+      <span class="s">&quot;4000000000&quot;</span><span class="p">,</span>
+    <span class="p">};</span>
+    <span class="k">static</span> <span class="k">const</span> <span class="n">Uint</span> <span class="n">uValues2</span><span class="p">[]</span> <span class="o">=</span> <span class="p">{</span>
+      <span class="p">(</span><span class="n">Uint</span><span class="p">)</span><span class="mi">2147483648U</span><span class="p">,</span>
+      <span class="p">(</span><span class="n">Uint</span><span class="p">)</span><span class="mi">3147483648U</span><span class="p">,</span>
+      <span class="p">(</span><span class="n">Uint</span><span class="p">)</span><span class="mi">4147483648U</span><span class="p">,</span>
+      <span class="p">(</span><span class="n">Uint</span><span class="p">)</span><span class="mi">4000000000U</span><span class="p">,</span>
+    <span class="p">};</span>
+    <span class="n">FOR_EACH_RANGE</span> <span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">uStrings2</span><span class="p">)</span><span class="o">/</span><span class="k">sizeof</span><span class="p">(</span><span class="n">uStrings2</span><span class="p">))</span> <span class="p">{</span>
+      <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">to</span><span class="o">&lt;</span><span class="n">Uint</span><span class="o">&gt;</span><span class="p">(</span><span class="n">uStrings2</span><span class="p">[</span><span class="n">i</span><span class="p">]),</span> <span class="n">uValues2</span><span class="p">[</span><span class="n">i</span><span class="p">]);</span>
+      <span class="k">if</span> <span class="p">(</span><span class="k">sizeof</span><span class="p">(</span><span class="n">Int</span><span class="p">)</span> <span class="o">==</span> <span class="mi">4</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">EXPECT_THROW</span><span class="p">(</span><span class="n">to</span><span class="o">&lt;</span><span class="n">Sint</span><span class="o">&gt;</span><span class="p">(</span><span class="n">uStrings2</span><span class="p">[</span><span class="n">i</span><span class="p">]),</span> <span class="n">std</span><span class="o">::</span><span class="n">range_error</span><span class="p">);</span>
+      <span class="p">}</span>
+    <span class="p">}</span>
+  <span class="p">}</span>
+
+  <span class="k">if</span> <span class="p">(</span><span class="k">sizeof</span><span class="p">(</span><span class="n">Int</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="mi">8</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">static_assert</span><span class="p">(</span><span class="k">sizeof</span><span class="p">(</span><span class="n">Int</span><span class="p">)</span> <span class="o">&lt;=</span> <span class="mi">8</span><span class="p">,</span> <span class="s">&quot;Now that would be interesting&quot;</span><span class="p">);</span>
+    <span class="k">static</span> <span class="k">const</span> <span class="n">String</span> <span class="n">strings3</span><span class="p">[]</span> <span class="o">=</span> <span class="p">{</span>
+      <span class="s">&quot;2147483648&quot;</span><span class="p">,</span>
+      <span class="s">&quot;5000000001&quot;</span><span class="p">,</span>
+      <span class="s">&quot;25687346509278435&quot;</span><span class="p">,</span>
+      <span class="s">&quot;100000000000000000&quot;</span><span class="p">,</span>
+      <span class="s">&quot;9223372036854775807&quot;</span><span class="p">,</span>
+    <span class="p">};</span>
+    <span class="k">static</span> <span class="k">const</span> <span class="n">Uint</span> <span class="n">values3</span><span class="p">[]</span> <span class="o">=</span> <span class="p">{</span>
+      <span class="p">(</span><span class="n">Uint</span><span class="p">)</span><span class="mi">2147483648ULL</span><span class="p">,</span>
+      <span class="p">(</span><span class="n">Uint</span><span class="p">)</span><span class="mi">5000000001ULL</span><span class="p">,</span>
+      <span class="p">(</span><span class="n">Uint</span><span class="p">)</span><span class="mi">25687346509278435ULL</span><span class="p">,</span>
+      <span class="p">(</span><span class="n">Uint</span><span class="p">)</span><span class="mi">100000000000000000ULL</span><span class="p">,</span>
+      <span class="p">(</span><span class="n">Uint</span><span class="p">)</span><span class="mi">9223372036854775807ULL</span><span class="p">,</span>
+    <span class="p">};</span>
+    <span class="n">FOR_EACH_RANGE</span> <span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">strings3</span><span class="p">)</span><span class="o">/</span><span class="k">sizeof</span><span class="p">(</span><span class="o">*</span><span class="n">strings3</span><span class="p">))</span> <span class="p">{</span>
+      <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">to</span><span class="o">&lt;</span><span class="n">Uint</span><span class="o">&gt;</span><span class="p">(</span><span class="n">strings3</span><span class="p">[</span><span class="n">i</span><span class="p">]),</span> <span class="n">values3</span><span class="p">[</span><span class="n">i</span><span class="p">]);</span>
+      <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">to</span><span class="o">&lt;</span><span class="n">Sint</span><span class="o">&gt;</span><span class="p">(</span><span class="n">strings3</span><span class="p">[</span><span class="n">i</span><span class="p">]),</span> <span class="n">values3</span><span class="p">[</span><span class="n">i</span><span class="p">]);</span>
+    <span class="p">}</span>
+
+    <span class="k">static</span> <span class="k">const</span> <span class="n">String</span> <span class="n">uStrings3</span><span class="p">[]</span> <span class="o">=</span> <span class="p">{</span>
+      <span class="s">&quot;9223372036854775808&quot;</span><span class="p">,</span>
+      <span class="s">&quot;9987435987394857987&quot;</span><span class="p">,</span>
+      <span class="s">&quot;17873648761234698740&quot;</span><span class="p">,</span>
+      <span class="s">&quot;18446744073709551615&quot;</span><span class="p">,</span>
+    <span class="p">};</span>
+    <span class="k">static</span> <span class="k">const</span> <span class="n">Uint</span> <span class="n">uValues3</span><span class="p">[]</span> <span class="o">=</span> <span class="p">{</span>
+      <span class="p">(</span><span class="n">Uint</span><span class="p">)</span><span class="mi">9223372036854775808ULL</span><span class="p">,</span>
+      <span class="p">(</span><span class="n">Uint</span><span class="p">)</span><span class="mi">9987435987394857987ULL</span><span class="p">,</span>
+      <span class="p">(</span><span class="n">Uint</span><span class="p">)</span><span class="mi">17873648761234698740ULL</span><span class="p">,</span>
+      <span class="p">(</span><span class="n">Uint</span><span class="p">)</span><span class="mi">18446744073709551615ULL</span><span class="p">,</span>
+    <span class="p">};</span>
+    <span class="n">FOR_EACH_RANGE</span> <span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">uStrings3</span><span class="p">)</span><span class="o">/</span><span class="k">sizeof</span><span class="p">(</span><span class="o">*</span><span class="n">uStrings3</span><span class="p">))</span> <span class="p">{</span>
+      <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">to</span><span class="o">&lt;</span><span class="n">Uint</span><span class="o">&gt;</span><span class="p">(</span><span class="n">uStrings3</span><span class="p">[</span><span class="n">i</span><span class="p">]),</span> <span class="n">uValues3</span><span class="p">[</span><span class="n">i</span><span class="p">]);</span>
+      <span class="k">if</span> <span class="p">(</span><span class="k">sizeof</span><span class="p">(</span><span class="n">Int</span><span class="p">)</span> <span class="o">==</span> <span class="mi">8</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">EXPECT_THROW</span><span class="p">(</span><span class="n">to</span><span class="o">&lt;</span><span class="n">Sint</span><span class="o">&gt;</span><span class="p">(</span><span class="n">uStrings3</span><span class="p">[</span><span class="n">i</span><span class="p">]),</span> <span class="n">std</span><span class="o">::</span><span class="n">range_error</span><span class="p">);</span>
+      <span class="p">}</span>
+    <span class="p">}</span>
+  <span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-6"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-6">&#182;</a></div><p>Minimum possible negative values, and negative sign overflow</p></td><td class="code"><div class="highlight"><pre>  <span class="k">static</span> <span class="k">const</span> <span class="n">String</span> <span class="n">strings4</span><span class="p">[]</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s">&quot;-128&quot;</span><span class="p">,</span>
+    <span class="s">&quot;-32768&quot;</span><span class="p">,</span>
+    <span class="s">&quot;-2147483648&quot;</span><span class="p">,</span>
+    <span class="s">&quot;-9223372036854775808&quot;</span><span class="p">,</span>
+  <span class="p">};</span>
+  <span class="k">static</span> <span class="k">const</span> <span class="n">String</span> <span class="n">strings5</span><span class="p">[]</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s">&quot;-129&quot;</span><span class="p">,</span>
+    <span class="s">&quot;-32769&quot;</span><span class="p">,</span>
+    <span class="s">&quot;-2147483649&quot;</span><span class="p">,</span>
+    <span class="s">&quot;-9223372036854775809&quot;</span><span class="p">,</span>
+  <span class="p">};</span>
+  <span class="k">static</span> <span class="k">const</span> <span class="n">Sint</span> <span class="n">values4</span><span class="p">[]</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="p">(</span><span class="n">Sint</span><span class="p">)</span><span class="o">-</span><span class="mi">128LL</span><span class="p">,</span>
+    <span class="p">(</span><span class="n">Sint</span><span class="p">)</span><span class="o">-</span><span class="mi">32768LL</span><span class="p">,</span>
+    <span class="p">(</span><span class="n">Sint</span><span class="p">)</span><span class="o">-</span><span class="mi">2147483648LL</span><span class="p">,</span>
+    <span class="p">(</span><span class="n">Sint</span><span class="p">)(</span><span class="o">-</span><span class="mi">9223372036854775807LL</span> <span class="o">-</span> <span class="mi">1</span><span class="p">),</span>
+  <span class="p">};</span>
+  <span class="n">FOR_EACH_RANGE</span> <span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">strings4</span><span class="p">)</span><span class="o">/</span><span class="k">sizeof</span><span class="p">(</span><span class="o">*</span><span class="n">strings4</span><span class="p">))</span> <span class="p">{</span>
+    <span class="k">if</span> <span class="p">(</span><span class="k">sizeof</span><span class="p">(</span><span class="n">Int</span><span class="p">)</span> <span class="o">&gt;</span> <span class="n">std</span><span class="o">::</span><span class="n">pow</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="n">i</span><span class="p">))</span> <span class="p">{</span>
+      <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">values4</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="n">to</span><span class="o">&lt;</span><span class="n">Sint</span><span class="o">&gt;</span><span class="p">(</span><span class="n">strings4</span><span class="p">[</span><span class="n">i</span><span class="p">]));</span>
+      <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">values4</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">-</span> <span class="mi">1</span><span class="p">,</span> <span class="n">to</span><span class="o">&lt;</span><span class="n">Sint</span><span class="o">&gt;</span><span class="p">(</span><span class="n">strings5</span><span class="p">[</span><span class="n">i</span><span class="p">]));</span>
+    <span class="p">}</span> <span class="k">else</span> <span class="k">if</span> <span class="p">(</span><span class="k">sizeof</span><span class="p">(</span><span class="n">Int</span><span class="p">)</span> <span class="o">==</span> <span class="n">std</span><span class="o">::</span><span class="n">pow</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="n">i</span><span class="p">))</span> <span class="p">{</span>
+      <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">values4</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="n">to</span><span class="o">&lt;</span><span class="n">Sint</span><span class="o">&gt;</span><span class="p">(</span><span class="n">strings4</span><span class="p">[</span><span class="n">i</span><span class="p">]));</span>
+      <span class="n">EXPECT_THROW</span><span class="p">(</span><span class="n">to</span><span class="o">&lt;</span><span class="n">Sint</span><span class="o">&gt;</span><span class="p">(</span><span class="n">strings5</span><span class="p">[</span><span class="n">i</span><span class="p">]),</span> <span class="n">std</span><span class="o">::</span><span class="n">range_error</span><span class="p">);</span>
+    <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+      <span class="n">EXPECT_THROW</span><span class="p">(</span><span class="n">to</span><span class="o">&lt;</span><span class="n">Sint</span><span class="o">&gt;</span><span class="p">(</span><span class="n">strings4</span><span class="p">[</span><span class="n">i</span><span class="p">]),</span> <span class="n">std</span><span class="o">::</span><span class="n">range_error</span><span class="p">);</span>
+      <span class="n">EXPECT_THROW</span><span class="p">(</span><span class="n">to</span><span class="o">&lt;</span><span class="n">Sint</span><span class="o">&gt;</span><span class="p">(</span><span class="n">strings5</span><span class="p">[</span><span class="n">i</span><span class="p">]),</span> <span class="n">std</span><span class="o">::</span><span class="n">range_error</span><span class="p">);</span>
+    <span class="p">}</span>
+  <span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-7"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-7">&#182;</a></div><p>Bogus string values</p></td><td class="code"><div class="highlight"><pre>  <span class="k">static</span> <span class="k">const</span> <span class="n">String</span> <span class="n">bogusStrings</span><span class="p">[]</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s">&quot;&quot;</span><span class="p">,</span>
+    <span class="s">&quot;0x1234&quot;</span><span class="p">,</span>
+    <span class="s">&quot;123L&quot;</span><span class="p">,</span>
+    <span class="s">&quot;123a&quot;</span><span class="p">,</span>
+    <span class="s">&quot;x 123 &quot;</span><span class="p">,</span>
+    <span class="s">&quot;234 y&quot;</span><span class="p">,</span>
+    <span class="s">&quot;- 42&quot;</span><span class="p">,</span>  <span class="c1">// whitespace is not allowed between the sign and the value</span>
+    <span class="s">&quot; +   13 &quot;</span><span class="p">,</span>
+    <span class="s">&quot;12345678901234567890123456789&quot;</span><span class="p">,</span>
+  <span class="p">};</span>
+  <span class="k">for</span> <span class="p">(</span><span class="k">const</span> <span class="k">auto</span><span class="o">&amp;</span> <span class="n">str</span> <span class="o">:</span> <span class="n">bogusStrings</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">EXPECT_THROW</span><span class="p">(</span><span class="n">to</span><span class="o">&lt;</span><span class="n">Sint</span><span class="o">&gt;</span><span class="p">(</span><span class="n">str</span><span class="p">),</span> <span class="n">std</span><span class="o">::</span><span class="n">range_error</span><span class="p">);</span>
+    <span class="n">EXPECT_THROW</span><span class="p">(</span><span class="n">to</span><span class="o">&lt;</span><span class="n">Uint</span><span class="o">&gt;</span><span class="p">(</span><span class="n">str</span><span class="p">),</span> <span class="n">std</span><span class="o">::</span><span class="n">range_error</span><span class="p">);</span>
+  <span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-8"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-8">&#182;</a></div><p>A leading '+' character is only allowed when converting to signed types.</p></td><td class="code"><div class="highlight"><pre>  <span class="n">String</span> <span class="n">posSign</span><span class="p">(</span><span class="s">&quot;+42&quot;</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">42</span><span class="p">,</span> <span class="n">to</span><span class="o">&lt;</span><span class="n">Sint</span><span class="o">&gt;</span><span class="p">(</span><span class="n">posSign</span><span class="p">));</span>
+  <span class="n">EXPECT_THROW</span><span class="p">(</span><span class="n">to</span><span class="o">&lt;</span><span class="n">Uint</span><span class="o">&gt;</span><span class="p">(</span><span class="n">posSign</span><span class="p">),</span> <span class="n">std</span><span class="o">::</span><span class="n">range_error</span><span class="p">);</span>
+
+  <span class="n">testString2Integral</span><span class="o">&lt;</span><span class="n">String</span><span class="p">,</span> <span class="n">Ints</span><span class="p">...</span><span class="o">&gt;</span><span class="p">();</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">Conv</span><span class="p">,</span> <span class="n">String2Integral</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">testString2Integral</span><span class="o">&lt;</span><span class="k">const</span> <span class="kt">char</span><span class="o">*</span><span class="p">,</span> <span class="kt">signed</span> <span class="kt">char</span><span class="p">,</span> <span class="kt">short</span><span class="p">,</span> <span class="kt">int</span><span class="p">,</span> <span class="kt">long</span><span class="p">,</span> <span class="kt">long</span> <span class="kt">long</span><span class="o">&gt;</span><span class="p">();</span>
+  <span class="n">testString2Integral</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="p">,</span> <span class="kt">signed</span> <span class="kt">char</span><span class="p">,</span> <span class="kt">short</span><span class="p">,</span> <span class="kt">int</span><span class="p">,</span> <span class="kt">long</span><span class="p">,</span> <span class="kt">long</span> <span class="kt">long</span><span class="o">&gt;</span><span class="p">();</span>
+  <span class="n">testString2Integral</span><span class="o">&lt;</span><span class="n">fbstring</span><span class="p">,</span> <span class="kt">signed</span> <span class="kt">char</span><span class="p">,</span> <span class="kt">short</span><span class="p">,</span> <span class="kt">int</span><span class="p">,</span> <span class="kt">long</span><span class="p">,</span> <span class="kt">long</span> <span class="kt">long</span><span class="o">&gt;</span><span class="p">();</span></pre></div></td></tr>
+
+
+<tr id="section-9"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-9">&#182;</a></div><p>Testing the behavior of the StringPiece* API
+StringPiece* normally parses as much valid data as it can,
+and advances the StringPiece to the end of the valid data.</p></td><td class="code"><div class="highlight"><pre>  <span class="kt">char</span> <span class="n">buf1</span><span class="p">[]</span> <span class="o">=</span> <span class="s">&quot;100foo&quot;</span><span class="p">;</span>
+  <span class="n">StringPiece</span> <span class="n">sp1</span><span class="p">(</span><span class="n">buf1</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">100</span><span class="p">,</span> <span class="n">to</span><span class="o">&lt;</span><span class="n">uint8_t</span><span class="o">&gt;</span><span class="p">(</span><span class="o">&amp;</span><span class="n">sp1</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">buf1</span> <span class="o">+</span> <span class="mi">3</span><span class="p">,</span> <span class="n">sp1</span><span class="p">.</span><span class="n">begin</span><span class="p">());</span></pre></div></td></tr>
+
+
+<tr id="section-10"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-10">&#182;</a></div><p>However, if the next character would cause an overflow it throws a
+range_error rather than consuming only as much as it can without
+overflowing.</p></td><td class="code"><div class="highlight"><pre>  <span class="kt">char</span> <span class="n">buf2</span><span class="p">[]</span> <span class="o">=</span> <span class="s">&quot;1002&quot;</span><span class="p">;</span>
+  <span class="n">StringPiece</span> <span class="n">sp2</span><span class="p">(</span><span class="n">buf2</span><span class="p">);</span>
+  <span class="n">EXPECT_THROW</span><span class="p">(</span><span class="n">to</span><span class="o">&lt;</span><span class="n">uint8_t</span><span class="o">&gt;</span><span class="p">(</span><span class="o">&amp;</span><span class="n">sp2</span><span class="p">),</span> <span class="n">std</span><span class="o">::</span><span class="n">range_error</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">buf2</span><span class="p">,</span> <span class="n">sp2</span><span class="p">.</span><span class="n">begin</span><span class="p">());</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">Conv</span><span class="p">,</span> <span class="n">StringPiece2Integral</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">string</span> <span class="n">s</span> <span class="o">=</span> <span class="s">&quot;  +123  hello world  &quot;</span><span class="p">;</span>
+  <span class="n">StringPiece</span> <span class="n">sp</span> <span class="o">=</span> <span class="n">s</span><span class="p">;</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">to</span><span class="o">&lt;</span><span class="kt">int</span><span class="o">&gt;</span><span class="p">(</span><span class="o">&amp;</span><span class="n">sp</span><span class="p">),</span> <span class="mi">123</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">sp</span><span class="p">,</span> <span class="s">&quot;  hello world  &quot;</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">Conv</span><span class="p">,</span> <span class="n">StringPieceAppend</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">string</span> <span class="n">s</span> <span class="o">=</span> <span class="s">&quot;foobar&quot;</span><span class="p">;</span>
+  <span class="p">{</span>
+    <span class="n">StringPiece</span> <span class="n">sp</span><span class="p">(</span><span class="n">s</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">3</span><span class="p">);</span>
+    <span class="n">string</span> <span class="n">result</span> <span class="o">=</span> <span class="n">to</span><span class="o">&lt;</span><span class="n">string</span><span class="o">&gt;</span><span class="p">(</span><span class="n">s</span><span class="p">,</span> <span class="n">sp</span><span class="p">);</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">result</span><span class="p">,</span> <span class="s">&quot;foobarfoo&quot;</span><span class="p">);</span>
+  <span class="p">}</span>
+  <span class="p">{</span>
+    <span class="n">StringPiece</span> <span class="n">sp1</span><span class="p">(</span><span class="n">s</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">3</span><span class="p">);</span>
+    <span class="n">StringPiece</span> <span class="n">sp2</span><span class="p">(</span><span class="n">s</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">);</span>
+    <span class="n">string</span> <span class="n">result</span> <span class="o">=</span> <span class="n">to</span><span class="o">&lt;</span><span class="n">string</span><span class="o">&gt;</span><span class="p">(</span><span class="n">sp1</span><span class="p">,</span> <span class="n">sp2</span><span class="p">);</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">result</span><span class="p">,</span> <span class="n">s</span><span class="p">);</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">Conv</span><span class="p">,</span> <span class="n">BadStringToIntegral</span><span class="p">)</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-11"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-11">&#182;</a></div><p>Note that leading spaces (e.g.  " 1") are valid.</p></td><td class="code"><div class="highlight"><pre>  <span class="n">vector</span><span class="o">&lt;</span><span class="n">string</span><span class="o">&gt;</span> <span class="n">v</span> <span class="o">=</span> <span class="p">{</span> <span class="s">&quot;a&quot;</span><span class="p">,</span> <span class="s">&quot;&quot;</span><span class="p">,</span> <span class="s">&quot; &quot;</span><span class="p">,</span> <span class="s">&quot;</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">,</span> <span class="s">&quot; a0&quot;</span><span class="p">,</span> <span class="s">&quot;abcdef&quot;</span><span class="p">,</span> <span class="s">&quot;1Z&quot;</span><span class="p">,</span> <span class="s">&quot;!#&quot;</span> <span class="p">};</span>
+  <span class="k">for</span> <span class="p">(</span><span class="k">auto</span><span class="o">&amp;</span> <span class="nl">s:</span> <span class="n">v</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">EXPECT_THROW</span><span class="p">(</span><span class="n">to</span><span class="o">&lt;</span><span class="kt">int</span><span class="o">&gt;</span><span class="p">(</span><span class="n">s</span><span class="p">),</span> <span class="n">std</span><span class="o">::</span><span class="n">range_error</span><span class="p">)</span> <span class="o">&lt;&lt;</span> <span class="s">&quot;s=&quot;</span> <span class="o">&lt;&lt;</span> <span class="n">s</span><span class="p">;</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="k">template</span> <span class="o">&lt;</span><span class="k">class</span> <span class="nc">String</span><span class="o">&gt;</span>
+<span class="kt">void</span> <span class="n">testVariadicTo</span><span class="p">()</span> <span class="p">{</span>
+  <span class="n">String</span> <span class="n">s</span><span class="p">;</span>
+  <span class="n">toAppend</span><span class="p">(</span><span class="o">&amp;</span><span class="n">s</span><span class="p">);</span>
+  <span class="n">toAppend</span><span class="p">(</span><span class="s">&quot;Lorem ipsum &quot;</span><span class="p">,</span> <span class="mi">1234</span><span class="p">,</span> <span class="n">String</span><span class="p">(</span><span class="s">&quot; dolor amet &quot;</span><span class="p">),</span> <span class="mf">567.89</span><span class="p">,</span> <span class="sc">&#39;!&#39;</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">s</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">s</span><span class="p">,</span> <span class="s">&quot;Lorem ipsum 1234 dolor amet 567.89!&quot;</span><span class="p">);</span>
+
+  <span class="n">s</span> <span class="o">=</span> <span class="n">to</span><span class="o">&lt;</span><span class="n">String</span><span class="o">&gt;</span><span class="p">();</span>
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">s</span><span class="p">.</span><span class="n">empty</span><span class="p">());</span>
+
+  <span class="n">s</span> <span class="o">=</span> <span class="n">to</span><span class="o">&lt;</span><span class="n">String</span><span class="o">&gt;</span><span class="p">(</span><span class="s">&quot;Lorem ipsum &quot;</span><span class="p">,</span> <span class="n">nullptr</span><span class="p">,</span> <span class="mi">1234</span><span class="p">,</span> <span class="s">&quot; dolor amet &quot;</span><span class="p">,</span> <span class="mf">567.89</span><span class="p">,</span> <span class="sc">&#39;.&#39;</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">s</span><span class="p">,</span> <span class="s">&quot;Lorem ipsum 1234 dolor amet 567.89.&quot;</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">Conv</span><span class="p">,</span> <span class="n">NullString</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">string</span> <span class="n">s1</span> <span class="o">=</span> <span class="n">to</span><span class="o">&lt;</span><span class="n">string</span><span class="o">&gt;</span><span class="p">((</span><span class="kt">char</span> <span class="o">*</span><span class="p">)</span> <span class="nb">NULL</span><span class="p">);</span>
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">s1</span><span class="p">.</span><span class="n">empty</span><span class="p">());</span>
+  <span class="n">fbstring</span> <span class="n">s2</span> <span class="o">=</span> <span class="n">to</span><span class="o">&lt;</span><span class="n">fbstring</span><span class="o">&gt;</span><span class="p">((</span><span class="kt">char</span> <span class="o">*</span><span class="p">)</span> <span class="nb">NULL</span><span class="p">);</span>
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">s2</span><span class="p">.</span><span class="n">empty</span><span class="p">());</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">Conv</span><span class="p">,</span> <span class="n">VariadicTo</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">testVariadicTo</span><span class="o">&lt;</span><span class="n">string</span><span class="o">&gt;</span><span class="p">();</span>
+  <span class="n">testVariadicTo</span><span class="o">&lt;</span><span class="n">fbstring</span><span class="o">&gt;</span><span class="p">();</span>
+<span class="p">}</span>
+
+<span class="k">template</span> <span class="o">&lt;</span><span class="k">class</span> <span class="nc">String</span><span class="o">&gt;</span>
+<span class="kt">void</span> <span class="n">testDoubleToString</span><span class="p">()</span> <span class="p">{</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">to</span><span class="o">&lt;</span><span class="n">string</span><span class="o">&gt;</span><span class="p">(</span><span class="mf">0.0</span><span class="p">),</span> <span class="s">&quot;0&quot;</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">to</span><span class="o">&lt;</span><span class="n">string</span><span class="o">&gt;</span><span class="p">(</span><span class="mf">0.5</span><span class="p">),</span> <span class="s">&quot;0.5&quot;</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">to</span><span class="o">&lt;</span><span class="n">string</span><span class="o">&gt;</span><span class="p">(</span><span class="mf">10.25</span><span class="p">),</span> <span class="s">&quot;10.25&quot;</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">to</span><span class="o">&lt;</span><span class="n">string</span><span class="o">&gt;</span><span class="p">(</span><span class="mf">1.123e10</span><span class="p">),</span> <span class="s">&quot;11230000000&quot;</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">Conv</span><span class="p">,</span> <span class="n">DoubleToString</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">testDoubleToString</span><span class="o">&lt;</span><span class="n">string</span><span class="o">&gt;</span><span class="p">();</span>
+  <span class="n">testDoubleToString</span><span class="o">&lt;</span><span class="n">fbstring</span><span class="o">&gt;</span><span class="p">();</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">Conv</span><span class="p">,</span> <span class="n">FBStringToString</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">fbstring</span> <span class="n">foo</span><span class="p">(</span><span class="s">&quot;foo&quot;</span><span class="p">);</span>
+  <span class="n">string</span> <span class="n">ret</span> <span class="o">=</span> <span class="n">to</span><span class="o">&lt;</span><span class="n">string</span><span class="o">&gt;</span><span class="p">(</span><span class="n">foo</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">ret</span><span class="p">,</span> <span class="s">&quot;foo&quot;</span><span class="p">);</span>
+  <span class="n">string</span> <span class="n">ret2</span> <span class="o">=</span> <span class="n">to</span><span class="o">&lt;</span><span class="n">string</span><span class="o">&gt;</span><span class="p">(</span><span class="n">foo</span><span class="p">,</span> <span class="mi">2</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">ret2</span><span class="p">,</span> <span class="s">&quot;foo2&quot;</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">Conv</span><span class="p">,</span> <span class="n">StringPieceToDouble</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">string</span> <span class="n">s</span> <span class="o">=</span> <span class="s">&quot;2134123.125 zorro&quot;</span><span class="p">;</span>
+  <span class="n">StringPiece</span> <span class="n">pc</span><span class="p">(</span><span class="n">s</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">to</span><span class="o">&lt;</span><span class="kt">double</span><span class="o">&gt;</span><span class="p">(</span><span class="o">&amp;</span><span class="n">pc</span><span class="p">),</span> <span class="mf">2134123.125</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">pc</span><span class="p">,</span> <span class="s">&quot; zorro&quot;</span><span class="p">);</span>
+
+  <span class="n">EXPECT_THROW</span><span class="p">(</span><span class="n">to</span><span class="o">&lt;</span><span class="kt">double</span><span class="o">&gt;</span><span class="p">(</span><span class="n">StringPiece</span><span class="p">(</span><span class="n">s</span><span class="p">)),</span> <span class="n">std</span><span class="o">::</span><span class="n">range_error</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">to</span><span class="o">&lt;</span><span class="kt">double</span><span class="o">&gt;</span><span class="p">(</span><span class="n">StringPiece</span><span class="p">(</span><span class="n">s</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span> <span class="n">pc</span><span class="p">.</span><span class="n">data</span><span class="p">())),</span> <span class="mf">2134123.125</span><span class="p">);</span></pre></div></td></tr>
+
+
+<tr id="section-12"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-12">&#182;</a></div><p>Test NaN conversion</p></td><td class="code"><div class="highlight"><pre>  <span class="k">try</span> <span class="p">{</span>
+    <span class="n">to</span><span class="o">&lt;</span><span class="kt">double</span><span class="o">&gt;</span><span class="p">(</span><span class="s">&quot;not a number&quot;</span><span class="p">);</span>
+    <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="kc">false</span><span class="p">);</span>
+  <span class="p">}</span> <span class="k">catch</span> <span class="p">(</span><span class="k">const</span> <span class="n">std</span><span class="o">::</span><span class="n">range_error</span> <span class="o">&amp;</span><span class="p">)</span> <span class="p">{</span>
+  <span class="p">}</span>
+
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">isnan</span><span class="p">(</span><span class="n">to</span><span class="o">&lt;</span><span class="kt">double</span><span class="o">&gt;</span><span class="p">(</span><span class="s">&quot;NaN&quot;</span><span class="p">)));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">to</span><span class="o">&lt;</span><span class="kt">double</span><span class="o">&gt;</span><span class="p">(</span><span class="s">&quot;inf&quot;</span><span class="p">),</span> <span class="n">numeric_limits</span><span class="o">&lt;</span><span class="kt">double</span><span class="o">&gt;::</span><span class="n">infinity</span><span class="p">());</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">to</span><span class="o">&lt;</span><span class="kt">double</span><span class="o">&gt;</span><span class="p">(</span><span class="s">&quot;infinity&quot;</span><span class="p">),</span> <span class="n">numeric_limits</span><span class="o">&lt;</span><span class="kt">double</span><span class="o">&gt;::</span><span class="n">infinity</span><span class="p">());</span>
+  <span class="n">EXPECT_THROW</span><span class="p">(</span><span class="n">to</span><span class="o">&lt;</span><span class="kt">double</span><span class="o">&gt;</span><span class="p">(</span><span class="s">&quot;infinitX&quot;</span><span class="p">),</span> <span class="n">std</span><span class="o">::</span><span class="n">range_error</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">to</span><span class="o">&lt;</span><span class="kt">double</span><span class="o">&gt;</span><span class="p">(</span><span class="s">&quot;-inf&quot;</span><span class="p">),</span> <span class="o">-</span><span class="n">numeric_limits</span><span class="o">&lt;</span><span class="kt">double</span><span class="o">&gt;::</span><span class="n">infinity</span><span class="p">());</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">to</span><span class="o">&lt;</span><span class="kt">double</span><span class="o">&gt;</span><span class="p">(</span><span class="s">&quot;-infinity&quot;</span><span class="p">),</span> <span class="o">-</span><span class="n">numeric_limits</span><span class="o">&lt;</span><span class="kt">double</span><span class="o">&gt;::</span><span class="n">infinity</span><span class="p">());</span>
+  <span class="n">EXPECT_THROW</span><span class="p">(</span><span class="n">to</span><span class="o">&lt;</span><span class="kt">double</span><span class="o">&gt;</span><span class="p">(</span><span class="s">&quot;-infinitX&quot;</span><span class="p">),</span> <span class="n">std</span><span class="o">::</span><span class="n">range_error</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">Conv</span><span class="p">,</span> <span class="n">EmptyStringToInt</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">string</span> <span class="n">s</span> <span class="o">=</span> <span class="s">&quot;&quot;</span><span class="p">;</span>
+  <span class="n">StringPiece</span> <span class="n">pc</span><span class="p">(</span><span class="n">s</span><span class="p">);</span>
+
+  <span class="k">try</span> <span class="p">{</span>
+    <span class="n">to</span><span class="o">&lt;</span><span class="kt">int</span><span class="o">&gt;</span><span class="p">(</span><span class="n">pc</span><span class="p">);</span>
+    <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="kc">false</span><span class="p">);</span>
+  <span class="p">}</span> <span class="k">catch</span> <span class="p">(</span><span class="k">const</span> <span class="n">std</span><span class="o">::</span><span class="n">range_error</span> <span class="o">&amp;</span><span class="p">)</span> <span class="p">{</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">Conv</span><span class="p">,</span> <span class="n">CorruptedStringToInt</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">string</span> <span class="n">s</span> <span class="o">=</span> <span class="s">&quot;-1&quot;</span><span class="p">;</span>
+  <span class="n">StringPiece</span> <span class="n">pc</span><span class="p">(</span><span class="n">s</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span> <span class="n">s</span><span class="p">.</span><span class="n">data</span><span class="p">()</span> <span class="o">+</span> <span class="mi">1</span><span class="p">);</span> <span class="c1">// Only  &quot;-&quot;</span>
+
+  <span class="k">try</span> <span class="p">{</span>
+    <span class="n">to</span><span class="o">&lt;</span><span class="n">int64_t</span><span class="o">&gt;</span><span class="p">(</span><span class="o">&amp;</span><span class="n">pc</span><span class="p">);</span>
+    <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="kc">false</span><span class="p">);</span>
+  <span class="p">}</span> <span class="k">catch</span> <span class="p">(</span><span class="k">const</span> <span class="n">std</span><span class="o">::</span><span class="n">range_error</span> <span class="o">&amp;</span><span class="p">)</span> <span class="p">{</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">Conv</span><span class="p">,</span> <span class="n">EmptyStringToDouble</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">string</span> <span class="n">s</span> <span class="o">=</span> <span class="s">&quot;&quot;</span><span class="p">;</span>
+  <span class="n">StringPiece</span> <span class="n">pc</span><span class="p">(</span><span class="n">s</span><span class="p">);</span>
+
+  <span class="k">try</span> <span class="p">{</span>
+    <span class="n">to</span><span class="o">&lt;</span><span class="kt">double</span><span class="o">&gt;</span><span class="p">(</span><span class="n">pc</span><span class="p">);</span>
+    <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="kc">false</span><span class="p">);</span>
+  <span class="p">}</span> <span class="k">catch</span> <span class="p">(</span><span class="k">const</span> <span class="n">std</span><span class="o">::</span><span class="n">range_error</span> <span class="o">&amp;</span><span class="p">)</span> <span class="p">{</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">Conv</span><span class="p">,</span> <span class="n">IntToDouble</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">auto</span> <span class="n">d</span> <span class="o">=</span> <span class="n">to</span><span class="o">&lt;</span><span class="kt">double</span><span class="o">&gt;</span><span class="p">(</span><span class="mi">42</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">d</span><span class="p">,</span> <span class="mi">42</span><span class="p">);</span>
+  <span class="cm">/* This seems not work in ubuntu11.10, gcc 4.6.1</span>
+<span class="cm">  try {</span>
+<span class="cm">    auto f = to&lt;float&gt;(957837589847);</span>
+<span class="cm">    EXPECT_TRUE(false);</span>
+<span class="cm">  } catch (std::range_error&amp; e) {</span>
+
+<span class="cm">//DIVIDER</span>
+<span class="cm">  }</span>
+<span class="cm">  */</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">Conv</span><span class="p">,</span> <span class="n">DoubleToInt</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">auto</span> <span class="n">i</span> <span class="o">=</span> <span class="n">to</span><span class="o">&lt;</span><span class="kt">int</span><span class="o">&gt;</span><span class="p">(</span><span class="mf">42.0</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="mi">42</span><span class="p">);</span>
+  <span class="k">try</span> <span class="p">{</span>
+    <span class="k">auto</span> <span class="n">i</span> <span class="o">=</span> <span class="n">to</span><span class="o">&lt;</span><span class="kt">int</span><span class="o">&gt;</span><span class="p">(</span><span class="mf">42.1</span><span class="p">);</span>
+    <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="kc">false</span><span class="p">);</span>
+  <span class="p">}</span> <span class="k">catch</span> <span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">range_error</span><span class="o">&amp;</span> <span class="n">e</span><span class="p">)</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-13"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-13">&#182;</a></div><p>LOG(INFO) &lt;&lt; e.what();</p></td><td class="code"><div class="highlight"><pre>  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">Conv</span><span class="p">,</span> <span class="n">EnumToInt</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">enum</span> <span class="n">A</span> <span class="p">{</span> <span class="n">x</span> <span class="o">=</span> <span class="mi">42</span><span class="p">,</span> <span class="n">y</span> <span class="o">=</span> <span class="mi">420</span><span class="p">,</span> <span class="n">z</span> <span class="o">=</span> <span class="mi">65</span> <span class="p">};</span>
+  <span class="k">auto</span> <span class="n">i</span> <span class="o">=</span> <span class="n">to</span><span class="o">&lt;</span><span class="kt">int</span><span class="o">&gt;</span><span class="p">(</span><span class="n">x</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="mi">42</span><span class="p">);</span>
+  <span class="k">auto</span> <span class="n">j</span> <span class="o">=</span> <span class="n">to</span><span class="o">&lt;</span><span class="kt">char</span><span class="o">&gt;</span><span class="p">(</span><span class="n">x</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">j</span><span class="p">,</span> <span class="mi">42</span><span class="p">);</span>
+  <span class="k">try</span> <span class="p">{</span>
+    <span class="k">auto</span> <span class="n">i</span> <span class="o">=</span> <span class="n">to</span><span class="o">&lt;</span><span class="kt">char</span><span class="o">&gt;</span><span class="p">(</span><span class="n">y</span><span class="p">);</span>
+    <span class="n">LOG</span><span class="p">(</span><span class="n">ERROR</span><span class="p">)</span> <span class="o">&lt;&lt;</span> <span class="k">static_cast</span><span class="o">&lt;</span><span class="kt">unsigned</span> <span class="kt">int</span><span class="o">&gt;</span><span class="p">(</span><span class="n">i</span><span class="p">);</span>
+    <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="kc">false</span><span class="p">);</span>
+  <span class="p">}</span> <span class="k">catch</span> <span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">range_error</span><span class="o">&amp;</span> <span class="n">e</span><span class="p">)</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-14"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-14">&#182;</a></div><p>LOG(INFO) &lt;&lt; e.what();</p></td><td class="code"><div class="highlight"><pre>  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">Conv</span><span class="p">,</span> <span class="n">EnumToString</span><span class="p">)</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-15"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-15">&#182;</a></div><p>LOG(INFO) &lt;&lt; e.what();</p></td><td class="code"><div class="highlight"><pre>  <span class="k">enum</span> <span class="n">A</span> <span class="p">{</span> <span class="n">x</span> <span class="o">=</span> <span class="mi">4</span><span class="p">,</span> <span class="n">y</span> <span class="o">=</span> <span class="mi">420</span><span class="p">,</span> <span class="n">z</span> <span class="o">=</span> <span class="mi">65</span> <span class="p">};</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;foo.4&quot;</span><span class="p">,</span> <span class="n">to</span><span class="o">&lt;</span><span class="n">string</span><span class="o">&gt;</span><span class="p">(</span><span class="s">&quot;foo.&quot;</span><span class="p">,</span> <span class="n">x</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;foo.420&quot;</span><span class="p">,</span> <span class="n">to</span><span class="o">&lt;</span><span class="n">string</span><span class="o">&gt;</span><span class="p">(</span><span class="s">&quot;foo.&quot;</span><span class="p">,</span> <span class="n">y</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;foo.65&quot;</span><span class="p">,</span> <span class="n">to</span><span class="o">&lt;</span><span class="n">string</span><span class="o">&gt;</span><span class="p">(</span><span class="s">&quot;foo.&quot;</span><span class="p">,</span> <span class="n">z</span><span class="p">));</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">Conv</span><span class="p">,</span> <span class="n">IntToEnum</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">enum</span> <span class="n">A</span> <span class="p">{</span> <span class="n">x</span> <span class="o">=</span> <span class="mi">42</span><span class="p">,</span> <span class="n">y</span> <span class="o">=</span> <span class="mi">420</span> <span class="p">};</span>
+  <span class="k">auto</span> <span class="n">i</span> <span class="o">=</span> <span class="n">to</span><span class="o">&lt;</span><span class="n">A</span><span class="o">&gt;</span><span class="p">(</span><span class="mi">42</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="n">A</span><span class="o">::</span><span class="n">x</span><span class="p">);</span>
+  <span class="k">auto</span> <span class="n">j</span> <span class="o">=</span> <span class="n">to</span><span class="o">&lt;</span><span class="n">A</span><span class="o">&gt;</span><span class="p">(</span><span class="mi">100</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">j</span><span class="p">,</span> <span class="mi">100</span><span class="p">);</span>
+  <span class="k">try</span> <span class="p">{</span>
+    <span class="k">auto</span> <span class="n">i</span> <span class="o">=</span> <span class="n">to</span><span class="o">&lt;</span><span class="n">A</span><span class="o">&gt;</span><span class="p">(</span><span class="mi">5000000000L</span><span class="p">);</span>
+    <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="kc">false</span><span class="p">);</span>
+  <span class="p">}</span> <span class="k">catch</span> <span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">range_error</span><span class="o">&amp;</span> <span class="n">e</span><span class="p">)</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-16"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-16">&#182;</a></div><p>task 813959</p></td><td class="code"><div class="highlight"><pre>  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="k">template</span><span class="o">&lt;</span><span class="k">typename</span> <span class="n">Src</span><span class="o">&gt;</span>
+<span class="kt">void</span> <span class="n">testStr2Bool</span><span class="p">()</span> <span class="p">{</span>
+  <span class="n">EXPECT_FALSE</span><span class="p">(</span><span class="n">to</span><span class="o">&lt;</span><span class="kt">bool</span><span class="o">&gt;</span><span class="p">(</span><span class="n">Src</span><span class="p">(</span><span class="s">&quot;0&quot;</span><span class="p">)));</span>
+  <span class="n">EXPECT_FALSE</span><span class="p">(</span><span class="n">to</span><span class="o">&lt;</span><span class="kt">bool</span><span class="o">&gt;</span><span class="p">(</span><span class="n">Src</span><span class="p">(</span><span class="s">&quot;  000  &quot;</span><span class="p">)));</span>
+
+  <span class="n">EXPECT_FALSE</span><span class="p">(</span><span class="n">to</span><span class="o">&lt;</span><span class="kt">bool</span><span class="o">&gt;</span><span class="p">(</span><span class="n">Src</span><span class="p">(</span><span class="s">&quot;n&quot;</span><span class="p">)));</span>
+  <span class="n">EXPECT_FALSE</span><span class="p">(</span><span class="n">to</span><span class="o">&lt;</span><span class="kt">bool</span><span class="o">&gt;</span><span class="p">(</span><span class="n">Src</span><span class="p">(</span><span class="s">&quot;no&quot;</span><span class="p">)));</span>
+  <span class="n">EXPECT_FALSE</span><span class="p">(</span><span class="n">to</span><span class="o">&lt;</span><span class="kt">bool</span><span class="o">&gt;</span><span class="p">(</span><span class="n">Src</span><span class="p">(</span><span class="s">&quot;false&quot;</span><span class="p">)));</span>
+  <span class="n">EXPECT_FALSE</span><span class="p">(</span><span class="n">to</span><span class="o">&lt;</span><span class="kt">bool</span><span class="o">&gt;</span><span class="p">(</span><span class="n">Src</span><span class="p">(</span><span class="s">&quot;False&quot;</span><span class="p">)));</span>
+  <span class="n">EXPECT_FALSE</span><span class="p">(</span><span class="n">to</span><span class="o">&lt;</span><span class="kt">bool</span><span class="o">&gt;</span><span class="p">(</span><span class="n">Src</span><span class="p">(</span><span class="s">&quot;  fAlSe&quot;</span>  <span class="p">)));</span>
+  <span class="n">EXPECT_FALSE</span><span class="p">(</span><span class="n">to</span><span class="o">&lt;</span><span class="kt">bool</span><span class="o">&gt;</span><span class="p">(</span><span class="n">Src</span><span class="p">(</span><span class="s">&quot;F&quot;</span><span class="p">)));</span>
+  <span class="n">EXPECT_FALSE</span><span class="p">(</span><span class="n">to</span><span class="o">&lt;</span><span class="kt">bool</span><span class="o">&gt;</span><span class="p">(</span><span class="n">Src</span><span class="p">(</span><span class="s">&quot;off&quot;</span><span class="p">)));</span>
+
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">to</span><span class="o">&lt;</span><span class="kt">bool</span><span class="o">&gt;</span><span class="p">(</span><span class="n">Src</span><span class="p">(</span><span class="s">&quot;1&quot;</span><span class="p">)));</span>
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">to</span><span class="o">&lt;</span><span class="kt">bool</span><span class="o">&gt;</span><span class="p">(</span><span class="n">Src</span><span class="p">(</span><span class="s">&quot;  001 &quot;</span><span class="p">)));</span>
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">to</span><span class="o">&lt;</span><span class="kt">bool</span><span class="o">&gt;</span><span class="p">(</span><span class="n">Src</span><span class="p">(</span><span class="s">&quot;y&quot;</span><span class="p">)));</span>
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">to</span><span class="o">&lt;</span><span class="kt">bool</span><span class="o">&gt;</span><span class="p">(</span><span class="n">Src</span><span class="p">(</span><span class="s">&quot;yes&quot;</span><span class="p">)));</span>
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">to</span><span class="o">&lt;</span><span class="kt">bool</span><span class="o">&gt;</span><span class="p">(</span><span class="n">Src</span><span class="p">(</span><span class="s">&quot;</span><span class="se">\n</span><span class="s">yEs</span><span class="se">\t</span><span class="s">&quot;</span><span class="p">)));</span>
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">to</span><span class="o">&lt;</span><span class="kt">bool</span><span class="o">&gt;</span><span class="p">(</span><span class="n">Src</span><span class="p">(</span><span class="s">&quot;true&quot;</span><span class="p">)));</span>
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">to</span><span class="o">&lt;</span><span class="kt">bool</span><span class="o">&gt;</span><span class="p">(</span><span class="n">Src</span><span class="p">(</span><span class="s">&quot;True&quot;</span><span class="p">)));</span>
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">to</span><span class="o">&lt;</span><span class="kt">bool</span><span class="o">&gt;</span><span class="p">(</span><span class="n">Src</span><span class="p">(</span><span class="s">&quot;T&quot;</span><span class="p">)));</span>
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">to</span><span class="o">&lt;</span><span class="kt">bool</span><span class="o">&gt;</span><span class="p">(</span><span class="n">Src</span><span class="p">(</span><span class="s">&quot;on&quot;</span><span class="p">)));</span>
+
+  <span class="n">EXPECT_THROW</span><span class="p">(</span><span class="n">to</span><span class="o">&lt;</span><span class="kt">bool</span><span class="o">&gt;</span><span class="p">(</span><span class="n">Src</span><span class="p">(</span><span class="s">&quot;&quot;</span><span class="p">)),</span> <span class="n">std</span><span class="o">::</span><span class="n">range_error</span><span class="p">);</span>
+  <span class="n">EXPECT_THROW</span><span class="p">(</span><span class="n">to</span><span class="o">&lt;</span><span class="kt">bool</span><span class="o">&gt;</span><span class="p">(</span><span class="n">Src</span><span class="p">(</span><span class="s">&quot;2&quot;</span><span class="p">)),</span> <span class="n">std</span><span class="o">::</span><span class="n">range_error</span><span class="p">);</span>
+  <span class="n">EXPECT_THROW</span><span class="p">(</span><span class="n">to</span><span class="o">&lt;</span><span class="kt">bool</span><span class="o">&gt;</span><span class="p">(</span><span class="n">Src</span><span class="p">(</span><span class="s">&quot;11&quot;</span><span class="p">)),</span> <span class="n">std</span><span class="o">::</span><span class="n">range_error</span><span class="p">);</span>
+  <span class="n">EXPECT_THROW</span><span class="p">(</span><span class="n">to</span><span class="o">&lt;</span><span class="kt">bool</span><span class="o">&gt;</span><span class="p">(</span><span class="n">Src</span><span class="p">(</span><span class="s">&quot;19&quot;</span><span class="p">)),</span> <span class="n">std</span><span class="o">::</span><span class="n">range_error</span><span class="p">);</span>
+  <span class="n">EXPECT_THROW</span><span class="p">(</span><span class="n">to</span><span class="o">&lt;</span><span class="kt">bool</span><span class="o">&gt;</span><span class="p">(</span><span class="n">Src</span><span class="p">(</span><span class="s">&quot;o&quot;</span><span class="p">)),</span> <span class="n">std</span><span class="o">::</span><span class="n">range_error</span><span class="p">);</span>
+  <span class="n">EXPECT_THROW</span><span class="p">(</span><span class="n">to</span><span class="o">&lt;</span><span class="kt">bool</span><span class="o">&gt;</span><span class="p">(</span><span class="n">Src</span><span class="p">(</span><span class="s">&quot;fal&quot;</span><span class="p">)),</span> <span class="n">std</span><span class="o">::</span><span class="n">range_error</span><span class="p">);</span>
+  <span class="n">EXPECT_THROW</span><span class="p">(</span><span class="n">to</span><span class="o">&lt;</span><span class="kt">bool</span><span class="o">&gt;</span><span class="p">(</span><span class="n">Src</span><span class="p">(</span><span class="s">&quot;tru&quot;</span><span class="p">)),</span> <span class="n">std</span><span class="o">::</span><span class="n">range_error</span><span class="p">);</span>
+  <span class="n">EXPECT_THROW</span><span class="p">(</span><span class="n">to</span><span class="o">&lt;</span><span class="kt">bool</span><span class="o">&gt;</span><span class="p">(</span><span class="n">Src</span><span class="p">(</span><span class="s">&quot;ye&quot;</span><span class="p">)),</span> <span class="n">std</span><span class="o">::</span><span class="n">range_error</span><span class="p">);</span>
+  <span class="n">EXPECT_THROW</span><span class="p">(</span><span class="n">to</span><span class="o">&lt;</span><span class="kt">bool</span><span class="o">&gt;</span><span class="p">(</span><span class="n">Src</span><span class="p">(</span><span class="s">&quot;yes foo&quot;</span><span class="p">)),</span> <span class="n">std</span><span class="o">::</span><span class="n">range_error</span><span class="p">);</span>
+  <span class="n">EXPECT_THROW</span><span class="p">(</span><span class="n">to</span><span class="o">&lt;</span><span class="kt">bool</span><span class="o">&gt;</span><span class="p">(</span><span class="n">Src</span><span class="p">(</span><span class="s">&quot;bar no&quot;</span><span class="p">)),</span> <span class="n">std</span><span class="o">::</span><span class="n">range_error</span><span class="p">);</span>
+  <span class="n">EXPECT_THROW</span><span class="p">(</span><span class="n">to</span><span class="o">&lt;</span><span class="kt">bool</span><span class="o">&gt;</span><span class="p">(</span><span class="n">Src</span><span class="p">(</span><span class="s">&quot;one&quot;</span><span class="p">)),</span> <span class="n">std</span><span class="o">::</span><span class="n">range_error</span><span class="p">);</span>
+  <span class="n">EXPECT_THROW</span><span class="p">(</span><span class="n">to</span><span class="o">&lt;</span><span class="kt">bool</span><span class="o">&gt;</span><span class="p">(</span><span class="n">Src</span><span class="p">(</span><span class="s">&quot;true_&quot;</span><span class="p">)),</span> <span class="n">std</span><span class="o">::</span><span class="n">range_error</span><span class="p">);</span>
+  <span class="n">EXPECT_THROW</span><span class="p">(</span><span class="n">to</span><span class="o">&lt;</span><span class="kt">bool</span><span class="o">&gt;</span><span class="p">(</span><span class="n">Src</span><span class="p">(</span><span class="s">&quot;bogus_token_that_is_too_long&quot;</span><span class="p">)),</span>
+               <span class="n">std</span><span class="o">::</span><span class="n">range_error</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">Conv</span><span class="p">,</span> <span class="n">StringToBool</span><span class="p">)</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-17"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-17">&#182;</a></div><p>LOG(INFO) &lt;&lt; e.what();</p></td><td class="code"><div class="highlight"><pre>  <span class="n">testStr2Bool</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="o">&gt;</span><span class="p">();</span></pre></div></td></tr>
+
+
+<tr id="section-18"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-18">&#182;</a></div><p>testStr2Bool<const char *>();</p></td><td class="code"><div class="highlight"><pre>  <span class="k">const</span> <span class="kt">char</span> <span class="n">buf</span><span class="p">[]</span> <span class="o">=</span> <span class="s">&quot;01234&quot;</span><span class="p">;</span>
+  <span class="n">EXPECT_FALSE</span><span class="p">(</span><span class="n">to</span><span class="o">&lt;</span><span class="kt">bool</span><span class="o">&gt;</span><span class="p">(</span><span class="n">StringPiece</span><span class="p">(</span><span class="n">buf</span><span class="p">,</span> <span class="n">buf</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)));</span>  <span class="c1">// &quot;0&quot;</span>
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">to</span><span class="o">&lt;</span><span class="kt">bool</span><span class="o">&gt;</span><span class="p">(</span><span class="n">StringPiece</span><span class="p">(</span><span class="n">buf</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="n">buf</span> <span class="o">+</span> <span class="mi">2</span><span class="p">)));</span>  <span class="c1">// &quot;1&quot;</span>
+  <span class="k">const</span> <span class="kt">char</span> <span class="n">buf2</span><span class="p">[]</span> <span class="o">=</span> <span class="s">&quot;one two three&quot;</span><span class="p">;</span>
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">to</span><span class="o">&lt;</span><span class="kt">bool</span><span class="o">&gt;</span><span class="p">(</span><span class="n">StringPiece</span><span class="p">(</span><span class="n">buf2</span><span class="p">,</span> <span class="n">buf2</span> <span class="o">+</span> <span class="mi">2</span><span class="p">)));</span>  <span class="c1">// &quot;on&quot;</span>
+  <span class="k">const</span> <span class="kt">char</span> <span class="n">buf3</span><span class="p">[]</span> <span class="o">=</span> <span class="s">&quot;false&quot;</span><span class="p">;</span>
+  <span class="n">EXPECT_THROW</span><span class="p">(</span><span class="n">to</span><span class="o">&lt;</span><span class="kt">bool</span><span class="o">&gt;</span><span class="p">(</span><span class="n">StringPiece</span><span class="p">(</span><span class="n">buf3</span><span class="p">,</span> <span class="n">buf3</span> <span class="o">+</span> <span class="mi">3</span><span class="p">)),</span>  <span class="c1">// &quot;fal&quot;</span>
+               <span class="n">std</span><span class="o">::</span><span class="n">range_error</span><span class="p">);</span></pre></div></td></tr>
+
+
+<tr id="section-19"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-19">&#182;</a></div><p>Test with strings that are not NUL terminated.</p></td><td class="code"><div class="highlight"><pre>  <span class="k">const</span> <span class="kt">char</span> <span class="n">buf4</span><span class="p">[]</span> <span class="o">=</span> <span class="s">&quot;001foo&quot;</span><span class="p">;</span>
+  <span class="n">StringPiece</span> <span class="n">sp4</span><span class="p">(</span><span class="n">buf4</span><span class="p">);</span>
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">to</span><span class="o">&lt;</span><span class="kt">bool</span><span class="o">&gt;</span><span class="p">(</span><span class="o">&amp;</span><span class="n">sp4</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">buf4</span> <span class="o">+</span> <span class="mi">3</span><span class="p">,</span> <span class="n">sp4</span><span class="p">.</span><span class="n">begin</span><span class="p">());</span>
+  <span class="k">const</span> <span class="kt">char</span> <span class="n">buf5</span><span class="p">[]</span> <span class="o">=</span> <span class="s">&quot;0012&quot;</span><span class="p">;</span>
+  <span class="n">StringPiece</span> <span class="n">sp5</span><span class="p">(</span><span class="n">buf5</span><span class="p">);</span>
+  <span class="n">EXPECT_THROW</span><span class="p">(</span><span class="n">to</span><span class="o">&lt;</span><span class="kt">bool</span><span class="o">&gt;</span><span class="p">(</span><span class="o">&amp;</span><span class="n">sp5</span><span class="p">),</span> <span class="n">std</span><span class="o">::</span><span class="n">range_error</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">buf5</span><span class="p">,</span> <span class="n">sp5</span><span class="p">.</span><span class="n">begin</span><span class="p">());</span>
+<span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-20"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-20">&#182;</a></div><p>Test the StringPiece* API</p></td><td class="code"><div class="highlight"><pre><span class="k">static</span> <span class="n">int64_t</span> <span class="n">handwrittenAtoi</span><span class="p">(</span><span class="k">const</span> <span class="kt">char</span><span class="o">*</span> <span class="n">start</span><span class="p">,</span> <span class="k">const</span> <span class="kt">char</span><span class="o">*</span> <span class="n">end</span><span class="p">)</span> <span class="p">{</span>
+
+  <span class="kt">bool</span> <span class="n">positive</span> <span class="o">=</span> <span class="kc">true</span><span class="p">;</span>
+  <span class="n">int64_t</span> <span class="n">retVal</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+
+  <span class="k">if</span> <span class="p">(</span><span class="n">start</span> <span class="o">==</span> <span class="n">end</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">throw</span> <span class="n">std</span><span class="o">::</span><span class="n">runtime_error</span><span class="p">(</span><span class="s">&quot;empty string&quot;</span><span class="p">);</span>
+  <span class="p">}</span>
+
+  <span class="k">while</span> <span class="p">(</span><span class="n">start</span> <span class="o">&lt;</span> <span class="n">end</span> <span class="o">&amp;&amp;</span> <span class="n">isspace</span><span class="p">(</span><span class="o">*</span><span class="n">start</span><span class="p">))</span> <span class="p">{</span>
+    <span class="o">++</span><span class="n">start</span><span class="p">;</span>
+  <span class="p">}</span>
+
+  <span class="k">switch</span> <span class="p">(</span><span class="o">*</span><span class="n">start</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">case</span> <span class="sc">&#39;-&#39;</span><span class="o">:</span>
+      <span class="n">positive</span> <span class="o">=</span> <span class="kc">false</span><span class="p">;</span>
+    <span class="k">case</span> <span class="sc">&#39;+&#39;</span><span class="o">:</span>
+      <span class="o">++</span><span class="n">start</span><span class="p">;</span>
+    <span class="k">default</span><span class="o">:</span><span class="p">;</span>
+  <span class="p">}</span>
+
+  <span class="k">while</span> <span class="p">(</span><span class="n">start</span> <span class="o">&lt;</span> <span class="n">end</span> <span class="o">&amp;&amp;</span> <span class="o">*</span><span class="n">start</span> <span class="o">&gt;=</span> <span class="sc">&#39;0&#39;</span> <span class="o">&amp;&amp;</span> <span class="o">*</span><span class="n">start</span> <span class="o">&lt;=</span> <span class="sc">&#39;9&#39;</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">auto</span> <span class="k">const</span> <span class="n">newRetVal</span> <span class="o">=</span> <span class="n">retVal</span> <span class="o">*</span> <span class="mi">10</span> <span class="o">+</span> <span class="p">(</span><span class="o">*</span><span class="n">start</span><span class="o">++</span> <span class="o">-</span> <span class="sc">&#39;0&#39;</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">newRetVal</span> <span class="o">&lt;</span> <span class="n">retVal</span><span class="p">)</span> <span class="p">{</span>
+      <span class="k">throw</span> <span class="n">std</span><span class="o">::</span><span class="n">runtime_error</span><span class="p">(</span><span class="s">&quot;overflow&quot;</span><span class="p">);</span>
+    <span class="p">}</span>
+    <span class="n">retVal</span> <span class="o">=</span> <span class="n">newRetVal</span><span class="p">;</span>
+  <span class="p">}</span>
+
+  <span class="k">if</span> <span class="p">(</span><span class="n">start</span> <span class="o">!=</span> <span class="n">end</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">throw</span> <span class="n">std</span><span class="o">::</span><span class="n">runtime_error</span><span class="p">(</span><span class="s">&quot;extra chars at the end&quot;</span><span class="p">);</span>
+  <span class="p">}</span>
+
+  <span class="k">return</span> <span class="n">positive</span> <span class="o">?</span> <span class="n">retVal</span> <span class="o">:</span> <span class="o">-</span><span class="n">retVal</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="k">static</span> <span class="n">StringPiece</span> <span class="n">pc1</span> <span class="o">=</span> <span class="s">&quot;1234567890123456789&quot;</span><span class="p">;</span>
+
+<span class="kt">void</span> <span class="n">handwrittenAtoiMeasure</span><span class="p">(</span><span class="n">uint</span> <span class="n">n</span><span class="p">,</span> <span class="n">uint</span> <span class="n">digits</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">auto</span> <span class="n">p</span> <span class="o">=</span> <span class="n">pc1</span><span class="p">.</span><span class="n">subpiece</span><span class="p">(</span><span class="n">pc1</span><span class="p">.</span><span class="n">size</span><span class="p">()</span> <span class="o">-</span> <span class="n">digits</span><span class="p">,</span> <span class="n">digits</span><span class="p">);</span>
+  <span class="n">FOR_EACH_RANGE</span> <span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">n</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">doNotOptimizeAway</span><span class="p">(</span><span class="n">handwrittenAtoi</span><span class="p">(</span><span class="n">p</span><span class="p">.</span><span class="n">begin</span><span class="p">(),</span> <span class="n">p</span><span class="p">.</span><span class="n">end</span><span class="p">()));</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="kt">void</span> <span class="n">follyAtoiMeasure</span><span class="p">(</span><span class="n">uint</span> <span class="n">n</span><span class="p">,</span> <span class="n">uint</span> <span class="n">digits</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">auto</span> <span class="n">p</span> <span class="o">=</span> <span class="n">pc1</span><span class="p">.</span><span class="n">subpiece</span><span class="p">(</span><span class="n">pc1</span><span class="p">.</span><span class="n">size</span><span class="p">()</span> <span class="o">-</span> <span class="n">digits</span><span class="p">,</span> <span class="n">digits</span><span class="p">);</span>
+  <span class="n">FOR_EACH_RANGE</span> <span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">n</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">doNotOptimizeAway</span><span class="p">(</span><span class="n">folly</span><span class="o">::</span><span class="n">to</span><span class="o">&lt;</span><span class="n">int64_t</span><span class="o">&gt;</span><span class="p">(</span><span class="n">p</span><span class="p">.</span><span class="n">begin</span><span class="p">(),</span> <span class="n">p</span><span class="p">.</span><span class="n">end</span><span class="p">()));</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="kt">void</span> <span class="n">clibAtoiMeasure</span><span class="p">(</span><span class="n">uint</span> <span class="n">n</span><span class="p">,</span> <span class="n">uint</span> <span class="n">digits</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">auto</span> <span class="n">p</span> <span class="o">=</span> <span class="n">pc1</span><span class="p">.</span><span class="n">subpiece</span><span class="p">(</span><span class="n">pc1</span><span class="p">.</span><span class="n">size</span><span class="p">()</span> <span class="o">-</span> <span class="n">digits</span><span class="p">,</span> <span class="n">digits</span><span class="p">);</span>
+  <span class="n">assert</span><span class="p">(</span><span class="o">*</span><span class="n">p</span><span class="p">.</span><span class="n">end</span><span class="p">()</span> <span class="o">==</span> <span class="mi">0</span><span class="p">);</span>
+  <span class="n">static_assert</span><span class="p">(</span><span class="k">sizeof</span><span class="p">(</span><span class="kt">long</span><span class="p">)</span> <span class="o">==</span> <span class="mi">8</span><span class="p">,</span> <span class="s">&quot;64-bit long assumed&quot;</span><span class="p">);</span>
+  <span class="n">FOR_EACH_RANGE</span> <span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">n</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">doNotOptimizeAway</span><span class="p">(</span><span class="n">atol</span><span class="p">(</span><span class="n">p</span><span class="p">.</span><span class="n">begin</span><span class="p">()));</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="kt">void</span> <span class="n">clibStrtoulMeasure</span><span class="p">(</span><span class="n">uint</span> <span class="n">n</span><span class="p">,</span> <span class="n">uint</span> <span class="n">digits</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">auto</span> <span class="n">p</span> <span class="o">=</span> <span class="n">pc1</span><span class="p">.</span><span class="n">subpiece</span><span class="p">(</span><span class="n">pc1</span><span class="p">.</span><span class="n">size</span><span class="p">()</span> <span class="o">-</span> <span class="n">digits</span><span class="p">,</span> <span class="n">digits</span><span class="p">);</span>
+  <span class="n">assert</span><span class="p">(</span><span class="o">*</span><span class="n">p</span><span class="p">.</span><span class="n">end</span><span class="p">()</span> <span class="o">==</span> <span class="mi">0</span><span class="p">);</span>
+  <span class="kt">char</span> <span class="o">*</span> <span class="n">endptr</span><span class="p">;</span>
+  <span class="n">FOR_EACH_RANGE</span> <span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">n</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">doNotOptimizeAway</span><span class="p">(</span><span class="n">strtoul</span><span class="p">(</span><span class="n">p</span><span class="p">.</span><span class="n">begin</span><span class="p">(),</span> <span class="o">&amp;</span><span class="n">endptr</span><span class="p">,</span> <span class="mi">10</span><span class="p">));</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="kt">void</span> <span class="n">lexicalCastMeasure</span><span class="p">(</span><span class="n">uint</span> <span class="n">n</span><span class="p">,</span> <span class="n">uint</span> <span class="n">digits</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">auto</span> <span class="n">p</span> <span class="o">=</span> <span class="n">pc1</span><span class="p">.</span><span class="n">subpiece</span><span class="p">(</span><span class="n">pc1</span><span class="p">.</span><span class="n">size</span><span class="p">()</span> <span class="o">-</span> <span class="n">digits</span><span class="p">,</span> <span class="n">digits</span><span class="p">);</span>
+  <span class="n">assert</span><span class="p">(</span><span class="o">*</span><span class="n">p</span><span class="p">.</span><span class="n">end</span><span class="p">()</span> <span class="o">==</span> <span class="mi">0</span><span class="p">);</span>
+  <span class="n">FOR_EACH_RANGE</span> <span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">n</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">doNotOptimizeAway</span><span class="p">(</span><span class="n">boost</span><span class="o">::</span><span class="n">lexical_cast</span><span class="o">&lt;</span><span class="n">uint64_t</span><span class="o">&gt;</span><span class="p">(</span><span class="n">p</span><span class="p">.</span><span class="n">begin</span><span class="p">()));</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="cp">#define DEFINE_BENCHMARK_GROUP(n)                       \</span>
+<span class="cp">  BENCHMARK_PARAM(clibAtoiMeasure, n);                  \</span>
+<span class="cp">  BENCHMARK_RELATIVE_PARAM(lexicalCastMeasure, n);      \</span>
+<span class="cp">  BENCHMARK_RELATIVE_PARAM(handwrittenAtoiMeasure, n);  \</span>
+<span class="cp">  BENCHMARK_RELATIVE_PARAM(follyAtoiMeasure, n);</span>
+
+<span class="n">DEFINE_BENCHMARK_GROUP</span><span class="p">(</span><span class="mi">1</span><span class="p">);</span>
+<span class="n">DEFINE_BENCHMARK_GROUP</span><span class="p">(</span><span class="mi">2</span><span class="p">);</span>
+<span class="n">DEFINE_BENCHMARK_GROUP</span><span class="p">(</span><span class="mi">3</span><span class="p">);</span>
+<span class="n">DEFINE_BENCHMARK_GROUP</span><span class="p">(</span><span class="mi">4</span><span class="p">);</span>
+<span class="n">DEFINE_BENCHMARK_GROUP</span><span class="p">(</span><span class="mi">5</span><span class="p">);</span>
+<span class="n">DEFINE_BENCHMARK_GROUP</span><span class="p">(</span><span class="mi">6</span><span class="p">);</span>
+<span class="n">DEFINE_BENCHMARK_GROUP</span><span class="p">(</span><span class="mi">7</span><span class="p">);</span>
+<span class="n">DEFINE_BENCHMARK_GROUP</span><span class="p">(</span><span class="mi">8</span><span class="p">);</span>
+<span class="n">DEFINE_BENCHMARK_GROUP</span><span class="p">(</span><span class="mi">9</span><span class="p">);</span>
+<span class="n">DEFINE_BENCHMARK_GROUP</span><span class="p">(</span><span class="mi">10</span><span class="p">);</span>
+<span class="n">DEFINE_BENCHMARK_GROUP</span><span class="p">(</span><span class="mi">11</span><span class="p">);</span>
+<span class="n">DEFINE_BENCHMARK_GROUP</span><span class="p">(</span><span class="mi">12</span><span class="p">);</span>
+<span class="n">DEFINE_BENCHMARK_GROUP</span><span class="p">(</span><span class="mi">13</span><span class="p">);</span>
+<span class="n">DEFINE_BENCHMARK_GROUP</span><span class="p">(</span><span class="mi">14</span><span class="p">);</span>
+<span class="n">DEFINE_BENCHMARK_GROUP</span><span class="p">(</span><span class="mi">15</span><span class="p">);</span>
+<span class="n">DEFINE_BENCHMARK_GROUP</span><span class="p">(</span><span class="mi">16</span><span class="p">);</span>
+<span class="n">DEFINE_BENCHMARK_GROUP</span><span class="p">(</span><span class="mi">17</span><span class="p">);</span>
+<span class="n">DEFINE_BENCHMARK_GROUP</span><span class="p">(</span><span class="mi">18</span><span class="p">);</span>
+<span class="n">DEFINE_BENCHMARK_GROUP</span><span class="p">(</span><span class="mi">19</span><span class="p">);</span>
+
+<span class="cp">#undef DEFINE_BENCHMARK_GROUP</span>
+
+<span class="kt">int</span> <span class="n">main</span><span class="p">(</span><span class="kt">int</span> <span class="n">argc</span><span class="p">,</span> <span class="kt">char</span><span class="o">**</span> <span class="n">argv</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">testing</span><span class="o">::</span><span class="n">InitGoogleTest</span><span class="p">(</span><span class="o">&amp;</span><span class="n">argc</span><span class="p">,</span> <span class="n">argv</span><span class="p">);</span>
+  <span class="n">google</span><span class="o">::</span><span class="n">ParseCommandLineFlags</span><span class="p">(</span><span class="o">&amp;</span><span class="n">argc</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">argv</span><span class="p">,</span> <span class="kc">true</span><span class="p">);</span>
+  <span class="k">auto</span> <span class="n">ret</span> <span class="o">=</span> <span class="n">RUN_ALL_TESTS</span><span class="p">();</span>
+  <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">ret</span> <span class="o">&amp;&amp;</span> <span class="n">FLAGS_benchmark</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">folly</span><span class="o">::</span><span class="n">runBenchmarks</span><span class="p">();</span>
+  <span class="p">}</span>
+  <span class="k">return</span> <span class="n">ret</span><span class="p">;</span>
+<span class="p">}</span>
+
+</pre></div></td></tr>
+
+
+<tr id="section-21"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-21">&#182;</a></div><p>//////////////////////////////////////////////////////////////////////////////
+Benchmarks for ASCII to int conversion
+//////////////////////////////////////////////////////////////////////////////
+@author: Rajat Goel (rajat)</p></td><td class="code"><div class="highlight"><pre>undefined</pre></div></td></tr>
+
+</tbody>
+</table>
+</div>
+
+</body>
+<script>docas={repo:"joekychen/folly",depth:2}</script>
+<script>document.write('<script src=' + ('__proto__' in {} ? 'http://cdnjs.cloudflare.com/ajax/libs/zepto/1.0rc1/zepto.min.js' : 'https://ajax.googleapis.com/ajax/libs/jquery/1.7.2/jquery.min.js')+'><\\/script>')</script>
+<script src="http://baoshan.github.com/moment/min/moment.min.js"></script>
+<script src="../../javascript/docco.min.js"></script>
+</html>

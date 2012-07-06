@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html><head><title>joekychen/folly » folly › test › BenchmarkTest.cpp
+
+</title>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+<meta name="generator" content="Docco">
+<link rel="stylesheet" media="all" href="../../stylesheets/docco.min.css" />
+
+
+</head>
+<body>
+<div id="container">
+<div id="background"></div>
+<table cellpadding="0" cellspacing="0">
+<thead><tr><th class="docs"><a id="home" href="../../index.html"></a><h1>BenchmarkTest.cpp</h1></th><th class="code"></th></tr></thead>
+<tbody>
+
+
+<tr id="section-1"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-1">&#182;</a></div></td><td class="code"><div class="highlight"><pre><span class="cm">/*</span>
+<span class="cm"> * Copyright 2012 Facebook, Inc.</span>
+<span class="cm"> *</span>
+<span class="cm"> * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span class="cm"> * you may not use this file except in compliance with the License.</span>
+<span class="cm"> * You may obtain a copy of the License at</span>
+<span class="cm"> *</span>
+<span class="cm"> *   http://www.apache.org/licenses/LICENSE-2.0</span>
+<span class="cm"> *</span>
+<span class="cm"> * Unless required by applicable law or agreed to in writing, software</span>
+<span class="cm"> * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span class="cm"> * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span class="cm"> * See the License for the specific language governing permissions and</span>
+<span class="cm"> * limitations under the License.</span>
+<span class="cm"> */</span>
+
+<span class="cp">#include &quot;folly/Benchmark.h&quot;</span>
+<span class="cp">#include &quot;folly/Foreach.h&quot;</span>
+<span class="cp">#include &quot;folly/String.h&quot;</span>
+<span class="cp">#include &lt;iostream&gt;</span>
+<span class="k">using</span> <span class="k">namespace</span> <span class="n">folly</span><span class="p">;</span>
+<span class="k">using</span> <span class="k">namespace</span> <span class="n">std</span><span class="p">;</span>
+
+<span class="kt">void</span> <span class="n">fun</span><span class="p">()</span> <span class="p">{</span>
+  <span class="k">static</span> <span class="kt">double</span> <span class="n">x</span> <span class="o">=</span> <span class="mi">1</span><span class="p">;</span>
+  <span class="o">++</span><span class="n">x</span><span class="p">;</span>
+  <span class="n">doNotOptimizeAway</span><span class="p">(</span><span class="n">x</span><span class="p">);</span>
+<span class="p">}</span>
+<span class="n">BENCHMARK</span><span class="p">(</span><span class="n">bmFun</span><span class="p">)</span> <span class="p">{</span> <span class="n">fun</span><span class="p">();</span> <span class="p">}</span>
+<span class="n">BENCHMARK</span><span class="p">(</span><span class="n">bmRepeatedFun</span><span class="p">,</span> <span class="n">n</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">FOR_EACH_RANGE</span> <span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">n</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">fun</span><span class="p">();</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+<span class="n">BENCHMARK_DRAW_LINE</span><span class="p">()</span>
+
+<span class="n">BENCHMARK</span><span class="p">(</span><span class="n">gun</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">static</span> <span class="kt">double</span> <span class="n">x</span> <span class="o">=</span> <span class="mi">1</span><span class="p">;</span>
+  <span class="n">x</span> <span class="o">*=</span> <span class="mi">2000</span><span class="p">;</span>
+  <span class="n">doNotOptimizeAway</span><span class="p">(</span><span class="n">x</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="n">BENCHMARK_DRAW_LINE</span><span class="p">()</span>
+
+<span class="n">BENCHMARK</span><span class="p">(</span><span class="n">baselinevector</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">vector</span><span class="o">&lt;</span><span class="kt">int</span><span class="o">&gt;</span> <span class="n">v</span><span class="p">;</span>
+
+  <span class="n">BENCHMARK_SUSPEND</span> <span class="p">{</span>
+    <span class="n">v</span><span class="p">.</span><span class="n">resize</span><span class="p">(</span><span class="mi">1000</span><span class="p">);</span>
+  <span class="p">}</span>
+
+  <span class="n">FOR_EACH_RANGE</span> <span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">100</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">v</span><span class="p">.</span><span class="n">push_back</span><span class="p">(</span><span class="mi">42</span><span class="p">);</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="n">BENCHMARK_RELATIVE</span><span class="p">(</span><span class="n">bmVector</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">vector</span><span class="o">&lt;</span><span class="kt">int</span><span class="o">&gt;</span> <span class="n">v</span><span class="p">;</span>
+  <span class="n">FOR_EACH_RANGE</span> <span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">100</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">v</span><span class="p">.</span><span class="n">resize</span><span class="p">(</span><span class="n">v</span><span class="p">.</span><span class="n">size</span><span class="p">()</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">42</span><span class="p">);</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="n">BENCHMARK_DRAW_LINE</span><span class="p">()</span>
+
+<span class="n">BENCHMARK</span><span class="p">(</span><span class="n">superslow</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">sleep</span><span class="p">(</span><span class="mi">1</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="kt">int</span> <span class="n">main</span><span class="p">(</span><span class="kt">int</span> <span class="n">argc</span><span class="p">,</span> <span class="kt">char</span><span class="o">**</span> <span class="n">argv</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">google</span><span class="o">::</span><span class="n">ParseCommandLineFlags</span><span class="p">(</span><span class="o">&amp;</span><span class="n">argc</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">argv</span><span class="p">,</span> <span class="kc">true</span><span class="p">);</span>
+  <span class="n">runBenchmarks</span><span class="p">();</span>
+  <span class="n">runBenchmarksOnFlag</span><span class="p">();</span>
+<span class="p">}</span>
+
+</pre></div></td></tr>
+
+</tbody>
+</table>
+</div>
+
+</body>
+<script>docas={repo:"joekychen/folly",depth:2}</script>
+<script>document.write('<script src=' + ('__proto__' in {} ? 'http://cdnjs.cloudflare.com/ajax/libs/zepto/1.0rc1/zepto.min.js' : 'https://ajax.googleapis.com/ajax/libs/jquery/1.7.2/jquery.min.js')+'><\\/script>')</script>
+<script src="http://baoshan.github.com/moment/min/moment.min.js"></script>
+<script src="../../javascript/docco.min.js"></script>
+</html>

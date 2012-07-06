@@ -1,0 +1,188 @@
+<h2><code>folly/Format.h</code></h2>
+
+<p><code>folly/Format.h</code> provides a fast, powerful, type-safe, flexible facility
+for formatting text, using a specification language similar to Python's
+<a href="http://docs.python.org/library/string.html#formatstrings">str.format</a>.
+By default, it can format strings, numbers (integral and floating point),
+and dynamically-typed <code>folly::dynamic</code> objects, and can extract values from
+random-access containers and string-keyed maps.  In many cases, <code>format</code> is
+faster than <code>sprintf</code> as well as being fully type-safe.</p>
+
+<p>To use <code>format</code>, you need to be using gcc 4.6 or later.  You'll want to include
+<code>folly/Format.h</code>.</p>
+
+<h3>Overview</h3>
+
+<hr />
+
+<p>Here are some code samples to get started:</p>
+
+<p>``` Cpp
+using folly::format;
+using folly::vformat;</p>
+
+<p>// Objects produced by format() can be streamed without creating
+// an intermediary string; {} yields the next argument using default
+// formatting.
+std::cout &lt;&lt; format("The answers are {} and {}", 23, 42);
+// => "The answers are 23 and 42"</p>
+
+<p>// To insert a literal '{' or '}', just double it.
+std::cout &lt;&lt; format("{} {{}} {{{}}}", 23, 42);
+// => "23 {} {42}"</p>
+
+<p>// Arguments can be referenced out of order, even multiple times
+std::cout &lt;&lt; format("The answers are {1}, {0}, and {1} again", 23, 42);
+// => "The answers are 42, 23, and 42 again"</p>
+
+<p>// It's perfectly fine to not reference all arguments
+std::cout &lt;&lt; format("The only answer is {1}", 23, 42);
+// => "The only answer is 42"</p>
+
+<p>// Values can be extracted from indexable containers
+// (random-access sequences and integral-keyed maps), and also from
+// string-keyed maps
+std::vector<int> v {23, 42};
+std::map<std::string, std::string> m { {"what", "answer"} };
+std::cout &lt;&lt; format("The only {1[what]} is {0[1]}", v, m);
+// => "The only answer is 42"</p>
+
+<p>// If you only have one container argument, vformat makes the syntax simpler
+std::map<std::string, std::string> m { {"what", "answer"}, {"value", "42"} };
+std::cout &lt;&lt; vformat("The only {what} is {value}", m);
+// => "The only answer is 42"
+// same as
+std::cout &lt;&lt; format("The only {0[what]} is {0[value]}", m);
+// => "The only answer is 42"</p>
+
+<p>// {} works for vformat too
+std::vector<int> v {42, 23};
+std::cout &lt;&lt; vformat("{} {}", v);
+// => "42 23"</p>
+
+<p>// format and vformat work with pairs and tuples
+std::tuple<int, std::string, int> t {42, "hello", 23};
+std::cout &lt;&lt; vformat("{0} {2} {1}", t);
+// => "42 23 hello"</p>
+
+<p>// Format supports width, alignment, arbitrary fill, and various
+// format specifiers, with meanings similar to printf
+// "X&lt;10": fill with 'X', left-align ('&lt;'), width 10
+std::cout &lt;&lt; format("{:X&lt;10} {}", "hello", "world");
+// => "helloXXXXX world"</p>
+
+<p>// Format supports printf-style format specifiers
+std::cout &lt;&lt; format("{0:05d} decimal = {0:04x} hex", 42);
+// => "00042 decimal = 002a hex"</p>
+
+<p>// Formatter objects may be written to a string using folly::to or
+// folly::toAppend (see folly/Conv.h), or by calling their appendTo(),
+// str(), and fbstr() methods
+std::string s = format("The only answer is {}", 42).str();
+std::cout &lt;&lt; s;
+// => "The only answer is 42"
+```</p>
+
+<h3>Format string syntax</h3>
+
+<hr />
+
+<p>Format string (<code>format</code>):
+<code>"{" [arg_index] ["[" key "]"] [":" format_spec] "}"</code></p>
+
+<ul>
+<li><code>arg_index</code>: index of argument to format; default = next argument.  Note
+that a format string may have either default argument indexes or
+non-default argument indexes, but not both (to avoid confusion).</li>
+<li><code>key</code>: if the argument is a container (C-style array or pointer,
+<code>std::array</code>, vector, deque, map), you may use this
+to select the element to format; works with random-access sequences and
+integer- and string-keyed maps.  Multiple level keys work as well, with
+components separated with "."; for example, given
+<code>map&lt;string, map&lt;string, string&gt;&gt; m</code>, <code>{[foo.bar]}</code> selects
+<code>m["foo"]["bar"]</code>.</li>
+<li><code>format_spec</code>: format specification, see below</li>
+</ul>
+
+<p>Format string (<code>vformat</code>):
+<code>"{" [ key ] [":" format_spec] "}"</code></p>
+
+<ul>
+<li><code>key</code>: select the argument to format from the container argument;
+works with random-access sequences and integer- and string-keyed maps.
+Multiple level keys work as well, with components separated with "."; for
+example, given <code>map&lt;string, map&lt;string, string&gt;&gt; m</code>, <code>{foo.bar}</code> selects
+<code>m["foo"]["bar"]</code>.</li>
+<li><code>format_spec</code>: format specification, see below</li>
+</ul>
+
+<p>Format specification:
+<code>[[fill] align] [sign] ["#"] ["0"] [width] [","] ["." precision] [type]</code></p>
+
+<ul>
+<li><code>fill</code> (may only be specified if <code>align</code> is also specified): pad with this
+character ('<code></code>' (space) or '<code>0</code>' (zero) might be useful; space is default)</li>
+<li><code>align</code>: one of '<code>&lt;</code>', '<code>&gt;</code>', '<code>=</code>', '<code>^</code>':
+<ul><li>'<code>&lt;</code>': left-align (default for most objects)</li>
+<li>'<code>&gt;</code>': right-align (default for numbers)</li>
+<li>'<code>=</code>': pad after sign, but before significant digits; used to print
+    <code>-0000120</code>; only valid for numbers</li>
+<li>'<code>^</code>': center</li></ul></li>
+<li><code>sign</code>: one of '<code>+</code>', '<code>-</code>', ' ' (space) (only valid for numbers)
+<ul><li>'<code>+</code>': output '<code>+</code>' if positive or zero, '<code>-</code>' if negative</li>
+<li>'<code>-</code>': output '<code>-</code>' if negative, nothing otherwise (default)</li>
+<li>'<code></code>' (space): output '<code></code>' (space) if positive or zero, '<code>-</code>' if negative</li></ul></li>
+<li>'<code>#</code>': output base prefix (<code>0</code> for octal, <code>0b</code> or <code>0B</code> for binary, <code>0x</code> or
+<code>0X</code> for hexadecimal; only valid for integers)</li>
+<li>'<code>0</code>': 0-pad after sign, same as specifying "<code>0=</code>" as the <code>fill</code> and
+<code>align</code> parameters (only valid for numbers)</li>
+<li><code>width</code>: minimum field width</li>
+<li>'<code>,</code>' (comma): output comma as thousands' separator (only valid for integers,
+and only for decimal output)</li>
+<li><code>precision</code> (not allowed for integers):
+<ul><li>for floating point values, number of digits after decimal point ('<code>f</code>' or
+'<code>F</code>' presentation) or number of significant digits ('<code>g</code>' or '<code>G</code>')</li>
+<li>for others, maximum field size (truncate subsequent characters)</li></ul></li>
+<li><code>type</code>: presentation format, see below</li>
+</ul>
+
+<p>Presentation formats:</p>
+
+<ul>
+<li>Strings (<code>folly::StringPiece</code>, <code>std::string</code>, <code>folly::fbstring</code>,
+<code>const char*</code>):
+<ul><li>'<code>s</code>' (default)</li></ul></li>
+<li>Integers:
+<ul><li>'<code>b</code>': output in binary (base 2) ("<code>0b</code>" prefix if '<code>#</code>' specified)</li>
+<li>'<code>B</code>': output in binary (base 2) ("<code>0B</code>" prefix if '<code>#</code>' specified)</li>
+<li>'<code>c</code>': output as a character (cast to <code>char</code>)</li>
+<li>'<code>d</code>': output in decimal (base 10) (default)</li>
+<li>'<code>o</code>': output in octal (base 8)</li>
+<li>'<code>O</code>': output in octal (base 8) (same as '<code>o</code>')</li>
+<li>'<code>x</code>': output in hexadecimal (base 16) (lower-case digits above 9)</li>
+<li>'<code>X</code>': output in hexadecimal (base 16) (upper-case digits above 9)</li>
+<li>'<code>n</code>': locale-aware output (currently same as '<code>d</code>')</li></ul></li>
+<li><code>bool</code>:
+<ul><li>default: output "<code>true</code>" or "<code>false</code>" as strings</li>
+<li>integer presentations allowed as well</li></ul></li>
+<li><code>char</code>:
+<ul><li>same as other integers, but default is '<code>c</code>' instead of '<code>d</code>'</li></ul></li>
+<li>Floating point (<code>float</code>, <code>double</code>; <code>long double</code> is not implemented):
+<ul><li>'<code>e</code>': scientific notation using '<code>e</code>' as exponent character</li>
+<li>'<code>E</code>': scientific notation using '<code>E</code>' as exponent character</li>
+<li>'<code>f</code>': fixed point</li>
+<li>'<code>F</code>': fixed point (same as '<code>f</code>')</li>
+<li>'<code>g</code>': general; use either '<code>f</code>' or '<code>e</code>' depending on magnitude (default)</li>
+<li>'<code>G</code>': general; use either '<code>f</code>' or '<code>E</code>' depending on magnitude</li>
+<li>'<code>n</code>': locale-aware version of '<code>g</code>' (currently same as '<code>g</code>')</li>
+<li>'<code>%</code>': percentage: multiply by 100 then display as '<code>f</code>'</li></ul></li>
+</ul>
+
+<h3>Extension</h3>
+
+<hr />
+
+<p>You can extend <code>format</code> for your own class by providing a specialization for
+<code>folly::FormatValue</code>.  See <code>folly/Format.h</code> and <code>folly/FormatArg.h</code> for
+details, and the existing specialization for <code>folly::dynamic</code> in
+<code>folly/dynamic-inl.h</code> for an implementation example.</p>

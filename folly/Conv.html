@@ -1,0 +1,879 @@
+<!DOCTYPE html>
+<html><head><title>joekychen/folly » folly › Conv.h
+
+</title>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+<meta name="generator" content="Docco">
+<link rel="stylesheet" media="all" href="../stylesheets/docco.min.css" />
+
+
+</head>
+<body>
+<div id="container">
+<div id="background"></div>
+<table cellpadding="0" cellspacing="0">
+<thead><tr><th class="docs"><a id="home" href="../index.html"></a><h1>Conv.h</h1></th><th class="code"></th></tr></thead>
+<tbody>
+
+
+<tr id="section-1"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-1">&#182;</a></div></td><td class="code"><div class="highlight"><pre><span class="cm">/*</span>
+<span class="cm"> * Copyright 2012 Facebook, Inc.</span>
+<span class="cm"> *</span>
+<span class="cm"> * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span class="cm"> * you may not use this file except in compliance with the License.</span>
+<span class="cm"> * You may obtain a copy of the License at</span>
+<span class="cm"> *</span>
+<span class="cm"> *   http://www.apache.org/licenses/LICENSE-2.0</span>
+<span class="cm"> *</span>
+<span class="cm"> * Unless required by applicable law or agreed to in writing, software</span>
+<span class="cm"> * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span class="cm"> * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span class="cm"> * See the License for the specific language governing permissions and</span>
+<span class="cm"> * limitations under the License.</span>
+<span class="cm"> */</span>
+
+<span class="cm">/**</span>
+<span class="cm"> * Converts anything to anything, with an emphasis on performance and</span>
+<span class="cm"> * safety.</span>
+<span class="cm"> *</span>
+<span class="cm"> * @author Andrei Alexandrescu (andrei.alexandrescu@fb.com)</span>
+<span class="cm"> */</span>
+
+<span class="cp">#ifndef FOLLY_BASE_CONV_H_</span>
+<span class="cp">#define FOLLY_BASE_CONV_H_</span>
+
+<span class="cp">#include &quot;folly/FBString.h&quot;</span>
+<span class="cp">#include &quot;folly/Likely.h&quot;</span>
+<span class="cp">#include &quot;folly/Preprocessor.h&quot;</span>
+<span class="cp">#include &quot;folly/Range.h&quot;</span>
+
+<span class="cp">#include &lt;boost/implicit_cast.hpp&gt;</span>
+<span class="cp">#include &lt;type_traits&gt;</span>
+<span class="cp">#include &lt;limits&gt;</span>
+<span class="cp">#include &lt;string&gt;</span>
+<span class="cp">#include &lt;tuple&gt;</span>
+<span class="cp">#include &lt;stdexcept&gt;</span>
+<span class="cp">#include &lt;typeinfo&gt;</span>
+
+<span class="cp">#include &quot;double-conversion.h&quot;   </span><span class="c1">// V8 JavaScript implementation</span>
+
+<span class="cp">#define FOLLY_RANGE_CHECK(condition, message)                           \</span>
+<span class="cp">  ((condition) ? (void)0 : throw std::range_error(                      \</span>
+<span class="cp">    (__FILE__ &quot;(&quot; + std::to_string((long long int) __LINE__) + &quot;): &quot;    \</span>
+<span class="cp">     + (message)).c_str()))</span>
+
+<span class="n">namespace</span> <span class="n">folly</span> <span class="p">{</span>
+
+<span class="cm">/*******************************************************************************</span>
+<span class="cm"> * Integral to integral</span>
+<span class="cm"> ******************************************************************************/</span>
+
+<span class="cm">/**</span>
+<span class="cm"> * Checked conversion from integral to integral. The checks are only</span>
+<span class="cm"> * performed when meaningful, e.g. conversion from int to long goes</span>
+<span class="cm"> * unchecked.</span>
+<span class="cm"> */</span>
+<span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">Tgt</span><span class="p">,</span> <span class="n">class</span> <span class="n">Src</span><span class="o">&gt;</span>
+<span class="kr">typename</span> <span class="n">std</span><span class="o">::</span><span class="n">enable_if</span><span class="o">&lt;</span>
+  <span class="n">std</span><span class="o">::</span><span class="n">is_integral</span><span class="o">&lt;</span><span class="n">Src</span><span class="o">&gt;::</span><span class="n">value</span> <span class="o">&amp;&amp;</span> <span class="n">std</span><span class="o">::</span><span class="n">is_integral</span><span class="o">&lt;</span><span class="n">Tgt</span><span class="o">&gt;::</span><span class="n">value</span><span class="p">,</span>
+  <span class="n">Tgt</span><span class="o">&gt;::</span><span class="n">type</span>
+<span class="n">to</span><span class="p">(</span><span class="k">const</span> <span class="n">Src</span> <span class="o">&amp;</span> <span class="n">value</span><span class="p">)</span> <span class="p">{</span>
+  <span class="cm">/* static */</span> <span class="k">if</span> <span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">numeric_limits</span><span class="o">&lt;</span><span class="n">Tgt</span><span class="o">&gt;::</span><span class="n">max</span><span class="p">()</span>
+                   <span class="o">&lt;</span> <span class="n">std</span><span class="o">::</span><span class="n">numeric_limits</span><span class="o">&lt;</span><span class="n">Src</span><span class="o">&gt;::</span><span class="n">max</span><span class="p">())</span> <span class="p">{</span>
+    <span class="n">FOLLY_RANGE_CHECK</span><span class="p">(</span><span class="n">value</span> <span class="o">&lt;=</span> <span class="n">std</span><span class="o">::</span><span class="n">numeric_limits</span><span class="o">&lt;</span><span class="n">Tgt</span><span class="o">&gt;::</span><span class="n">max</span><span class="p">(),</span>
+                      <span class="s">&quot;Overflow&quot;</span><span class="p">);</span>
+  <span class="p">}</span>
+  <span class="cm">/* static */</span> <span class="k">if</span> <span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">is_signed</span><span class="o">&lt;</span><span class="n">Src</span><span class="o">&gt;::</span><span class="n">value</span> <span class="o">&amp;&amp;</span>
+                   <span class="p">(</span><span class="o">!</span><span class="n">std</span><span class="o">::</span><span class="n">is_signed</span><span class="o">&lt;</span><span class="n">Tgt</span><span class="o">&gt;::</span><span class="n">value</span> <span class="o">||</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">Src</span><span class="p">)</span> <span class="o">&gt;</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">Tgt</span><span class="p">)))</span> <span class="p">{</span>
+    <span class="n">FOLLY_RANGE_CHECK</span><span class="p">(</span><span class="n">value</span> <span class="o">&gt;=</span> <span class="n">std</span><span class="o">::</span><span class="n">numeric_limits</span><span class="o">&lt;</span><span class="n">Tgt</span><span class="o">&gt;::</span><span class="n">min</span><span class="p">(),</span>
+                      <span class="s">&quot;Negative overflow&quot;</span><span class="p">);</span>
+  <span class="p">}</span>
+  <span class="k">return</span> <span class="n">static_cast</span><span class="o">&lt;</span><span class="n">Tgt</span><span class="o">&gt;</span><span class="p">(</span><span class="n">value</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="cm">/*******************************************************************************</span>
+<span class="cm"> * Floating point to floating point</span>
+<span class="cm"> ******************************************************************************/</span>
+
+<span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">Tgt</span><span class="p">,</span> <span class="n">class</span> <span class="n">Src</span><span class="o">&gt;</span>
+<span class="kr">typename</span> <span class="n">std</span><span class="o">::</span><span class="n">enable_if</span><span class="o">&lt;</span>
+  <span class="n">std</span><span class="o">::</span><span class="n">is_floating_point</span><span class="o">&lt;</span><span class="n">Tgt</span><span class="o">&gt;::</span><span class="n">value</span> <span class="o">&amp;&amp;</span> <span class="n">std</span><span class="o">::</span><span class="n">is_floating_point</span><span class="o">&lt;</span><span class="n">Src</span><span class="o">&gt;::</span><span class="n">value</span><span class="p">,</span>
+  <span class="n">Tgt</span><span class="o">&gt;::</span><span class="n">type</span>
+<span class="n">to</span><span class="p">(</span><span class="k">const</span> <span class="n">Src</span> <span class="o">&amp;</span> <span class="n">value</span><span class="p">)</span> <span class="p">{</span>
+  <span class="cm">/* static */</span> <span class="k">if</span> <span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">numeric_limits</span><span class="o">&lt;</span><span class="n">Tgt</span><span class="o">&gt;::</span><span class="n">max</span><span class="p">()</span> <span class="o">&lt;</span>
+                   <span class="n">std</span><span class="o">::</span><span class="n">numeric_limits</span><span class="o">&lt;</span><span class="n">Src</span><span class="o">&gt;::</span><span class="n">max</span><span class="p">())</span> <span class="p">{</span>
+    <span class="n">FOLLY_RANGE_CHECK</span><span class="p">(</span><span class="n">value</span> <span class="o">&lt;=</span> <span class="n">std</span><span class="o">::</span><span class="n">numeric_limits</span><span class="o">&lt;</span><span class="n">Tgt</span><span class="o">&gt;::</span><span class="n">max</span><span class="p">(),</span>
+                      <span class="s">&quot;Overflow&quot;</span><span class="p">);</span>
+    <span class="n">FOLLY_RANGE_CHECK</span><span class="p">(</span><span class="n">value</span> <span class="o">&gt;=</span> <span class="o">-</span><span class="n">std</span><span class="o">::</span><span class="n">numeric_limits</span><span class="o">&lt;</span><span class="n">Tgt</span><span class="o">&gt;::</span><span class="n">max</span><span class="p">(),</span>
+                      <span class="s">&quot;Negative overflow&quot;</span><span class="p">);</span>
+  <span class="p">}</span>
+  <span class="k">return</span> <span class="n">boost</span><span class="o">::</span><span class="n">implicit_cast</span><span class="o">&lt;</span><span class="n">Tgt</span><span class="o">&gt;</span><span class="p">(</span><span class="n">value</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="cm">/*******************************************************************************</span>
+<span class="cm"> * Anything to string</span>
+<span class="cm"> ******************************************************************************/</span>
+
+<span class="n">namespace</span> <span class="n">detail</span> <span class="p">{</span>
+
+<span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">T</span><span class="o">&gt;</span> <span class="k">struct</span> <span class="n">IsSomeString</span> <span class="p">{</span>
+  <span class="k">enum</span> <span class="p">{</span> <span class="n">value</span> <span class="o">=</span> <span class="n">std</span><span class="o">::</span><span class="n">is_same</span><span class="o">&lt;</span><span class="n">T</span><span class="p">,</span> <span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="o">&gt;::</span><span class="n">value</span>
+         <span class="o">||</span> <span class="n">std</span><span class="o">::</span><span class="n">is_same</span><span class="o">&lt;</span><span class="n">T</span><span class="p">,</span> <span class="n">fbstring</span><span class="o">&gt;::</span><span class="n">value</span> <span class="p">};</span>
+<span class="p">};</span>
+
+<span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">T</span><span class="o">&gt;</span>
+<span class="k">const</span> <span class="n">T</span><span class="o">&amp;</span> <span class="n">getLastElement</span><span class="p">(</span><span class="k">const</span> <span class="n">T</span> <span class="o">&amp;</span> <span class="n">v</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">return</span> <span class="n">v</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">T</span><span class="p">,</span> <span class="n">class</span><span class="p">...</span> <span class="n">Ts</span><span class="o">&gt;</span>
+<span class="kr">typename</span> <span class="n">std</span><span class="o">::</span><span class="n">tuple_element</span><span class="o">&lt;</span>
+  <span class="k">sizeof</span><span class="p">...(</span><span class="n">Ts</span><span class="p">),</span>
+  <span class="n">std</span><span class="o">::</span><span class="n">tuple</span><span class="o">&lt;</span><span class="n">T</span><span class="p">,</span> <span class="n">Ts</span><span class="p">...</span><span class="o">&gt;</span> <span class="o">&gt;::</span><span class="n">type</span> <span class="k">const</span><span class="o">&amp;</span>
+  <span class="n">getLastElement</span><span class="p">(</span><span class="k">const</span> <span class="n">T</span><span class="o">&amp;</span> <span class="n">v</span><span class="p">,</span> <span class="k">const</span> <span class="n">Ts</span><span class="o">&amp;</span><span class="p">...</span> <span class="n">vs</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">return</span> <span class="n">getLastElement</span><span class="p">(</span><span class="n">vs</span><span class="p">...);</span>
+<span class="p">}</span>
+
+<span class="cm">/*******************************************************************************</span>
+<span class="cm"> * Conversions from integral types to string types.</span>
+<span class="cm"> ******************************************************************************/</span></pre></div></td></tr>
+
+
+<tr id="section-2"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-2">&#182;</a></div><p>Returns the offset of the formatted string from the start of
+the supplied buffer. The new string will be at range
+[buf+begin,buf+bufLen). Uint will be either uint32<em>t or uint64</em>t.</p></td><td class="code"><div class="highlight"><pre><span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">Uint</span><span class="o">&gt;</span>
+<span class="kt">size_t</span> <span class="n">uintToBuffer</span><span class="p">(</span><span class="kt">char</span><span class="o">*</span><span class="k">const</span> <span class="n">buffer</span><span class="p">,</span> <span class="kt">size_t</span> <span class="n">bufLen</span><span class="p">,</span> <span class="n">Uint</span> <span class="n">v</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">extern</span> <span class="k">const</span> <span class="kt">char</span> <span class="n">digit1</span><span class="p">[</span><span class="mi">101</span><span class="p">],</span> <span class="n">digit2</span><span class="p">[</span><span class="mi">101</span><span class="p">];</span>
+  <span class="k">for</span> <span class="p">(;;)</span> <span class="p">{</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">v</span> <span class="o">&lt;</span> <span class="mi">100</span><span class="p">)</span> <span class="p">{</span>
+      <span class="k">if</span> <span class="p">(</span><span class="n">v</span> <span class="o">&lt;</span> <span class="mi">10</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">buffer</span><span class="p">[</span><span class="o">--</span><span class="n">bufLen</span><span class="p">]</span> <span class="o">=</span> <span class="n">static_cast</span><span class="o">&lt;</span><span class="kt">char</span><span class="o">&gt;</span><span class="p">(</span><span class="n">v</span> <span class="o">+</span> <span class="sc">&#39;0&#39;</span><span class="p">);</span>
+      <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+        <span class="kt">size_t</span> <span class="n">r</span> <span class="o">=</span> <span class="n">static_cast</span><span class="o">&lt;</span><span class="kt">size_t</span><span class="o">&gt;</span><span class="p">(</span><span class="n">v</span><span class="p">);</span>
+        <span class="n">bufLen</span> <span class="o">-=</span> <span class="mi">2</span><span class="p">;</span>
+        <span class="n">buffer</span><span class="p">[</span><span class="n">bufLen</span><span class="p">]</span> <span class="o">=</span> <span class="n">digit1</span><span class="p">[</span><span class="n">r</span><span class="p">];</span>
+        <span class="n">buffer</span><span class="p">[</span><span class="n">bufLen</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="n">digit2</span><span class="p">[</span><span class="n">r</span><span class="p">];</span>
+      <span class="p">}</span>
+      <span class="k">break</span><span class="p">;</span>
+    <span class="p">}</span>
+    <span class="n">Uint</span> <span class="n">t</span> <span class="o">=</span> <span class="n">v</span><span class="p">;</span>
+    <span class="n">v</span> <span class="o">/=</span> <span class="mi">100</span><span class="p">;</span>
+    <span class="kt">size_t</span> <span class="n">r</span> <span class="o">=</span> <span class="n">static_cast</span><span class="o">&lt;</span><span class="kt">size_t</span><span class="o">&gt;</span> <span class="p">(</span><span class="n">t</span> <span class="o">-</span> <span class="n">v</span> <span class="o">*</span> <span class="mi">100</span><span class="p">);</span>
+    <span class="n">bufLen</span> <span class="o">-=</span> <span class="mi">2</span><span class="p">;</span>
+    <span class="n">buffer</span><span class="p">[</span><span class="n">bufLen</span><span class="p">]</span> <span class="o">=</span> <span class="n">digit1</span><span class="p">[</span><span class="n">r</span><span class="p">];</span>
+    <span class="n">buffer</span><span class="p">[</span><span class="n">bufLen</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="n">digit2</span><span class="p">[</span><span class="n">r</span><span class="p">];</span>
+  <span class="p">}</span>
+  <span class="k">return</span> <span class="n">bufLen</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="k">const</span> <span class="kt">size_t</span> <span class="n">kMaxInt64BufLen</span> <span class="o">=</span> <span class="mi">21</span><span class="p">;</span><span class="c1">// 19 + 1 for possible &#39;-&#39; sign + 1 for \0</span>
+
+<span class="p">}</span>                                 <span class="c1">// namespace detail</span>
+
+<span class="cm">/**</span>
+<span class="cm"> * A single char gets appended.</span>
+<span class="cm"> */</span>
+<span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">Tgt</span><span class="o">&gt;</span>
+<span class="kt">void</span> <span class="n">toAppend</span><span class="p">(</span><span class="kt">char</span> <span class="n">value</span><span class="p">,</span> <span class="n">Tgt</span> <span class="o">*</span> <span class="n">result</span><span class="p">)</span> <span class="p">{</span>
+  <span class="o">*</span><span class="n">result</span> <span class="o">+=</span> <span class="n">value</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="cm">/**</span>
+<span class="cm"> * Everything implicitly convertible to const char* gets appended.</span>
+<span class="cm"> */</span>
+<span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">Tgt</span><span class="p">,</span> <span class="n">class</span> <span class="n">Src</span><span class="o">&gt;</span>
+<span class="kr">typename</span> <span class="n">std</span><span class="o">::</span><span class="n">enable_if</span><span class="o">&lt;</span>
+  <span class="n">std</span><span class="o">::</span><span class="n">is_convertible</span><span class="o">&lt;</span><span class="n">Src</span><span class="p">,</span> <span class="k">const</span> <span class="kt">char</span><span class="o">*&gt;::</span><span class="n">value</span>
+  <span class="o">&amp;&amp;</span> <span class="n">detail</span><span class="o">::</span><span class="n">IsSomeString</span><span class="o">&lt;</span><span class="n">Tgt</span><span class="o">&gt;::</span><span class="n">value</span><span class="o">&gt;::</span><span class="n">type</span>
+<span class="n">toAppend</span><span class="p">(</span><span class="n">Src</span> <span class="n">value</span><span class="p">,</span> <span class="n">Tgt</span> <span class="o">*</span> <span class="n">result</span><span class="p">)</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-3"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-3">&#182;</a></div><p>Treat null pointers like an empty string, as in:
+operator&lt;&lt;(std::ostream&amp;, const char*).</p></td><td class="code"><div class="highlight"><pre>  <span class="k">const</span> <span class="kt">char</span><span class="o">*</span> <span class="n">c</span> <span class="o">=</span> <span class="n">value</span><span class="p">;</span>
+  <span class="k">if</span> <span class="p">(</span><span class="n">c</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">result</span><span class="o">-&gt;</span><span class="n">append</span><span class="p">(</span><span class="n">value</span><span class="p">);</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="cm">/**</span>
+<span class="cm"> * Strings get appended, too.</span>
+<span class="cm"> */</span>
+<span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">Tgt</span><span class="p">,</span> <span class="n">class</span> <span class="n">Src</span><span class="o">&gt;</span>
+<span class="kr">typename</span> <span class="n">std</span><span class="o">::</span><span class="n">enable_if</span><span class="o">&lt;</span>
+  <span class="n">detail</span><span class="o">::</span><span class="n">IsSomeString</span><span class="o">&lt;</span><span class="n">Src</span><span class="o">&gt;::</span><span class="n">value</span> <span class="o">&amp;&amp;</span> <span class="n">detail</span><span class="o">::</span><span class="n">IsSomeString</span><span class="o">&lt;</span><span class="n">Tgt</span><span class="o">&gt;::</span><span class="n">value</span><span class="o">&gt;::</span><span class="n">type</span>
+<span class="n">toAppend</span><span class="p">(</span><span class="k">const</span> <span class="n">Src</span><span class="o">&amp;</span> <span class="n">value</span><span class="p">,</span> <span class="n">Tgt</span> <span class="o">*</span> <span class="n">result</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">result</span><span class="o">-&gt;</span><span class="n">append</span><span class="p">(</span><span class="n">value</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="cm">/**</span>
+<span class="cm"> * and StringPiece objects too</span>
+<span class="cm"> */</span>
+<span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">Tgt</span><span class="o">&gt;</span>
+<span class="kr">typename</span> <span class="n">std</span><span class="o">::</span><span class="n">enable_if</span><span class="o">&lt;</span>
+   <span class="n">detail</span><span class="o">::</span><span class="n">IsSomeString</span><span class="o">&lt;</span><span class="n">Tgt</span><span class="o">&gt;::</span><span class="n">value</span><span class="o">&gt;::</span><span class="n">type</span>
+<span class="n">toAppend</span><span class="p">(</span><span class="n">StringPiece</span> <span class="n">value</span><span class="p">,</span> <span class="n">Tgt</span> <span class="o">*</span> <span class="n">result</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">result</span><span class="o">-&gt;</span><span class="n">append</span><span class="p">(</span><span class="n">value</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span> <span class="n">value</span><span class="p">.</span><span class="n">size</span><span class="p">());</span>
+<span class="p">}</span>
+
+<span class="cm">/**</span>
+<span class="cm"> * There&#39;s no implicit conversion from fbstring to other string types,</span>
+<span class="cm"> * so make a specialization.</span>
+<span class="cm"> */</span>
+<span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">Tgt</span><span class="o">&gt;</span>
+<span class="kr">typename</span> <span class="n">std</span><span class="o">::</span><span class="n">enable_if</span><span class="o">&lt;</span>
+   <span class="n">detail</span><span class="o">::</span><span class="n">IsSomeString</span><span class="o">&lt;</span><span class="n">Tgt</span><span class="o">&gt;::</span><span class="n">value</span><span class="o">&gt;::</span><span class="n">type</span>
+<span class="n">toAppend</span><span class="p">(</span><span class="k">const</span> <span class="n">fbstring</span><span class="o">&amp;</span> <span class="n">value</span><span class="p">,</span> <span class="n">Tgt</span> <span class="o">*</span> <span class="n">result</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">result</span><span class="o">-&gt;</span><span class="n">append</span><span class="p">(</span><span class="n">value</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span> <span class="n">value</span><span class="p">.</span><span class="n">size</span><span class="p">());</span>
+<span class="p">}</span>
+
+<span class="cm">/**</span>
+<span class="cm"> * int32_t and int64_t to string (by appending) go through here. The</span>
+<span class="cm"> * result is APPENDED to a preexisting string passed as the second</span>
+<span class="cm"> * parameter. For convenience, the function also returns a reference</span>
+<span class="cm"> * to *result. This should be efficient with fbstring because fbstring</span>
+<span class="cm"> * incurs no dynamic allocation below 23 bytes and no number has more</span>
+<span class="cm"> * than 22 bytes in its textual representation (20 for digits, one for</span>
+<span class="cm"> * sign, one for the terminating 0).</span>
+<span class="cm"> */</span>
+<span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">Tgt</span><span class="p">,</span> <span class="n">class</span> <span class="n">Src</span><span class="o">&gt;</span>
+<span class="kr">typename</span> <span class="n">std</span><span class="o">::</span><span class="n">enable_if</span><span class="o">&lt;</span>
+  <span class="n">std</span><span class="o">::</span><span class="n">is_integral</span><span class="o">&lt;</span><span class="n">Src</span><span class="o">&gt;::</span><span class="n">value</span> <span class="o">&amp;&amp;</span> <span class="n">std</span><span class="o">::</span><span class="n">is_signed</span><span class="o">&lt;</span><span class="n">Src</span><span class="o">&gt;::</span><span class="n">value</span>
+  <span class="o">&amp;&amp;</span> <span class="n">detail</span><span class="o">::</span><span class="n">IsSomeString</span><span class="o">&lt;</span><span class="n">Tgt</span><span class="o">&gt;::</span><span class="n">value</span> <span class="o">&amp;&amp;</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">Src</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="mi">4</span><span class="o">&gt;::</span><span class="n">type</span>
+<span class="n">toAppend</span><span class="p">(</span><span class="n">Src</span> <span class="n">value</span><span class="p">,</span> <span class="n">Tgt</span> <span class="o">*</span> <span class="n">result</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">typedef</span> <span class="kr">typename</span> <span class="n">std</span><span class="o">::</span><span class="n">make_unsigned</span><span class="o">&lt;</span><span class="n">Src</span><span class="o">&gt;::</span><span class="n">type</span> <span class="n">Usrc</span><span class="p">;</span>
+  <span class="kt">char</span> <span class="n">buffer</span><span class="p">[</span><span class="n">detail</span><span class="o">::</span><span class="n">kMaxInt64BufLen</span><span class="p">];</span>
+  <span class="kt">size_t</span> <span class="n">begin</span><span class="p">;</span>
+  <span class="k">if</span> <span class="p">(</span><span class="n">value</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">begin</span> <span class="o">=</span> <span class="n">detail</span><span class="o">::</span><span class="n">uintToBuffer</span><span class="p">(</span><span class="n">buffer</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">buffer</span><span class="p">),</span>
+                                 <span class="n">static_cast</span><span class="o">&lt;</span><span class="n">Usrc</span><span class="o">&gt;</span><span class="p">(</span><span class="o">-</span><span class="n">value</span><span class="p">));</span>
+    <span class="n">DCHECK_GE</span><span class="p">(</span><span class="n">begin</span><span class="p">,</span> <span class="mi">1</span><span class="p">);</span>
+    <span class="n">buffer</span><span class="p">[</span><span class="o">--</span><span class="n">begin</span><span class="p">]</span> <span class="o">=</span> <span class="sc">&#39;-&#39;</span><span class="p">;</span>
+  <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+    <span class="n">begin</span> <span class="o">=</span> <span class="n">detail</span><span class="o">::</span><span class="n">uintToBuffer</span><span class="p">(</span><span class="n">buffer</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">buffer</span><span class="p">),</span>
+                                 <span class="n">static_cast</span><span class="o">&lt;</span><span class="n">Usrc</span><span class="o">&gt;</span><span class="p">(</span><span class="n">value</span><span class="p">));</span>
+  <span class="p">}</span>
+  <span class="n">result</span><span class="o">-&gt;</span><span class="n">append</span><span class="p">(</span><span class="n">buffer</span> <span class="o">+</span> <span class="n">begin</span><span class="p">,</span> <span class="n">buffer</span> <span class="o">+</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">buffer</span><span class="p">));</span>
+<span class="p">}</span>
+
+<span class="cm">/**</span>
+<span class="cm"> * As above, but for uint32_t and uint64_t.</span>
+<span class="cm"> */</span>
+<span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">Tgt</span><span class="p">,</span> <span class="n">class</span> <span class="n">Src</span><span class="o">&gt;</span>
+<span class="kr">typename</span> <span class="n">std</span><span class="o">::</span><span class="n">enable_if</span><span class="o">&lt;</span>
+  <span class="n">std</span><span class="o">::</span><span class="n">is_integral</span><span class="o">&lt;</span><span class="n">Src</span><span class="o">&gt;::</span><span class="n">value</span> <span class="o">&amp;&amp;</span> <span class="o">!</span><span class="n">std</span><span class="o">::</span><span class="n">is_signed</span><span class="o">&lt;</span><span class="n">Src</span><span class="o">&gt;::</span><span class="n">value</span>
+  <span class="o">&amp;&amp;</span> <span class="n">detail</span><span class="o">::</span><span class="n">IsSomeString</span><span class="o">&lt;</span><span class="n">Tgt</span><span class="o">&gt;::</span><span class="n">value</span> <span class="o">&amp;&amp;</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">Src</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="mi">4</span><span class="o">&gt;::</span><span class="n">type</span>
+<span class="n">toAppend</span><span class="p">(</span><span class="n">Src</span> <span class="n">value</span><span class="p">,</span> <span class="n">Tgt</span> <span class="o">*</span> <span class="n">result</span><span class="p">)</span> <span class="p">{</span>
+  <span class="kt">char</span> <span class="n">buffer</span><span class="p">[</span><span class="n">detail</span><span class="o">::</span><span class="n">kMaxInt64BufLen</span><span class="p">];</span>
+  <span class="k">const</span> <span class="kt">size_t</span> <span class="n">begin</span> <span class="o">=</span> <span class="n">detail</span><span class="o">::</span><span class="n">uintToBuffer</span><span class="p">(</span><span class="n">buffer</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">buffer</span><span class="p">),</span> <span class="n">value</span><span class="p">);</span>
+  <span class="n">result</span><span class="o">-&gt;</span><span class="n">append</span><span class="p">(</span><span class="n">buffer</span> <span class="o">+</span> <span class="n">begin</span><span class="p">,</span> <span class="n">buffer</span> <span class="o">+</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">buffer</span><span class="p">));</span>
+<span class="p">}</span>
+
+<span class="cm">/**</span>
+<span class="cm"> * All small signed and unsigned integers to string go through 32-bit</span>
+<span class="cm"> * types int32_t and uint32_t, respectively.</span>
+<span class="cm"> */</span>
+<span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">Tgt</span><span class="p">,</span> <span class="n">class</span> <span class="n">Src</span><span class="o">&gt;</span>
+<span class="kr">typename</span> <span class="n">std</span><span class="o">::</span><span class="n">enable_if</span><span class="o">&lt;</span>
+  <span class="n">std</span><span class="o">::</span><span class="n">is_integral</span><span class="o">&lt;</span><span class="n">Src</span><span class="o">&gt;::</span><span class="n">value</span>
+  <span class="o">&amp;&amp;</span> <span class="n">detail</span><span class="o">::</span><span class="n">IsSomeString</span><span class="o">&lt;</span><span class="n">Tgt</span><span class="o">&gt;::</span><span class="n">value</span> <span class="o">&amp;&amp;</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">Src</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">4</span><span class="o">&gt;::</span><span class="n">type</span>
+<span class="n">toAppend</span><span class="p">(</span><span class="n">Src</span> <span class="n">value</span><span class="p">,</span> <span class="n">Tgt</span> <span class="o">*</span> <span class="n">result</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">typedef</span> <span class="kr">typename</span>
+    <span class="n">std</span><span class="o">::</span><span class="n">conditional</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">is_signed</span><span class="o">&lt;</span><span class="n">Src</span><span class="o">&gt;::</span><span class="n">value</span><span class="p">,</span> <span class="kt">int64_t</span><span class="p">,</span> <span class="kt">uint64_t</span><span class="o">&gt;::</span><span class="n">type</span>
+    <span class="n">Intermediate</span><span class="p">;</span>
+  <span class="n">toAppend</span><span class="o">&lt;</span><span class="n">Tgt</span><span class="o">&gt;</span><span class="p">(</span><span class="n">static_cast</span><span class="o">&lt;</span><span class="n">Intermediate</span><span class="o">&gt;</span><span class="p">(</span><span class="n">value</span><span class="p">),</span> <span class="n">result</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="cm">/**</span>
+<span class="cm"> * Enumerated values get appended as integers.</span>
+<span class="cm"> */</span>
+<span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">Tgt</span><span class="p">,</span> <span class="n">class</span> <span class="n">Src</span><span class="o">&gt;</span>
+<span class="kr">typename</span> <span class="n">std</span><span class="o">::</span><span class="n">enable_if</span><span class="o">&lt;</span>
+  <span class="n">std</span><span class="o">::</span><span class="n">is_enum</span><span class="o">&lt;</span><span class="n">Src</span><span class="o">&gt;::</span><span class="n">value</span> <span class="o">&amp;&amp;</span> <span class="n">detail</span><span class="o">::</span><span class="n">IsSomeString</span><span class="o">&lt;</span><span class="n">Tgt</span><span class="o">&gt;::</span><span class="n">value</span><span class="o">&gt;::</span><span class="n">type</span>
+<span class="n">toAppend</span><span class="p">(</span><span class="n">Src</span> <span class="n">value</span><span class="p">,</span> <span class="n">Tgt</span> <span class="o">*</span> <span class="n">result</span><span class="p">)</span> <span class="p">{</span>
+  <span class="cm">/* static */</span> <span class="k">if</span> <span class="p">(</span><span class="n">Src</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+    <span class="cm">/* static */</span> <span class="k">if</span> <span class="p">(</span><span class="k">sizeof</span><span class="p">(</span><span class="n">Src</span><span class="p">)</span> <span class="o">&lt;=</span> <span class="k">sizeof</span><span class="p">(</span><span class="kt">int</span><span class="p">))</span> <span class="p">{</span>
+      <span class="n">toAppend</span><span class="p">(</span><span class="n">static_cast</span><span class="o">&lt;</span><span class="kt">int</span><span class="o">&gt;</span><span class="p">(</span><span class="n">value</span><span class="p">),</span> <span class="n">result</span><span class="p">);</span>
+    <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+      <span class="n">toAppend</span><span class="p">(</span><span class="n">static_cast</span><span class="o">&lt;</span><span class="kt">long</span><span class="o">&gt;</span><span class="p">(</span><span class="n">value</span><span class="p">),</span> <span class="n">result</span><span class="p">);</span>
+    <span class="p">}</span>
+  <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+    <span class="cm">/* static */</span> <span class="k">if</span> <span class="p">(</span><span class="k">sizeof</span><span class="p">(</span><span class="n">Src</span><span class="p">)</span> <span class="o">&lt;=</span> <span class="k">sizeof</span><span class="p">(</span><span class="kt">int</span><span class="p">))</span> <span class="p">{</span>
+      <span class="n">toAppend</span><span class="p">(</span><span class="n">static_cast</span><span class="o">&lt;</span><span class="kt">unsigned</span> <span class="kt">int</span><span class="o">&gt;</span><span class="p">(</span><span class="n">value</span><span class="p">),</span> <span class="n">result</span><span class="p">);</span>
+    <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+      <span class="n">toAppend</span><span class="p">(</span><span class="n">static_cast</span><span class="o">&lt;</span><span class="kt">unsigned</span> <span class="kt">long</span><span class="o">&gt;</span><span class="p">(</span><span class="n">value</span><span class="p">),</span> <span class="n">result</span><span class="p">);</span>
+    <span class="p">}</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="cm">/*******************************************************************************</span>
+<span class="cm"> * Conversions from floating-point types to string types.</span>
+<span class="cm"> ******************************************************************************/</span>
+
+<span class="cm">/** Wrapper around DoubleToStringConverter **/</span>
+<span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">Tgt</span><span class="p">,</span> <span class="n">class</span> <span class="n">Src</span><span class="o">&gt;</span>
+<span class="kr">typename</span> <span class="n">std</span><span class="o">::</span><span class="n">enable_if</span><span class="o">&lt;</span>
+  <span class="n">std</span><span class="o">::</span><span class="n">is_floating_point</span><span class="o">&lt;</span><span class="n">Src</span><span class="o">&gt;::</span><span class="n">value</span>
+  <span class="o">&amp;&amp;</span> <span class="n">detail</span><span class="o">::</span><span class="n">IsSomeString</span><span class="o">&lt;</span><span class="n">Tgt</span><span class="o">&gt;::</span><span class="n">value</span><span class="o">&gt;::</span><span class="n">type</span>
+<span class="n">toAppend</span><span class="p">(</span>
+  <span class="n">Src</span> <span class="n">value</span><span class="p">,</span>
+  <span class="n">Tgt</span> <span class="o">*</span> <span class="n">result</span><span class="p">,</span>
+  <span class="n">double_conversion</span><span class="o">::</span><span class="n">DoubleToStringConverter</span><span class="o">::</span><span class="n">DtoaMode</span> <span class="n">mode</span><span class="p">,</span>
+  <span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">numDigits</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">using</span> <span class="n">namespace</span> <span class="n">double_conversion</span><span class="p">;</span>
+  <span class="n">DoubleToStringConverter</span>
+    <span class="n">conv</span><span class="p">(</span><span class="n">DoubleToStringConverter</span><span class="o">::</span><span class="n">NO_FLAGS</span><span class="p">,</span>
+         <span class="s">&quot;infinity&quot;</span><span class="p">,</span> <span class="s">&quot;NaN&quot;</span><span class="p">,</span> <span class="sc">&#39;E&#39;</span><span class="p">,</span>
+         <span class="o">-</span><span class="mi">6</span><span class="p">,</span>  <span class="c1">// decimal in shortest low</span>
+         <span class="mi">21</span><span class="p">,</span>  <span class="c1">// decimal in shortest high</span>
+         <span class="mi">6</span><span class="p">,</span>   <span class="c1">// max leading padding zeros</span>
+         <span class="mi">1</span><span class="p">);</span>  <span class="c1">// max trailing padding zeros</span>
+  <span class="kt">char</span> <span class="n">buffer</span><span class="p">[</span><span class="mi">256</span><span class="p">];</span>
+  <span class="n">StringBuilder</span> <span class="n">builder</span><span class="p">(</span><span class="n">buffer</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">buffer</span><span class="p">));</span>
+  <span class="k">switch</span> <span class="p">(</span><span class="n">mode</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">case</span> <span class="n">DoubleToStringConverter</span>:<span class="o">:</span><span class="n">SHORTEST</span><span class="o">:</span>
+      <span class="n">conv</span><span class="p">.</span><span class="n">ToShortest</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">builder</span><span class="p">);</span>
+      <span class="k">break</span><span class="p">;</span>
+    <span class="k">case</span> <span class="n">DoubleToStringConverter</span>:<span class="o">:</span><span class="n">FIXED</span><span class="o">:</span>
+      <span class="n">conv</span><span class="p">.</span><span class="n">ToFixed</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">numDigits</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">builder</span><span class="p">);</span>
+      <span class="k">break</span><span class="p">;</span>
+    <span class="nl">default:</span>
+      <span class="n">CHECK</span><span class="p">(</span><span class="n">mode</span> <span class="o">==</span> <span class="n">DoubleToStringConverter</span><span class="o">::</span><span class="n">PRECISION</span><span class="p">);</span>
+      <span class="n">conv</span><span class="p">.</span><span class="n">ToPrecision</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">numDigits</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">builder</span><span class="p">);</span>
+      <span class="k">break</span><span class="p">;</span>
+  <span class="p">}</span>
+  <span class="k">const</span> <span class="kt">size_t</span> <span class="n">length</span> <span class="o">=</span> <span class="n">builder</span><span class="p">.</span><span class="n">position</span><span class="p">();</span>
+  <span class="n">builder</span><span class="p">.</span><span class="n">Finalize</span><span class="p">();</span>
+  <span class="n">result</span><span class="o">-&gt;</span><span class="n">append</span><span class="p">(</span><span class="n">buffer</span><span class="p">,</span> <span class="n">length</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="cm">/**</span>
+<span class="cm"> * As above, but for floating point</span>
+<span class="cm"> */</span>
+<span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">Tgt</span><span class="p">,</span> <span class="n">class</span> <span class="n">Src</span><span class="o">&gt;</span>
+<span class="kr">typename</span> <span class="n">std</span><span class="o">::</span><span class="n">enable_if</span><span class="o">&lt;</span>
+  <span class="n">std</span><span class="o">::</span><span class="n">is_floating_point</span><span class="o">&lt;</span><span class="n">Src</span><span class="o">&gt;::</span><span class="n">value</span>
+  <span class="o">&amp;&amp;</span> <span class="n">detail</span><span class="o">::</span><span class="n">IsSomeString</span><span class="o">&lt;</span><span class="n">Tgt</span><span class="o">&gt;::</span><span class="n">value</span><span class="o">&gt;::</span><span class="n">type</span>
+<span class="n">toAppend</span><span class="p">(</span><span class="n">Src</span> <span class="n">value</span><span class="p">,</span> <span class="n">Tgt</span> <span class="o">*</span> <span class="n">result</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">toAppend</span><span class="p">(</span>
+    <span class="n">value</span><span class="p">,</span> <span class="n">result</span><span class="p">,</span> <span class="n">double_conversion</span><span class="o">::</span><span class="n">DoubleToStringConverter</span><span class="o">::</span><span class="n">SHORTEST</span><span class="p">,</span> <span class="mi">0</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="cm">/**</span>
+<span class="cm"> * Variadic conversion to string. Appends each element in turn.</span>
+<span class="cm"> */</span>
+<span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">T</span><span class="p">,</span> <span class="n">class</span><span class="p">...</span> <span class="n">Ts</span><span class="o">&gt;</span>
+<span class="kr">typename</span> <span class="n">std</span><span class="o">::</span><span class="n">enable_if</span><span class="o">&lt;</span><span class="k">sizeof</span><span class="p">...(</span><span class="n">Ts</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="mi">2</span>
+  <span class="o">&amp;&amp;</span> <span class="n">detail</span><span class="o">::</span><span class="n">IsSomeString</span><span class="o">&lt;</span>
+  <span class="kr">typename</span> <span class="n">std</span><span class="o">::</span><span class="n">remove_pointer</span><span class="o">&lt;</span>
+    <span class="kr">typename</span> <span class="n">std</span><span class="o">::</span><span class="n">tuple_element</span><span class="o">&lt;</span>
+      <span class="k">sizeof</span><span class="p">...(</span><span class="n">Ts</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span><span class="p">,</span> <span class="n">std</span><span class="o">::</span><span class="n">tuple</span><span class="o">&lt;</span><span class="n">Ts</span><span class="p">...</span><span class="o">&gt;</span>
+      <span class="o">&gt;::</span><span class="n">type</span><span class="o">&gt;::</span><span class="n">type</span><span class="o">&gt;::</span><span class="n">value</span><span class="o">&gt;::</span><span class="n">type</span>
+<span class="n">toAppend</span><span class="p">(</span><span class="k">const</span> <span class="n">T</span><span class="o">&amp;</span> <span class="n">v</span><span class="p">,</span> <span class="k">const</span> <span class="n">Ts</span><span class="o">&amp;</span><span class="p">...</span> <span class="n">vs</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">toAppend</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="n">detail</span><span class="o">::</span><span class="n">getLastElement</span><span class="p">(</span><span class="n">vs</span><span class="p">...));</span>
+  <span class="n">toAppend</span><span class="p">(</span><span class="n">vs</span><span class="p">...);</span>
+<span class="p">}</span>
+
+<span class="cm">/**</span>
+<span class="cm"> * Variadic base case: do nothing.</span>
+<span class="cm"> */</span>
+<span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">Tgt</span><span class="o">&gt;</span>
+<span class="kr">typename</span> <span class="n">std</span><span class="o">::</span><span class="n">enable_if</span><span class="o">&lt;</span><span class="n">detail</span><span class="o">::</span><span class="n">IsSomeString</span><span class="o">&lt;</span><span class="n">Tgt</span><span class="o">&gt;::</span><span class="n">value</span><span class="o">&gt;::</span><span class="n">type</span>
+<span class="n">toAppend</span><span class="p">(</span><span class="n">Tgt</span><span class="o">*</span> <span class="n">result</span><span class="p">)</span> <span class="p">{</span>
+<span class="p">}</span>
+
+<span class="cm">/**</span>
+<span class="cm"> * to&lt;SomeString&gt;(v1, v2, ...) uses toAppend() (see below) as back-end</span>
+<span class="cm"> * for all types.</span>
+<span class="cm"> */</span>
+<span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">Tgt</span><span class="p">,</span> <span class="n">class</span><span class="p">...</span> <span class="n">Ts</span><span class="o">&gt;</span>
+<span class="kr">typename</span> <span class="n">std</span><span class="o">::</span><span class="n">enable_if</span><span class="o">&lt;</span><span class="n">detail</span><span class="o">::</span><span class="n">IsSomeString</span><span class="o">&lt;</span><span class="n">Tgt</span><span class="o">&gt;::</span><span class="n">value</span><span class="p">,</span> <span class="n">Tgt</span><span class="o">&gt;::</span><span class="n">type</span>
+<span class="n">to</span><span class="p">(</span><span class="k">const</span> <span class="n">Ts</span><span class="o">&amp;</span><span class="p">...</span> <span class="n">vs</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">Tgt</span> <span class="n">result</span><span class="p">;</span>
+  <span class="n">toAppend</span><span class="p">(</span><span class="n">vs</span><span class="p">...,</span> <span class="o">&amp;</span><span class="n">result</span><span class="p">);</span>
+  <span class="k">return</span> <span class="n">result</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="cm">/*******************************************************************************</span>
+<span class="cm"> * Conversions from string types to integral types.</span>
+<span class="cm"> ******************************************************************************/</span>
+
+<span class="n">namespace</span> <span class="n">detail</span> <span class="p">{</span>
+
+<span class="cm">/**</span>
+<span class="cm"> * Finds the first non-digit in a string. The number of digits</span>
+<span class="cm"> * searched depends on the precision of the Tgt integral. Assumes the</span>
+<span class="cm"> * string starts with NO whitespace and NO sign.</span>
+<span class="cm"> *</span>
+<span class="cm"> * The semantics of the routine is:</span>
+<span class="cm"> *   for (;; ++b) {</span>
+<span class="cm"> *     if (b &gt;= e || !isdigit(*b)) return b;</span>
+<span class="cm"> *   }</span>
+<span class="cm"> *</span>
+<span class="cm"> *  Complete unrolling marks bottom-line (i.e. entire conversion)</span>
+<span class="cm"> *  improvements of 20%.</span>
+<span class="cm"> */</span>
+  <span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">Tgt</span><span class="o">&gt;</span>
+  <span class="k">const</span> <span class="kt">char</span><span class="o">*</span> <span class="n">findFirstNonDigit</span><span class="p">(</span><span class="k">const</span> <span class="kt">char</span><span class="o">*</span> <span class="n">b</span><span class="p">,</span> <span class="k">const</span> <span class="kt">char</span><span class="o">*</span> <span class="n">e</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">for</span> <span class="p">(;</span> <span class="n">b</span> <span class="o">&lt;</span> <span class="n">e</span><span class="p">;</span> <span class="o">++</span><span class="n">b</span><span class="p">)</span> <span class="p">{</span>
+      <span class="k">auto</span> <span class="k">const</span> <span class="n">c</span> <span class="o">=</span> <span class="n">static_cast</span><span class="o">&lt;</span><span class="kt">unsigned</span><span class="o">&gt;</span><span class="p">(</span><span class="o">*</span><span class="n">b</span><span class="p">)</span> <span class="o">-</span> <span class="sc">&#39;0&#39;</span><span class="p">;</span>
+      <span class="k">if</span> <span class="p">(</span><span class="n">c</span> <span class="o">&gt;=</span> <span class="mi">10</span><span class="p">)</span> <span class="k">break</span><span class="p">;</span>
+    <span class="p">}</span>
+    <span class="k">return</span> <span class="n">b</span><span class="p">;</span>
+  <span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-4"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-4">&#182;</a></div><p>Maximum value of number when represented as a string</p></td><td class="code"><div class="highlight"><pre>  <span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">T</span><span class="o">&gt;</span> <span class="k">struct</span> <span class="n">MaxString</span> <span class="p">{</span>
+    <span class="k">static</span> <span class="k">const</span> <span class="kt">char</span><span class="o">*</span><span class="k">const</span> <span class="n">value</span><span class="p">;</span>
+  <span class="p">};</span>
+
+<span class="cm">/**</span>
+<span class="cm"> * String represented as a pair of pointers to char to unsigned</span>
+<span class="cm"> * integrals. Assumes NO whitespace before or after, and also that the</span>
+<span class="cm"> * string is composed entirely of digits. Tgt must be unsigned, and no</span>
+<span class="cm"> * sign is allowed in the string (even it&#39;s &#39;+&#39;). String may be empty,</span>
+<span class="cm"> * in which case digits_to throws.</span>
+<span class="cm"> */</span>
+  <span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">Tgt</span><span class="o">&gt;</span>
+  <span class="n">Tgt</span> <span class="n">digits_to</span><span class="p">(</span><span class="k">const</span> <span class="kt">char</span> <span class="o">*</span> <span class="n">b</span><span class="p">,</span> <span class="k">const</span> <span class="kt">char</span> <span class="o">*</span> <span class="n">e</span><span class="p">)</span> <span class="p">{</span>
+
+    <span class="n">static_assert</span><span class="p">(</span><span class="o">!</span><span class="n">std</span><span class="o">::</span><span class="n">is_signed</span><span class="o">&lt;</span><span class="n">Tgt</span><span class="o">&gt;::</span><span class="n">value</span><span class="p">,</span> <span class="s">&quot;Unsigned type expected&quot;</span><span class="p">);</span>
+    <span class="n">assert</span><span class="p">(</span><span class="n">b</span> <span class="o">&lt;=</span> <span class="n">e</span><span class="p">);</span>
+
+    <span class="k">const</span> <span class="kt">size_t</span> <span class="n">size</span> <span class="o">=</span> <span class="n">e</span> <span class="o">-</span> <span class="n">b</span><span class="p">;</span>
+
+    <span class="cm">/* Although the string is entirely made of digits, we still need to</span>
+<span class="cm">     * check for overflow.</span>
+<span class="cm">     */</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">size</span> <span class="o">&gt;=</span> <span class="n">std</span><span class="o">::</span><span class="n">numeric_limits</span><span class="o">&lt;</span><span class="n">Tgt</span><span class="o">&gt;::</span><span class="n">digits10</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-5"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-5">&#182;</a></div><p>Leading zeros? If so, recurse to keep things simple</p></td><td class="code"><div class="highlight"><pre>      <span class="k">if</span> <span class="p">(</span><span class="n">b</span> <span class="o">&lt;</span> <span class="n">e</span> <span class="o">&amp;&amp;</span> <span class="o">*</span><span class="n">b</span> <span class="o">==</span> <span class="sc">&#39;0&#39;</span><span class="p">)</span> <span class="p">{</span>
+        <span class="k">for</span> <span class="p">(</span><span class="o">++</span><span class="n">b</span><span class="p">;;</span> <span class="o">++</span><span class="n">b</span><span class="p">)</span> <span class="p">{</span>
+          <span class="k">if</span> <span class="p">(</span><span class="n">b</span> <span class="o">==</span> <span class="n">e</span><span class="p">)</span> <span class="k">return</span> <span class="mi">0</span><span class="p">;</span> <span class="c1">// just zeros, e.g. &quot;0000&quot;</span>
+          <span class="k">if</span> <span class="p">(</span><span class="o">*</span><span class="n">b</span> <span class="o">!=</span> <span class="sc">&#39;0&#39;</span><span class="p">)</span> <span class="k">return</span> <span class="n">digits_to</span><span class="o">&lt;</span><span class="n">Tgt</span><span class="o">&gt;</span><span class="p">(</span><span class="n">b</span><span class="p">,</span> <span class="n">e</span><span class="p">);</span>
+        <span class="p">}</span>
+      <span class="p">}</span>
+      <span class="n">FOLLY_RANGE_CHECK</span><span class="p">(</span><span class="n">size</span> <span class="o">==</span> <span class="n">std</span><span class="o">::</span><span class="n">numeric_limits</span><span class="o">&lt;</span><span class="n">Tgt</span><span class="o">&gt;::</span><span class="n">digits10</span> <span class="o">+</span> <span class="mi">1</span> <span class="o">&amp;&amp;</span>
+                        <span class="n">strncmp</span><span class="p">(</span><span class="n">b</span><span class="p">,</span> <span class="n">detail</span><span class="o">::</span><span class="n">MaxString</span><span class="o">&lt;</span><span class="n">Tgt</span><span class="o">&gt;::</span><span class="n">value</span><span class="p">,</span> <span class="n">size</span><span class="p">)</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">,</span>
+                        <span class="s">&quot;Numeric overflow upon conversion&quot;</span><span class="p">);</span>
+    <span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-6"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-6">&#182;</a></div><p>Here we know that the number won't overflow when
+converted. Proceed without checks.</p></td><td class="code"><div class="highlight"><pre>    <span class="k">static</span> <span class="k">const</span> <span class="n">Tgt</span> <span class="n">power10</span><span class="p">[</span><span class="mi">20</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
+      <span class="n">static_cast</span><span class="o">&lt;</span><span class="n">Tgt</span><span class="o">&gt;</span><span class="p">(</span><span class="mi">10000000000000000000UL</span><span class="p">),</span>
+      <span class="n">static_cast</span><span class="o">&lt;</span><span class="n">Tgt</span><span class="o">&gt;</span><span class="p">(</span><span class="mi">1000000000000000000UL</span><span class="p">),</span>
+      <span class="n">static_cast</span><span class="o">&lt;</span><span class="n">Tgt</span><span class="o">&gt;</span><span class="p">(</span><span class="mi">100000000000000000UL</span><span class="p">),</span>
+      <span class="n">static_cast</span><span class="o">&lt;</span><span class="n">Tgt</span><span class="o">&gt;</span><span class="p">(</span><span class="mi">10000000000000000UL</span><span class="p">),</span>
+      <span class="n">static_cast</span><span class="o">&lt;</span><span class="n">Tgt</span><span class="o">&gt;</span><span class="p">(</span><span class="mi">1000000000000000UL</span><span class="p">),</span>
+      <span class="n">static_cast</span><span class="o">&lt;</span><span class="n">Tgt</span><span class="o">&gt;</span><span class="p">(</span><span class="mi">100000000000000UL</span><span class="p">),</span>
+      <span class="n">static_cast</span><span class="o">&lt;</span><span class="n">Tgt</span><span class="o">&gt;</span><span class="p">(</span><span class="mi">10000000000000UL</span><span class="p">),</span>
+      <span class="n">static_cast</span><span class="o">&lt;</span><span class="n">Tgt</span><span class="o">&gt;</span><span class="p">(</span><span class="mi">1000000000000UL</span><span class="p">),</span>
+      <span class="n">static_cast</span><span class="o">&lt;</span><span class="n">Tgt</span><span class="o">&gt;</span><span class="p">(</span><span class="mi">100000000000UL</span><span class="p">),</span>
+      <span class="n">static_cast</span><span class="o">&lt;</span><span class="n">Tgt</span><span class="o">&gt;</span><span class="p">(</span><span class="mi">10000000000UL</span><span class="p">),</span>
+      <span class="n">static_cast</span><span class="o">&lt;</span><span class="n">Tgt</span><span class="o">&gt;</span><span class="p">(</span><span class="mi">1000000000UL</span><span class="p">),</span>
+      <span class="n">static_cast</span><span class="o">&lt;</span><span class="n">Tgt</span><span class="o">&gt;</span><span class="p">(</span><span class="mi">100000000UL</span><span class="p">),</span>
+      <span class="n">static_cast</span><span class="o">&lt;</span><span class="n">Tgt</span><span class="o">&gt;</span><span class="p">(</span><span class="mi">10000000UL</span><span class="p">),</span>
+      <span class="n">static_cast</span><span class="o">&lt;</span><span class="n">Tgt</span><span class="o">&gt;</span><span class="p">(</span><span class="mi">1000000UL</span><span class="p">),</span>
+      <span class="n">static_cast</span><span class="o">&lt;</span><span class="n">Tgt</span><span class="o">&gt;</span><span class="p">(</span><span class="mi">100000UL</span><span class="p">),</span>
+      <span class="n">static_cast</span><span class="o">&lt;</span><span class="n">Tgt</span><span class="o">&gt;</span><span class="p">(</span><span class="mi">10000UL</span><span class="p">),</span>
+      <span class="n">static_cast</span><span class="o">&lt;</span><span class="n">Tgt</span><span class="o">&gt;</span><span class="p">(</span><span class="mi">1000UL</span><span class="p">),</span>
+      <span class="n">static_cast</span><span class="o">&lt;</span><span class="n">Tgt</span><span class="o">&gt;</span><span class="p">(</span><span class="mi">100UL</span><span class="p">),</span>
+      <span class="n">static_cast</span><span class="o">&lt;</span><span class="n">Tgt</span><span class="o">&gt;</span><span class="p">(</span><span class="mi">10UL</span><span class="p">),</span>
+      <span class="n">static_cast</span><span class="o">&lt;</span><span class="n">Tgt</span><span class="o">&gt;</span><span class="p">(</span><span class="mi">1UL</span><span class="p">),</span>
+    <span class="p">};</span>
+
+    <span class="kt">size_t</span> <span class="n">powIdx</span> <span class="o">=</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">power10</span><span class="p">)</span> <span class="o">/</span> <span class="k">sizeof</span><span class="p">(</span><span class="o">*</span><span class="n">power10</span><span class="p">)</span> <span class="o">-</span> <span class="n">size</span><span class="p">;</span>
+    <span class="n">Tgt</span> <span class="n">result</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+
+    <span class="k">for</span> <span class="p">(;</span> <span class="n">e</span> <span class="o">-</span> <span class="n">b</span> <span class="o">&gt;=</span> <span class="mi">4</span><span class="p">;</span> <span class="n">b</span> <span class="o">+=</span> <span class="mi">4</span><span class="p">,</span> <span class="n">powIdx</span> <span class="o">+=</span> <span class="mi">4</span><span class="p">)</span> <span class="p">{</span>
+      <span class="k">const</span> <span class="k">auto</span> <span class="n">c0</span> <span class="o">=</span> <span class="n">static_cast</span><span class="o">&lt;</span><span class="kt">unsigned</span><span class="o">&gt;</span><span class="p">(</span><span class="o">*</span><span class="n">b</span><span class="p">)</span> <span class="o">-</span> <span class="sc">&#39;0&#39;</span><span class="p">;</span>
+      <span class="k">if</span> <span class="p">(</span><span class="n">c0</span> <span class="o">&gt;=</span> <span class="mi">10</span><span class="p">)</span> <span class="k">goto</span> <span class="n">failure</span><span class="p">;</span>
+      <span class="k">const</span> <span class="k">auto</span> <span class="n">r0</span> <span class="o">=</span> <span class="n">power10</span><span class="p">[</span><span class="n">powIdx</span><span class="p">]</span> <span class="o">*</span> <span class="n">c0</span><span class="p">;</span>
+      <span class="k">const</span> <span class="k">auto</span> <span class="n">c1</span> <span class="o">=</span> <span class="n">static_cast</span><span class="o">&lt;</span><span class="kt">unsigned</span><span class="o">&gt;</span><span class="p">(</span><span class="n">b</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span> <span class="o">-</span> <span class="sc">&#39;0&#39;</span><span class="p">;</span>
+      <span class="k">if</span> <span class="p">(</span><span class="n">c1</span> <span class="o">&gt;=</span> <span class="mi">10</span><span class="p">)</span> <span class="k">goto</span> <span class="n">failure</span><span class="p">;</span>
+      <span class="k">const</span> <span class="k">auto</span> <span class="n">r1</span> <span class="o">=</span> <span class="n">power10</span><span class="p">[</span><span class="n">powIdx</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]</span> <span class="o">*</span> <span class="n">c1</span><span class="p">;</span>
+      <span class="k">const</span> <span class="k">auto</span> <span class="n">c2</span> <span class="o">=</span> <span class="n">static_cast</span><span class="o">&lt;</span><span class="kt">unsigned</span><span class="o">&gt;</span><span class="p">(</span><span class="n">b</span><span class="p">[</span><span class="mi">2</span><span class="p">])</span> <span class="o">-</span> <span class="sc">&#39;0&#39;</span><span class="p">;</span>
+      <span class="k">if</span> <span class="p">(</span><span class="n">c2</span> <span class="o">&gt;=</span> <span class="mi">10</span><span class="p">)</span> <span class="k">goto</span> <span class="n">failure</span><span class="p">;</span>
+      <span class="k">const</span> <span class="k">auto</span> <span class="n">r2</span> <span class="o">=</span> <span class="n">power10</span><span class="p">[</span><span class="n">powIdx</span> <span class="o">+</span> <span class="mi">2</span><span class="p">]</span> <span class="o">*</span> <span class="n">c2</span><span class="p">;</span>
+      <span class="k">const</span> <span class="k">auto</span> <span class="n">c3</span> <span class="o">=</span> <span class="n">static_cast</span><span class="o">&lt;</span><span class="kt">unsigned</span><span class="o">&gt;</span><span class="p">(</span><span class="n">b</span><span class="p">[</span><span class="mi">3</span><span class="p">])</span> <span class="o">-</span> <span class="sc">&#39;0&#39;</span><span class="p">;</span>
+      <span class="k">if</span> <span class="p">(</span><span class="n">c3</span> <span class="o">&gt;=</span> <span class="mi">10</span><span class="p">)</span> <span class="k">goto</span> <span class="n">failure</span><span class="p">;</span>
+      <span class="k">const</span> <span class="k">auto</span> <span class="n">r3</span> <span class="o">=</span> <span class="n">power10</span><span class="p">[</span><span class="n">powIdx</span> <span class="o">+</span> <span class="mi">3</span><span class="p">]</span> <span class="o">*</span> <span class="n">c3</span><span class="p">;</span>
+      <span class="n">result</span> <span class="o">+=</span> <span class="n">r0</span> <span class="o">+</span> <span class="n">r1</span> <span class="o">+</span> <span class="n">r2</span> <span class="o">+</span> <span class="n">r3</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="k">switch</span> <span class="p">(</span><span class="n">e</span> <span class="o">-</span> <span class="n">b</span><span class="p">)</span> <span class="p">{</span>
+      <span class="k">case</span> <span class="mi">3</span>: <span class="p">{</span>
+        <span class="k">const</span> <span class="k">auto</span> <span class="n">c0</span> <span class="o">=</span> <span class="n">static_cast</span><span class="o">&lt;</span><span class="kt">unsigned</span><span class="o">&gt;</span><span class="p">(</span><span class="o">*</span><span class="n">b</span><span class="p">)</span> <span class="o">-</span> <span class="sc">&#39;0&#39;</span><span class="p">;</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">c0</span> <span class="o">&gt;=</span> <span class="mi">10</span><span class="p">)</span> <span class="k">goto</span> <span class="n">failure</span><span class="p">;</span>
+        <span class="k">const</span> <span class="k">auto</span> <span class="n">c1</span> <span class="o">=</span> <span class="n">static_cast</span><span class="o">&lt;</span><span class="kt">unsigned</span><span class="o">&gt;</span><span class="p">(</span><span class="n">b</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span> <span class="o">-</span> <span class="sc">&#39;0&#39;</span><span class="p">;</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">c1</span> <span class="o">&gt;=</span> <span class="mi">10</span><span class="p">)</span> <span class="k">goto</span> <span class="n">failure</span><span class="p">;</span>
+        <span class="k">const</span> <span class="k">auto</span> <span class="n">c2</span> <span class="o">=</span> <span class="n">static_cast</span><span class="o">&lt;</span><span class="kt">unsigned</span><span class="o">&gt;</span><span class="p">(</span><span class="n">b</span><span class="p">[</span><span class="mi">2</span><span class="p">])</span> <span class="o">-</span> <span class="sc">&#39;0&#39;</span><span class="p">;</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">c2</span> <span class="o">&gt;=</span> <span class="mi">10</span><span class="p">)</span> <span class="k">goto</span> <span class="n">failure</span><span class="p">;</span>
+        <span class="k">return</span> <span class="n">result</span> <span class="o">+</span> <span class="mi">100</span> <span class="o">*</span> <span class="n">c0</span> <span class="o">+</span> <span class="mi">10</span> <span class="o">*</span> <span class="n">c1</span> <span class="o">+</span> <span class="n">c2</span><span class="p">;</span>
+      <span class="p">}</span>
+      <span class="k">case</span> <span class="mi">2</span>: <span class="p">{</span>
+        <span class="k">const</span> <span class="k">auto</span> <span class="n">c0</span> <span class="o">=</span> <span class="n">static_cast</span><span class="o">&lt;</span><span class="kt">unsigned</span><span class="o">&gt;</span><span class="p">(</span><span class="o">*</span><span class="n">b</span><span class="p">)</span> <span class="o">-</span> <span class="sc">&#39;0&#39;</span><span class="p">;</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">c0</span> <span class="o">&gt;=</span> <span class="mi">10</span><span class="p">)</span> <span class="k">goto</span> <span class="n">failure</span><span class="p">;</span>
+        <span class="k">const</span> <span class="k">auto</span> <span class="n">c1</span> <span class="o">=</span> <span class="n">static_cast</span><span class="o">&lt;</span><span class="kt">unsigned</span><span class="o">&gt;</span><span class="p">(</span><span class="n">b</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span> <span class="o">-</span> <span class="sc">&#39;0&#39;</span><span class="p">;</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">c1</span> <span class="o">&gt;=</span> <span class="mi">10</span><span class="p">)</span> <span class="k">goto</span> <span class="n">failure</span><span class="p">;</span>
+        <span class="k">return</span> <span class="n">result</span> <span class="o">+</span> <span class="mi">10</span> <span class="o">*</span> <span class="n">c0</span> <span class="o">+</span> <span class="n">c1</span><span class="p">;</span>
+      <span class="p">}</span>
+      <span class="k">case</span> <span class="mi">1</span>: <span class="p">{</span>
+        <span class="k">const</span> <span class="k">auto</span> <span class="n">c0</span> <span class="o">=</span> <span class="n">static_cast</span><span class="o">&lt;</span><span class="kt">unsigned</span><span class="o">&gt;</span><span class="p">(</span><span class="o">*</span><span class="n">b</span><span class="p">)</span> <span class="o">-</span> <span class="sc">&#39;0&#39;</span><span class="p">;</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">c0</span> <span class="o">&gt;=</span> <span class="mi">10</span><span class="p">)</span> <span class="k">goto</span> <span class="n">failure</span><span class="p">;</span>
+        <span class="k">return</span> <span class="n">result</span> <span class="o">+</span> <span class="n">c0</span><span class="p">;</span>
+      <span class="p">}</span>
+    <span class="p">}</span>
+
+    <span class="n">assert</span><span class="p">(</span><span class="n">b</span> <span class="o">==</span> <span class="n">e</span><span class="p">);</span>
+    <span class="n">FOLLY_RANGE_CHECK</span><span class="p">(</span><span class="n">size</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">,</span> <span class="s">&quot;Found no digits to convert in input&quot;</span><span class="p">);</span>
+    <span class="k">return</span> <span class="n">result</span><span class="p">;</span>
+
+    <span class="nl">failure:</span>
+    <span class="n">throw</span> <span class="n">std</span><span class="o">::</span><span class="n">range_error</span><span class="p">(</span><span class="s">&quot;Cannot convert string &quot;</span> <span class="o">+</span>
+                           <span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="p">(</span><span class="n">e</span> <span class="o">-</span> <span class="n">size</span><span class="p">,</span> <span class="n">e</span><span class="p">)</span> <span class="o">+</span> <span class="s">&quot; to integral.&quot;</span><span class="p">);</span>
+  <span class="p">}</span>
+
+  <span class="n">bool</span> <span class="n">str_to_bool</span><span class="p">(</span><span class="n">StringPiece</span> <span class="o">*</span> <span class="n">src</span><span class="p">);</span>
+
+<span class="p">}</span>                                 <span class="c1">// namespace detail</span>
+
+<span class="cm">/**</span>
+<span class="cm"> * String represented as a pair of pointers to char to unsigned</span>
+<span class="cm"> * integrals. Assumes NO whitespace before or after.</span>
+<span class="cm"> */</span>
+<span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">Tgt</span><span class="o">&gt;</span>
+<span class="kr">typename</span> <span class="n">std</span><span class="o">::</span><span class="n">enable_if</span><span class="o">&lt;</span>
+  <span class="n">std</span><span class="o">::</span><span class="n">is_integral</span><span class="o">&lt;</span><span class="n">Tgt</span><span class="o">&gt;::</span><span class="n">value</span> <span class="o">&amp;&amp;</span> <span class="o">!</span><span class="n">std</span><span class="o">::</span><span class="n">is_signed</span><span class="o">&lt;</span><span class="n">Tgt</span><span class="o">&gt;::</span><span class="n">value</span>
+  <span class="o">&amp;&amp;</span> <span class="o">!</span><span class="n">std</span><span class="o">::</span><span class="n">is_same</span><span class="o">&lt;</span><span class="kr">typename</span> <span class="n">std</span><span class="o">::</span><span class="n">remove_cv</span><span class="o">&lt;</span><span class="n">Tgt</span><span class="o">&gt;::</span><span class="n">type</span><span class="p">,</span> <span class="n">bool</span><span class="o">&gt;::</span><span class="n">value</span><span class="p">,</span>
+  <span class="n">Tgt</span><span class="o">&gt;::</span><span class="n">type</span>
+<span class="n">to</span><span class="p">(</span><span class="k">const</span> <span class="kt">char</span> <span class="o">*</span> <span class="n">b</span><span class="p">,</span> <span class="k">const</span> <span class="kt">char</span> <span class="o">*</span> <span class="n">e</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">return</span> <span class="n">detail</span><span class="o">::</span><span class="n">digits_to</span><span class="o">&lt;</span><span class="n">Tgt</span><span class="o">&gt;</span><span class="p">(</span><span class="n">b</span><span class="p">,</span> <span class="n">e</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="cm">/**</span>
+<span class="cm"> * String represented as a pair of pointers to char to signed</span>
+<span class="cm"> * integrals. Assumes NO whitespace before or after. Allows an</span>
+<span class="cm"> * optional leading sign.</span>
+<span class="cm"> */</span>
+<span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">Tgt</span><span class="o">&gt;</span>
+<span class="kr">typename</span> <span class="n">std</span><span class="o">::</span><span class="n">enable_if</span><span class="o">&lt;</span>
+  <span class="n">std</span><span class="o">::</span><span class="n">is_integral</span><span class="o">&lt;</span><span class="n">Tgt</span><span class="o">&gt;::</span><span class="n">value</span> <span class="o">&amp;&amp;</span> <span class="n">std</span><span class="o">::</span><span class="n">is_signed</span><span class="o">&lt;</span><span class="n">Tgt</span><span class="o">&gt;::</span><span class="n">value</span><span class="p">,</span>
+  <span class="n">Tgt</span><span class="o">&gt;::</span><span class="n">type</span>
+<span class="n">to</span><span class="p">(</span><span class="k">const</span> <span class="kt">char</span> <span class="o">*</span> <span class="n">b</span><span class="p">,</span> <span class="k">const</span> <span class="kt">char</span> <span class="o">*</span> <span class="n">e</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">FOLLY_RANGE_CHECK</span><span class="p">(</span><span class="n">b</span> <span class="o">&lt;</span> <span class="n">e</span><span class="p">,</span> <span class="s">&quot;Empty input string in conversion to integral&quot;</span><span class="p">);</span>
+  <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">isdigit</span><span class="p">(</span><span class="o">*</span><span class="n">b</span><span class="p">))</span> <span class="p">{</span>
+    <span class="k">if</span> <span class="p">(</span><span class="o">*</span><span class="n">b</span> <span class="o">==</span> <span class="sc">&#39;-&#39;</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">Tgt</span> <span class="n">result</span> <span class="o">=</span> <span class="o">-</span><span class="n">to</span><span class="o">&lt;</span><span class="kr">typename</span> <span class="n">std</span><span class="o">::</span><span class="n">make_unsigned</span><span class="o">&lt;</span><span class="n">Tgt</span><span class="o">&gt;::</span><span class="n">type</span><span class="o">&gt;</span><span class="p">(</span><span class="n">b</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="n">e</span><span class="p">);</span>
+      <span class="n">FOLLY_RANGE_CHECK</span><span class="p">(</span><span class="n">result</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">,</span> <span class="s">&quot;Negative overflow.&quot;</span><span class="p">);</span>
+      <span class="k">return</span> <span class="n">result</span><span class="p">;</span>
+    <span class="p">}</span>
+    <span class="n">FOLLY_RANGE_CHECK</span><span class="p">(</span><span class="o">*</span><span class="n">b</span> <span class="o">==</span> <span class="sc">&#39;+&#39;</span><span class="p">,</span> <span class="s">&quot;Invalid lead character&quot;</span><span class="p">);</span>
+    <span class="o">++</span><span class="n">b</span><span class="p">;</span>
+  <span class="p">}</span>
+  <span class="n">Tgt</span> <span class="n">result</span> <span class="o">=</span> <span class="n">to</span><span class="o">&lt;</span><span class="kr">typename</span> <span class="n">std</span><span class="o">::</span><span class="n">make_unsigned</span><span class="o">&lt;</span><span class="n">Tgt</span><span class="o">&gt;::</span><span class="n">type</span><span class="o">&gt;</span><span class="p">(</span><span class="n">b</span><span class="p">,</span> <span class="n">e</span><span class="p">);</span>
+  <span class="n">FOLLY_RANGE_CHECK</span><span class="p">(</span><span class="n">result</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">,</span> <span class="s">&quot;Overflow.&quot;</span><span class="p">);</span>
+  <span class="k">return</span> <span class="n">result</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="cm">/**</span>
+<span class="cm"> * Parsing strings to integrals. These routines differ from</span>
+<span class="cm"> * to&lt;integral&gt;(string) in that they take a POINTER TO a StringPiece</span>
+<span class="cm"> * and alter that StringPiece to reflect progress information.</span>
+<span class="cm"> */</span>
+
+<span class="cm">/**</span>
+<span class="cm"> * StringPiece to integrals, with progress information. Alters the</span>
+<span class="cm"> * StringPiece parameter to munch the already-parsed characters.</span>
+<span class="cm"> */</span>
+<span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">Tgt</span><span class="o">&gt;</span>
+<span class="kr">typename</span> <span class="n">std</span><span class="o">::</span><span class="n">enable_if</span><span class="o">&lt;</span>
+  <span class="n">std</span><span class="o">::</span><span class="n">is_integral</span><span class="o">&lt;</span><span class="n">Tgt</span><span class="o">&gt;::</span><span class="n">value</span>
+  <span class="o">&amp;&amp;</span> <span class="o">!</span><span class="n">std</span><span class="o">::</span><span class="n">is_same</span><span class="o">&lt;</span><span class="kr">typename</span> <span class="n">std</span><span class="o">::</span><span class="n">remove_cv</span><span class="o">&lt;</span><span class="n">Tgt</span><span class="o">&gt;::</span><span class="n">type</span><span class="p">,</span> <span class="n">bool</span><span class="o">&gt;::</span><span class="n">value</span><span class="p">,</span>
+  <span class="n">Tgt</span><span class="o">&gt;::</span><span class="n">type</span>
+<span class="n">to</span><span class="p">(</span><span class="n">StringPiece</span> <span class="o">*</span> <span class="n">src</span><span class="p">)</span> <span class="p">{</span>
+
+  <span class="k">auto</span> <span class="n">b</span> <span class="o">=</span> <span class="n">src</span><span class="o">-&gt;</span><span class="n">data</span><span class="p">(),</span> <span class="n">past</span> <span class="o">=</span> <span class="n">src</span><span class="o">-&gt;</span><span class="n">data</span><span class="p">()</span> <span class="o">+</span> <span class="n">src</span><span class="o">-&gt;</span><span class="n">size</span><span class="p">();</span>
+  <span class="k">for</span> <span class="p">(;;</span> <span class="o">++</span><span class="n">b</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">FOLLY_RANGE_CHECK</span><span class="p">(</span><span class="n">b</span> <span class="o">&lt;</span> <span class="n">past</span><span class="p">,</span> <span class="s">&quot;No digits found in input string&quot;</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">isspace</span><span class="p">(</span><span class="o">*</span><span class="n">b</span><span class="p">))</span> <span class="k">break</span><span class="p">;</span>
+  <span class="p">}</span>
+
+  <span class="k">auto</span> <span class="n">m</span> <span class="o">=</span> <span class="n">b</span><span class="p">;</span></pre></div></td></tr>
+
+
+<tr id="section-7"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-7">&#182;</a></div><p>First digit is customized because we test for sign</p></td><td class="code"><div class="highlight"><pre>  <span class="n">bool</span> <span class="n">negative</span> <span class="o">=</span> <span class="nb">false</span><span class="p">;</span>
+  <span class="cm">/* static */</span> <span class="k">if</span> <span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">is_signed</span><span class="o">&lt;</span><span class="n">Tgt</span><span class="o">&gt;::</span><span class="n">value</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">isdigit</span><span class="p">(</span><span class="o">*</span><span class="n">m</span><span class="p">))</span> <span class="p">{</span>
+      <span class="k">if</span> <span class="p">(</span><span class="o">*</span><span class="n">m</span> <span class="o">==</span> <span class="sc">&#39;-&#39;</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">negative</span> <span class="o">=</span> <span class="nb">true</span><span class="p">;</span>
+      <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+        <span class="n">FOLLY_RANGE_CHECK</span><span class="p">(</span><span class="o">*</span><span class="n">m</span> <span class="o">==</span> <span class="sc">&#39;+&#39;</span><span class="p">,</span> <span class="s">&quot;Invalid leading character in conversion&quot;</span>
+                          <span class="s">&quot; to integral&quot;</span><span class="p">);</span>
+      <span class="p">}</span>
+      <span class="o">++</span><span class="n">b</span><span class="p">;</span>
+      <span class="o">++</span><span class="n">m</span><span class="p">;</span>
+    <span class="p">}</span>
+  <span class="p">}</span>
+  <span class="n">FOLLY_RANGE_CHECK</span><span class="p">(</span><span class="n">m</span> <span class="o">&lt;</span> <span class="n">past</span><span class="p">,</span> <span class="s">&quot;No digits found in input string&quot;</span><span class="p">);</span>
+  <span class="n">FOLLY_RANGE_CHECK</span><span class="p">(</span><span class="n">isdigit</span><span class="p">(</span><span class="o">*</span><span class="n">m</span><span class="p">),</span> <span class="s">&quot;Non-digit character found&quot;</span><span class="p">);</span>
+  <span class="n">m</span> <span class="o">=</span> <span class="n">detail</span><span class="o">::</span><span class="n">findFirstNonDigit</span><span class="o">&lt;</span><span class="n">Tgt</span><span class="o">&gt;</span><span class="p">(</span><span class="n">m</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="n">past</span><span class="p">);</span>
+
+  <span class="n">Tgt</span> <span class="n">result</span><span class="p">;</span>
+  <span class="cm">/* static */</span> <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">std</span><span class="o">::</span><span class="n">is_signed</span><span class="o">&lt;</span><span class="n">Tgt</span><span class="o">&gt;::</span><span class="n">value</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">result</span> <span class="o">=</span> <span class="n">detail</span><span class="o">::</span><span class="n">digits_to</span><span class="o">&lt;</span><span class="kr">typename</span> <span class="n">std</span><span class="o">::</span><span class="n">make_unsigned</span><span class="o">&lt;</span><span class="n">Tgt</span><span class="o">&gt;::</span><span class="n">type</span><span class="o">&gt;</span><span class="p">(</span><span class="n">b</span><span class="p">,</span> <span class="n">m</span><span class="p">);</span>
+  <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+    <span class="k">auto</span> <span class="n">t</span> <span class="o">=</span> <span class="n">detail</span><span class="o">::</span><span class="n">digits_to</span><span class="o">&lt;</span><span class="kr">typename</span> <span class="n">std</span><span class="o">::</span><span class="n">make_unsigned</span><span class="o">&lt;</span><span class="n">Tgt</span><span class="o">&gt;::</span><span class="n">type</span><span class="o">&gt;</span><span class="p">(</span><span class="n">b</span><span class="p">,</span> <span class="n">m</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">negative</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">result</span> <span class="o">=</span> <span class="o">-</span><span class="n">t</span><span class="p">;</span>
+      <span class="n">FOLLY_RANGE_CHECK</span><span class="p">(</span><span class="n">result</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">,</span> <span class="s">&quot;Negative overflow&quot;</span><span class="p">);</span>
+    <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+      <span class="n">result</span> <span class="o">=</span> <span class="n">t</span><span class="p">;</span>
+      <span class="n">FOLLY_RANGE_CHECK</span><span class="p">(</span><span class="n">result</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">,</span> <span class="s">&quot;Overflow&quot;</span><span class="p">);</span>
+    <span class="p">}</span>
+  <span class="p">}</span>
+  <span class="n">src</span><span class="o">-&gt;</span><span class="n">advance</span><span class="p">(</span><span class="n">m</span> <span class="o">-</span> <span class="n">src</span><span class="o">-&gt;</span><span class="n">data</span><span class="p">());</span>
+  <span class="k">return</span> <span class="n">result</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="cm">/**</span>
+<span class="cm"> * StringPiece to bool, with progress information. Alters the</span>
+<span class="cm"> * StringPiece parameter to munch the already-parsed characters.</span>
+<span class="cm"> */</span>
+<span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">Tgt</span><span class="o">&gt;</span>
+<span class="kr">typename</span> <span class="n">std</span><span class="o">::</span><span class="n">enable_if</span><span class="o">&lt;</span>
+  <span class="n">std</span><span class="o">::</span><span class="n">is_same</span><span class="o">&lt;</span><span class="kr">typename</span> <span class="n">std</span><span class="o">::</span><span class="n">remove_cv</span><span class="o">&lt;</span><span class="n">Tgt</span><span class="o">&gt;::</span><span class="n">type</span><span class="p">,</span> <span class="n">bool</span><span class="o">&gt;::</span><span class="n">value</span><span class="p">,</span>
+  <span class="n">Tgt</span><span class="o">&gt;::</span><span class="n">type</span>
+<span class="n">to</span><span class="p">(</span><span class="n">StringPiece</span> <span class="o">*</span> <span class="n">src</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">return</span> <span class="n">detail</span><span class="o">::</span><span class="n">str_to_bool</span><span class="p">(</span><span class="n">src</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="n">namespace</span> <span class="n">detail</span> <span class="p">{</span>
+
+<span class="cm">/**</span>
+<span class="cm"> * Enforce that the suffix following a number is made up only of whitespace.</span>
+<span class="cm"> */</span>
+<span class="kr">inline</span> <span class="kt">void</span> <span class="n">enforceWhitespace</span><span class="p">(</span><span class="k">const</span> <span class="kt">char</span><span class="o">*</span> <span class="n">b</span><span class="p">,</span> <span class="k">const</span> <span class="kt">char</span><span class="o">*</span> <span class="n">e</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">for</span> <span class="p">(;</span> <span class="n">b</span> <span class="o">!=</span> <span class="n">e</span><span class="p">;</span> <span class="o">++</span><span class="n">b</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">FOLLY_RANGE_CHECK</span><span class="p">(</span><span class="n">isspace</span><span class="p">(</span><span class="o">*</span><span class="n">b</span><span class="p">),</span> <span class="n">to</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="o">&gt;</span><span class="p">(</span><span class="s">&quot;Non-whitespace: &quot;</span><span class="p">,</span> <span class="o">*</span><span class="n">b</span><span class="p">));</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="p">}</span>  <span class="c1">// namespace detail</span>
+
+<span class="cm">/**</span>
+<span class="cm"> * String or StringPiece to integrals. Accepts leading and trailing</span>
+<span class="cm"> * whitespace, but no non-space trailing characters.</span>
+<span class="cm"> */</span>
+<span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">Tgt</span><span class="o">&gt;</span>
+<span class="kr">typename</span> <span class="n">std</span><span class="o">::</span><span class="n">enable_if</span><span class="o">&lt;</span>
+  <span class="n">std</span><span class="o">::</span><span class="n">is_integral</span><span class="o">&lt;</span><span class="n">Tgt</span><span class="o">&gt;::</span><span class="n">value</span><span class="p">,</span>
+  <span class="n">Tgt</span><span class="o">&gt;::</span><span class="n">type</span>
+<span class="n">to</span><span class="p">(</span><span class="n">StringPiece</span> <span class="n">src</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">Tgt</span> <span class="n">result</span> <span class="o">=</span> <span class="n">to</span><span class="o">&lt;</span><span class="n">Tgt</span><span class="o">&gt;</span><span class="p">(</span><span class="o">&amp;</span><span class="n">src</span><span class="p">);</span>
+  <span class="n">detail</span><span class="o">::</span><span class="n">enforceWhitespace</span><span class="p">(</span><span class="n">src</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span> <span class="n">src</span><span class="p">.</span><span class="n">data</span><span class="p">()</span> <span class="o">+</span> <span class="n">src</span><span class="p">.</span><span class="n">size</span><span class="p">());</span>
+  <span class="k">return</span> <span class="n">result</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="cm">/*******************************************************************************</span>
+<span class="cm"> * Conversions from string types to floating-point types.</span>
+<span class="cm"> ******************************************************************************/</span>
+
+<span class="cm">/**</span>
+<span class="cm"> * StringPiece to double, with progress information. Alters the</span>
+<span class="cm"> * StringPiece parameter to munch the already-parsed characters.</span>
+<span class="cm"> */</span>
+<span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">Tgt</span><span class="o">&gt;</span>
+<span class="kr">inline</span> <span class="kr">typename</span> <span class="n">std</span><span class="o">::</span><span class="n">enable_if</span><span class="o">&lt;</span>
+  <span class="n">std</span><span class="o">::</span><span class="n">is_floating_point</span><span class="o">&lt;</span><span class="n">Tgt</span><span class="o">&gt;::</span><span class="n">value</span><span class="p">,</span>
+  <span class="n">Tgt</span><span class="o">&gt;::</span><span class="n">type</span>
+<span class="n">to</span><span class="p">(</span><span class="n">StringPiece</span> <span class="o">*</span><span class="k">const</span> <span class="n">src</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">using</span> <span class="n">namespace</span> <span class="n">double_conversion</span><span class="p">;</span>
+  <span class="k">static</span> <span class="n">StringToDoubleConverter</span>
+    <span class="n">conv</span><span class="p">(</span><span class="n">StringToDoubleConverter</span><span class="o">::</span><span class="n">ALLOW_TRAILING_JUNK</span>
+         <span class="o">|</span> <span class="n">StringToDoubleConverter</span><span class="o">::</span><span class="n">ALLOW_LEADING_SPACES</span><span class="p">,</span>
+         <span class="mf">0.0</span><span class="p">,</span></pre></div></td></tr>
+
+
+<tr id="section-8"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-8">&#182;</a></div><p>return this for junk input string</p></td><td class="code"><div class="highlight"><pre>         <span class="n">std</span><span class="o">::</span><span class="n">numeric_limits</span><span class="o">&lt;</span><span class="kt">double</span><span class="o">&gt;::</span><span class="n">quiet_NaN</span><span class="p">(),</span>
+         <span class="n">nullptr</span><span class="p">,</span> <span class="n">nullptr</span><span class="p">);</span>
+
+  <span class="n">FOLLY_RANGE_CHECK</span><span class="p">(</span><span class="o">!</span><span class="n">src</span><span class="o">-&gt;</span><span class="n">empty</span><span class="p">(),</span> <span class="s">&quot;No digits found in input string&quot;</span><span class="p">);</span>
+
+  <span class="kt">int</span> <span class="n">length</span><span class="p">;</span>
+  <span class="k">auto</span> <span class="n">result</span> <span class="o">=</span> <span class="n">conv</span><span class="p">.</span><span class="n">StringToDouble</span><span class="p">(</span><span class="n">src</span><span class="o">-&gt;</span><span class="n">data</span><span class="p">(),</span> <span class="n">src</span><span class="o">-&gt;</span><span class="n">size</span><span class="p">(),</span>
+                                       <span class="o">&amp;</span><span class="n">length</span><span class="p">);</span> <span class="c1">// processed char count</span>
+
+  <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">std</span><span class="o">::</span><span class="n">isnan</span><span class="p">(</span><span class="n">result</span><span class="p">))</span> <span class="p">{</span>
+    <span class="n">src</span><span class="o">-&gt;</span><span class="n">advance</span><span class="p">(</span><span class="n">length</span><span class="p">);</span>
+    <span class="k">return</span> <span class="n">result</span><span class="p">;</span>
+  <span class="p">}</span>
+
+  <span class="k">for</span> <span class="p">(;;</span> <span class="n">src</span><span class="o">-&gt;</span><span class="n">advance</span><span class="p">(</span><span class="mi">1</span><span class="p">))</span> <span class="p">{</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">src</span><span class="o">-&gt;</span><span class="n">empty</span><span class="p">())</span> <span class="p">{</span>
+      <span class="n">throw</span> <span class="n">std</span><span class="o">::</span><span class="n">range_error</span><span class="p">(</span><span class="s">&quot;Unable to convert an empty string&quot;</span>
+                             <span class="s">&quot; to a floating point value.&quot;</span><span class="p">);</span>
+    <span class="p">}</span>
+    <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">isspace</span><span class="p">(</span><span class="n">src</span><span class="o">-&gt;</span><span class="n">front</span><span class="p">()))</span> <span class="p">{</span>
+      <span class="k">break</span><span class="p">;</span>
+    <span class="p">}</span>
+  <span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-9"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-9">&#182;</a></div><p>Was that "inf[inity]"?</p></td><td class="code"><div class="highlight"><pre>  <span class="k">if</span> <span class="p">(</span><span class="n">src</span><span class="o">-&gt;</span><span class="n">size</span><span class="p">()</span> <span class="o">&gt;=</span> <span class="mi">3</span> <span class="o">&amp;&amp;</span> <span class="n">toupper</span><span class="p">((</span><span class="o">*</span><span class="n">src</span><span class="p">)[</span><span class="mi">0</span><span class="p">])</span> <span class="o">==</span> <span class="sc">&#39;I&#39;</span>
+        <span class="o">&amp;&amp;</span> <span class="n">toupper</span><span class="p">((</span><span class="o">*</span><span class="n">src</span><span class="p">)[</span><span class="mi">1</span><span class="p">])</span> <span class="o">==</span> <span class="sc">&#39;N&#39;</span> <span class="o">&amp;&amp;</span> <span class="n">toupper</span><span class="p">((</span><span class="o">*</span><span class="n">src</span><span class="p">)[</span><span class="mi">2</span><span class="p">])</span> <span class="o">==</span> <span class="sc">&#39;F&#39;</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">src</span><span class="o">-&gt;</span><span class="n">size</span><span class="p">()</span> <span class="o">&gt;=</span> <span class="mi">8</span> <span class="o">&amp;&amp;</span>
+        <span class="n">toupper</span><span class="p">((</span><span class="o">*</span><span class="n">src</span><span class="p">)[</span><span class="mi">3</span><span class="p">])</span> <span class="o">==</span> <span class="sc">&#39;I&#39;</span> <span class="o">&amp;&amp;</span>
+        <span class="n">toupper</span><span class="p">((</span><span class="o">*</span><span class="n">src</span><span class="p">)[</span><span class="mi">4</span><span class="p">])</span> <span class="o">==</span> <span class="sc">&#39;N&#39;</span> <span class="o">&amp;&amp;</span>
+        <span class="n">toupper</span><span class="p">((</span><span class="o">*</span><span class="n">src</span><span class="p">)[</span><span class="mi">5</span><span class="p">])</span> <span class="o">==</span> <span class="sc">&#39;I&#39;</span> <span class="o">&amp;&amp;</span>
+        <span class="n">toupper</span><span class="p">((</span><span class="o">*</span><span class="n">src</span><span class="p">)[</span><span class="mi">6</span><span class="p">])</span> <span class="o">==</span> <span class="sc">&#39;T&#39;</span> <span class="o">&amp;&amp;</span>
+        <span class="n">toupper</span><span class="p">((</span><span class="o">*</span><span class="n">src</span><span class="p">)[</span><span class="mi">7</span><span class="p">])</span> <span class="o">==</span> <span class="sc">&#39;Y&#39;</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">src</span><span class="o">-&gt;</span><span class="n">advance</span><span class="p">(</span><span class="mi">8</span><span class="p">);</span>
+    <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+      <span class="n">src</span><span class="o">-&gt;</span><span class="n">advance</span><span class="p">(</span><span class="mi">3</span><span class="p">);</span>
+    <span class="p">}</span>
+    <span class="k">return</span> <span class="n">std</span><span class="o">::</span><span class="n">numeric_limits</span><span class="o">&lt;</span><span class="n">Tgt</span><span class="o">&gt;::</span><span class="n">infinity</span><span class="p">();</span>
+  <span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-10"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-10">&#182;</a></div><p>Was that "-inf[inity]"?</p></td><td class="code"><div class="highlight"><pre>  <span class="k">if</span> <span class="p">(</span><span class="n">src</span><span class="o">-&gt;</span><span class="n">size</span><span class="p">()</span> <span class="o">&gt;=</span> <span class="mi">4</span> <span class="o">&amp;&amp;</span> <span class="n">toupper</span><span class="p">((</span><span class="o">*</span><span class="n">src</span><span class="p">)[</span><span class="mi">0</span><span class="p">])</span> <span class="o">==</span> <span class="sc">&#39;-&#39;</span>
+      <span class="o">&amp;&amp;</span> <span class="n">toupper</span><span class="p">((</span><span class="o">*</span><span class="n">src</span><span class="p">)[</span><span class="mi">1</span><span class="p">])</span> <span class="o">==</span> <span class="sc">&#39;I&#39;</span> <span class="o">&amp;&amp;</span> <span class="n">toupper</span><span class="p">((</span><span class="o">*</span><span class="n">src</span><span class="p">)[</span><span class="mi">2</span><span class="p">])</span> <span class="o">==</span> <span class="sc">&#39;N&#39;</span>
+      <span class="o">&amp;&amp;</span> <span class="n">toupper</span><span class="p">((</span><span class="o">*</span><span class="n">src</span><span class="p">)[</span><span class="mi">3</span><span class="p">])</span> <span class="o">==</span> <span class="sc">&#39;F&#39;</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">src</span><span class="o">-&gt;</span><span class="n">size</span><span class="p">()</span> <span class="o">&gt;=</span> <span class="mi">9</span> <span class="o">&amp;&amp;</span>
+        <span class="n">toupper</span><span class="p">((</span><span class="o">*</span><span class="n">src</span><span class="p">)[</span><span class="mi">4</span><span class="p">])</span> <span class="o">==</span> <span class="sc">&#39;I&#39;</span> <span class="o">&amp;&amp;</span>
+        <span class="n">toupper</span><span class="p">((</span><span class="o">*</span><span class="n">src</span><span class="p">)[</span><span class="mi">5</span><span class="p">])</span> <span class="o">==</span> <span class="sc">&#39;N&#39;</span> <span class="o">&amp;&amp;</span>
+        <span class="n">toupper</span><span class="p">((</span><span class="o">*</span><span class="n">src</span><span class="p">)[</span><span class="mi">6</span><span class="p">])</span> <span class="o">==</span> <span class="sc">&#39;I&#39;</span> <span class="o">&amp;&amp;</span>
+        <span class="n">toupper</span><span class="p">((</span><span class="o">*</span><span class="n">src</span><span class="p">)[</span><span class="mi">7</span><span class="p">])</span> <span class="o">==</span> <span class="sc">&#39;T&#39;</span> <span class="o">&amp;&amp;</span>
+        <span class="n">toupper</span><span class="p">((</span><span class="o">*</span><span class="n">src</span><span class="p">)[</span><span class="mi">8</span><span class="p">])</span> <span class="o">==</span> <span class="sc">&#39;Y&#39;</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">src</span><span class="o">-&gt;</span><span class="n">advance</span><span class="p">(</span><span class="mi">9</span><span class="p">);</span>
+    <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+      <span class="n">src</span><span class="o">-&gt;</span><span class="n">advance</span><span class="p">(</span><span class="mi">4</span><span class="p">);</span>
+    <span class="p">}</span>
+    <span class="k">return</span> <span class="o">-</span><span class="n">std</span><span class="o">::</span><span class="n">numeric_limits</span><span class="o">&lt;</span><span class="n">Tgt</span><span class="o">&gt;::</span><span class="n">infinity</span><span class="p">();</span>
+  <span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-11"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-11">&#182;</a></div><p>"nan"?</p></td><td class="code"><div class="highlight"><pre>  <span class="k">if</span> <span class="p">(</span><span class="n">src</span><span class="o">-&gt;</span><span class="n">size</span><span class="p">()</span> <span class="o">&gt;=</span> <span class="mi">3</span> <span class="o">&amp;&amp;</span> <span class="n">toupper</span><span class="p">((</span><span class="o">*</span><span class="n">src</span><span class="p">)[</span><span class="mi">0</span><span class="p">])</span> <span class="o">==</span> <span class="sc">&#39;N&#39;</span>
+        <span class="o">&amp;&amp;</span> <span class="n">toupper</span><span class="p">((</span><span class="o">*</span><span class="n">src</span><span class="p">)[</span><span class="mi">1</span><span class="p">])</span> <span class="o">==</span> <span class="sc">&#39;A&#39;</span> <span class="o">&amp;&amp;</span> <span class="n">toupper</span><span class="p">((</span><span class="o">*</span><span class="n">src</span><span class="p">)[</span><span class="mi">2</span><span class="p">])</span> <span class="o">==</span> <span class="sc">&#39;N&#39;</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">src</span><span class="o">-&gt;</span><span class="n">advance</span><span class="p">(</span><span class="mi">3</span><span class="p">);</span>
+    <span class="k">return</span> <span class="n">std</span><span class="o">::</span><span class="n">numeric_limits</span><span class="o">&lt;</span><span class="n">Tgt</span><span class="o">&gt;::</span><span class="n">quiet_NaN</span><span class="p">();</span>
+  <span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-12"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-12">&#182;</a></div><p>All bets are off</p></td><td class="code"><div class="highlight"><pre>  <span class="n">throw</span> <span class="n">std</span><span class="o">::</span><span class="n">range_error</span><span class="p">(</span><span class="s">&quot;Unable to convert </span><span class="se">\&quot;</span><span class="s">&quot;</span> <span class="o">+</span> <span class="n">src</span><span class="o">-&gt;</span><span class="n">toString</span><span class="p">()</span>
+                         <span class="o">+</span> <span class="s">&quot;</span><span class="se">\&quot;</span><span class="s"> to a floating point value.&quot;</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="cm">/**</span>
+<span class="cm"> * Any string, const char*, or StringPiece to double.</span>
+<span class="cm"> */</span>
+<span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">Tgt</span><span class="o">&gt;</span>
+<span class="kr">typename</span> <span class="n">std</span><span class="o">::</span><span class="n">enable_if</span><span class="o">&lt;</span>
+  <span class="n">std</span><span class="o">::</span><span class="n">is_floating_point</span><span class="o">&lt;</span><span class="n">Tgt</span><span class="o">&gt;::</span><span class="n">value</span><span class="p">,</span>
+  <span class="n">Tgt</span><span class="o">&gt;::</span><span class="n">type</span>
+<span class="n">to</span><span class="p">(</span><span class="n">StringPiece</span> <span class="n">src</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">Tgt</span> <span class="n">result</span> <span class="o">=</span> <span class="n">to</span><span class="o">&lt;</span><span class="kt">double</span><span class="o">&gt;</span><span class="p">(</span><span class="o">&amp;</span><span class="n">src</span><span class="p">);</span>
+  <span class="n">detail</span><span class="o">::</span><span class="n">enforceWhitespace</span><span class="p">(</span><span class="n">src</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span> <span class="n">src</span><span class="p">.</span><span class="n">data</span><span class="p">()</span> <span class="o">+</span> <span class="n">src</span><span class="p">.</span><span class="n">size</span><span class="p">());</span>
+  <span class="k">return</span> <span class="n">result</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="cm">/*******************************************************************************</span>
+<span class="cm"> * Integral to floating point and back</span>
+<span class="cm"> ******************************************************************************/</span>
+
+<span class="cm">/**</span>
+<span class="cm"> * Checked conversion from integral to flating point and back. The</span>
+<span class="cm"> * result must be convertible back to the source type without loss of</span>
+<span class="cm"> * precision. This seems Draconian but sometimes is what&#39;s needed, and</span>
+<span class="cm"> * complements existing routines nicely. For various rounding</span>
+<span class="cm"> * routines, see &lt;math&gt;.</span>
+<span class="cm"> */</span>
+<span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">Tgt</span><span class="p">,</span> <span class="n">class</span> <span class="n">Src</span><span class="o">&gt;</span>
+<span class="kr">typename</span> <span class="n">std</span><span class="o">::</span><span class="n">enable_if</span><span class="o">&lt;</span>
+  <span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">is_integral</span><span class="o">&lt;</span><span class="n">Src</span><span class="o">&gt;::</span><span class="n">value</span> <span class="o">&amp;&amp;</span> <span class="n">std</span><span class="o">::</span><span class="n">is_floating_point</span><span class="o">&lt;</span><span class="n">Tgt</span><span class="o">&gt;::</span><span class="n">value</span><span class="p">)</span>
+  <span class="o">||</span>
+  <span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">is_floating_point</span><span class="o">&lt;</span><span class="n">Src</span><span class="o">&gt;::</span><span class="n">value</span> <span class="o">&amp;&amp;</span> <span class="n">std</span><span class="o">::</span><span class="n">is_integral</span><span class="o">&lt;</span><span class="n">Tgt</span><span class="o">&gt;::</span><span class="n">value</span><span class="p">),</span>
+  <span class="n">Tgt</span><span class="o">&gt;::</span><span class="n">type</span>
+<span class="n">to</span><span class="p">(</span><span class="k">const</span> <span class="n">Src</span> <span class="o">&amp;</span> <span class="n">value</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">Tgt</span> <span class="n">result</span> <span class="o">=</span> <span class="n">value</span><span class="p">;</span>
+  <span class="k">auto</span> <span class="n">witness</span> <span class="o">=</span> <span class="n">static_cast</span><span class="o">&lt;</span><span class="n">Src</span><span class="o">&gt;</span><span class="p">(</span><span class="n">result</span><span class="p">);</span>
+  <span class="k">if</span> <span class="p">(</span><span class="n">value</span> <span class="o">!=</span> <span class="n">witness</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">throw</span> <span class="n">std</span><span class="o">::</span><span class="n">range_error</span><span class="p">(</span>
+      <span class="n">to</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="o">&gt;</span><span class="p">(</span><span class="s">&quot;to&lt;&gt;: loss of precision when converting &quot;</span><span class="p">,</span> <span class="n">value</span><span class="p">,</span>
+                      <span class="s">&quot; to type &quot;</span><span class="p">,</span> <span class="n">typeid</span><span class="p">(</span><span class="n">Tgt</span><span class="p">).</span><span class="n">name</span><span class="p">()).</span><span class="n">c_str</span><span class="p">());</span>
+  <span class="p">}</span>
+  <span class="k">return</span> <span class="n">result</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="cm">/*******************************************************************************</span>
+<span class="cm"> * Enum to anything and back</span>
+<span class="cm"> ******************************************************************************/</span>
+
+<span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">Tgt</span><span class="p">,</span> <span class="n">class</span> <span class="n">Src</span><span class="o">&gt;</span>
+<span class="kr">typename</span> <span class="n">std</span><span class="o">::</span><span class="n">enable_if</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">is_enum</span><span class="o">&lt;</span><span class="n">Src</span><span class="o">&gt;::</span><span class="n">value</span><span class="p">,</span> <span class="n">Tgt</span><span class="o">&gt;::</span><span class="n">type</span>
+<span class="n">to</span><span class="p">(</span><span class="k">const</span> <span class="n">Src</span> <span class="o">&amp;</span> <span class="n">value</span><span class="p">)</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-13"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-13">&#182;</a></div><p>TODO: uncomment this when underlying<em>type is available
+return to<Tgt>(static</em>cast<typename std::underlying_type<Src>::type>(
+   value));</p></td><td class="code"><div class="highlight"><pre>  <span class="cm">/* static */</span> <span class="k">if</span> <span class="p">(</span><span class="n">Src</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+    <span class="cm">/* static */</span> <span class="k">if</span> <span class="p">(</span><span class="k">sizeof</span><span class="p">(</span><span class="n">Src</span><span class="p">)</span> <span class="o">&lt;=</span> <span class="k">sizeof</span><span class="p">(</span><span class="kt">int</span><span class="p">))</span> <span class="p">{</span>
+      <span class="k">return</span> <span class="n">to</span><span class="o">&lt;</span><span class="n">Tgt</span><span class="o">&gt;</span><span class="p">(</span><span class="n">static_cast</span><span class="o">&lt;</span><span class="kt">int</span><span class="o">&gt;</span><span class="p">(</span><span class="n">value</span><span class="p">));</span>
+    <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+      <span class="k">return</span> <span class="n">to</span><span class="o">&lt;</span><span class="n">Tgt</span><span class="o">&gt;</span><span class="p">(</span><span class="n">static_cast</span><span class="o">&lt;</span><span class="kt">long</span><span class="o">&gt;</span><span class="p">(</span><span class="n">value</span><span class="p">));</span>
+    <span class="p">}</span>
+  <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+    <span class="cm">/* static */</span> <span class="k">if</span> <span class="p">(</span><span class="k">sizeof</span><span class="p">(</span><span class="n">Src</span><span class="p">)</span> <span class="o">&lt;=</span> <span class="k">sizeof</span><span class="p">(</span><span class="kt">int</span><span class="p">))</span> <span class="p">{</span>
+      <span class="k">return</span> <span class="n">to</span><span class="o">&lt;</span><span class="n">Tgt</span><span class="o">&gt;</span><span class="p">(</span><span class="n">static_cast</span><span class="o">&lt;</span><span class="kt">unsigned</span> <span class="kt">int</span><span class="o">&gt;</span><span class="p">(</span><span class="n">value</span><span class="p">));</span>
+    <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+      <span class="k">return</span> <span class="n">to</span><span class="o">&lt;</span><span class="n">Tgt</span><span class="o">&gt;</span><span class="p">(</span><span class="n">static_cast</span><span class="o">&lt;</span><span class="kt">unsigned</span> <span class="kt">long</span><span class="o">&gt;</span><span class="p">(</span><span class="n">value</span><span class="p">));</span>
+    <span class="p">}</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">Tgt</span><span class="p">,</span> <span class="n">class</span> <span class="n">Src</span><span class="o">&gt;</span>
+<span class="kr">typename</span> <span class="n">std</span><span class="o">::</span><span class="n">enable_if</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">is_enum</span><span class="o">&lt;</span><span class="n">Tgt</span><span class="o">&gt;::</span><span class="n">value</span><span class="p">,</span> <span class="n">Tgt</span><span class="o">&gt;::</span><span class="n">type</span>
+<span class="n">to</span><span class="p">(</span><span class="k">const</span> <span class="n">Src</span> <span class="o">&amp;</span> <span class="n">value</span><span class="p">)</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-14"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-14">&#182;</a></div><p>TODO: uncomment this when underlying<em>type is available
+return static</em>cast<Tgt>(
+   to<typename std::underlying_type<Tgt>::type>(value));</p></td><td class="code"><div class="highlight"><pre>  <span class="cm">/* static */</span> <span class="k">if</span> <span class="p">(</span><span class="n">Tgt</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+    <span class="cm">/* static */</span> <span class="k">if</span> <span class="p">(</span><span class="k">sizeof</span><span class="p">(</span><span class="n">Tgt</span><span class="p">)</span> <span class="o">&lt;=</span> <span class="k">sizeof</span><span class="p">(</span><span class="kt">int</span><span class="p">))</span> <span class="p">{</span>
+      <span class="k">return</span> <span class="n">static_cast</span><span class="o">&lt;</span><span class="n">Tgt</span><span class="o">&gt;</span><span class="p">(</span><span class="n">to</span><span class="o">&lt;</span><span class="kt">int</span><span class="o">&gt;</span><span class="p">(</span><span class="n">value</span><span class="p">));</span>
+    <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+      <span class="k">return</span> <span class="n">static_cast</span><span class="o">&lt;</span><span class="n">Tgt</span><span class="o">&gt;</span><span class="p">(</span><span class="n">to</span><span class="o">&lt;</span><span class="kt">long</span><span class="o">&gt;</span><span class="p">(</span><span class="n">value</span><span class="p">));</span>
+    <span class="p">}</span>
+  <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+    <span class="cm">/* static */</span> <span class="k">if</span> <span class="p">(</span><span class="k">sizeof</span><span class="p">(</span><span class="n">Tgt</span><span class="p">)</span> <span class="o">&lt;=</span> <span class="k">sizeof</span><span class="p">(</span><span class="kt">int</span><span class="p">))</span> <span class="p">{</span>
+      <span class="k">return</span> <span class="n">static_cast</span><span class="o">&lt;</span><span class="n">Tgt</span><span class="o">&gt;</span><span class="p">(</span><span class="n">to</span><span class="o">&lt;</span><span class="kt">unsigned</span> <span class="kt">int</span><span class="o">&gt;</span><span class="p">(</span><span class="n">value</span><span class="p">));</span>
+    <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+      <span class="k">return</span> <span class="n">static_cast</span><span class="o">&lt;</span><span class="n">Tgt</span><span class="o">&gt;</span><span class="p">(</span><span class="n">to</span><span class="o">&lt;</span><span class="kt">unsigned</span> <span class="kt">long</span><span class="o">&gt;</span><span class="p">(</span><span class="n">value</span><span class="p">));</span>
+    <span class="p">}</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="p">}</span> <span class="c1">// namespace folly</span></pre></div></td></tr>
+
+
+<tr id="section-15"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-15">&#182;</a></div><p>FOLLY<em>CONV</em>INTERNAL is defined by Conv.cpp.  Keep the FOLLY<em>RANGE</em>CHECK
+macro for use in Conv.cpp, but #undefine it everywhere else we are included,
+to avoid defining this global macro name in other files that include Conv.h.</p></td><td class="code"><div class="highlight"><pre><span class="cp">#ifndef FOLLY_CONV_INTERNAL</span>
+<span class="cp">#undef FOLLY_RANGE_CHECK</span>
+<span class="cp">#endif</span>
+
+<span class="cp">#endif </span><span class="cm">/* FOLLY_BASE_CONV_H_ */</span><span class="cp"></span>
+
+</pre></div></td></tr>
+
+</tbody>
+</table>
+</div>
+
+</body>
+<script>docas={repo:"joekychen/folly",depth:1}</script>
+<script>document.write('<script src=' + ('__proto__' in {} ? 'http://cdnjs.cloudflare.com/ajax/libs/zepto/1.0rc1/zepto.min.js' : 'https://ajax.googleapis.com/ajax/libs/jquery/1.7.2/jquery.min.js')+'><\\/script>')</script>
+<script src="http://baoshan.github.com/moment/min/moment.min.js"></script>
+<script src="../javascript/docco.min.js"></script>
+</html>

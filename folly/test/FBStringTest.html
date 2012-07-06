@@ -1,0 +1,1129 @@
+<!DOCTYPE html>
+<html><head><title>joekychen/folly » folly › test › FBStringTest.cpp
+
+</title>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+<meta name="generator" content="Docco">
+<link rel="stylesheet" media="all" href="../../stylesheets/docco.min.css" />
+
+
+</head>
+<body>
+<div id="container">
+<div id="background"></div>
+<table cellpadding="0" cellspacing="0">
+<thead><tr><th class="docs"><a id="home" href="../../index.html"></a><h1>FBStringTest.cpp</h1></th><th class="code"></th></tr></thead>
+<tbody>
+
+
+<tr id="section-1"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-1">&#182;</a></div></td><td class="code"><div class="highlight"><pre><span class="cm">/*</span>
+<span class="cm"> * Copyright 2012 Facebook, Inc.</span>
+<span class="cm"> *</span>
+<span class="cm"> * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span class="cm"> * you may not use this file except in compliance with the License.</span>
+<span class="cm"> * You may obtain a copy of the License at</span>
+<span class="cm"> *</span>
+<span class="cm"> *   http://www.apache.org/licenses/LICENSE-2.0</span>
+<span class="cm"> *</span>
+<span class="cm"> * Unless required by applicable law or agreed to in writing, software</span>
+<span class="cm"> * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span class="cm"> * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span class="cm"> * See the License for the specific language governing permissions and</span>
+<span class="cm"> * limitations under the License.</span>
+<span class="cm"> */</span></pre></div></td></tr>
+
+
+<tr id="section-2"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-2">&#182;</a></div><p>Author: andrei.alexandrescu@fb.com</p></td><td class="code"><div class="highlight"><pre><span class="cp">#include &quot;folly/FBString.h&quot;</span>
+
+<span class="cp">#include &lt;cstdlib&gt;</span>
+
+<span class="cp">#include &lt;list&gt;</span>
+<span class="cp">#include &lt;fstream&gt;</span>
+<span class="cp">#include &lt;boost/algorithm/string.hpp&gt;</span>
+<span class="cp">#include &lt;boost/random.hpp&gt;</span>
+<span class="cp">#include &lt;gtest/gtest.h&gt;</span>
+
+<span class="cp">#include &lt;gflags/gflags.h&gt;</span>
+
+<span class="cp">#include &quot;folly/Foreach.h&quot;</span>
+<span class="cp">#include &quot;folly/Random.h&quot;</span>
+<span class="cp">#include &quot;folly/Benchmark.h&quot;</span>
+
+<span class="k">using</span> <span class="k">namespace</span> <span class="n">std</span><span class="p">;</span>
+<span class="k">using</span> <span class="k">namespace</span> <span class="n">folly</span><span class="p">;</span>
+
+<span class="k">static</span> <span class="k">const</span> <span class="kt">int</span> <span class="n">seed</span> <span class="o">=</span> <span class="n">folly</span><span class="o">::</span><span class="n">randomNumberSeed</span><span class="p">();</span>
+<span class="k">typedef</span> <span class="n">boost</span><span class="o">::</span><span class="n">mt19937</span> <span class="n">RandomT</span><span class="p">;</span>
+<span class="k">static</span> <span class="n">RandomT</span> <span class="n">rng</span><span class="p">(</span><span class="n">seed</span><span class="p">);</span>
+<span class="k">static</span> <span class="k">const</span> <span class="n">size_t</span> <span class="n">maxString</span> <span class="o">=</span> <span class="mi">100</span><span class="p">;</span>
+<span class="k">static</span> <span class="k">const</span> <span class="kt">bool</span> <span class="n">avoidAliasing</span> <span class="o">=</span> <span class="kc">true</span><span class="p">;</span>
+
+<span class="k">template</span> <span class="o">&lt;</span><span class="k">class</span> <span class="nc">Integral1</span><span class="p">,</span> <span class="k">class</span> <span class="nc">Integral2</span><span class="o">&gt;</span>
+<span class="n">Integral2</span> <span class="n">random</span><span class="p">(</span><span class="n">Integral1</span> <span class="n">low</span><span class="p">,</span> <span class="n">Integral2</span> <span class="n">up</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">boost</span><span class="o">::</span><span class="n">uniform_int</span><span class="o">&lt;&gt;</span> <span class="n">range</span><span class="p">(</span><span class="n">low</span><span class="p">,</span> <span class="n">up</span><span class="p">);</span>
+  <span class="k">return</span> <span class="n">range</span><span class="p">(</span><span class="n">rng</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="k">template</span> <span class="o">&lt;</span><span class="k">class</span> <span class="nc">String</span><span class="o">&gt;</span>
+<span class="kt">void</span> <span class="n">randomString</span><span class="p">(</span><span class="n">String</span><span class="o">*</span> <span class="n">toFill</span><span class="p">,</span> <span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">maxSize</span> <span class="o">=</span> <span class="mi">1000</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">assert</span><span class="p">(</span><span class="n">toFill</span><span class="p">);</span>
+  <span class="n">toFill</span><span class="o">-&gt;</span><span class="n">resize</span><span class="p">(</span><span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">maxSize</span><span class="p">));</span>
+  <span class="n">FOR_EACH</span> <span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="o">*</span><span class="n">toFill</span><span class="p">)</span> <span class="p">{</span>
+    <span class="o">*</span><span class="n">i</span> <span class="o">=</span> <span class="n">random</span><span class="p">(</span><span class="sc">&#39;a&#39;</span><span class="p">,</span> <span class="sc">&#39;z&#39;</span><span class="p">);</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="k">template</span> <span class="o">&lt;</span><span class="k">class</span> <span class="nc">String</span><span class="p">,</span> <span class="k">class</span> <span class="nc">Integral</span><span class="o">&gt;</span>
+<span class="kt">void</span> <span class="n">Num2String</span><span class="p">(</span><span class="n">String</span><span class="o">&amp;</span> <span class="n">str</span><span class="p">,</span> <span class="n">Integral</span> <span class="n">n</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">str</span><span class="p">.</span><span class="n">resize</span><span class="p">(</span><span class="mi">30</span><span class="p">,</span> <span class="sc">&#39;\0&#39;</span><span class="p">);</span>
+  <span class="n">sprintf</span><span class="p">(</span><span class="o">&amp;</span><span class="n">str</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="s">&quot;%lu&quot;</span><span class="p">,</span> <span class="k">static_cast</span><span class="o">&lt;</span><span class="kt">unsigned</span> <span class="kt">long</span><span class="o">&gt;</span><span class="p">(</span><span class="n">n</span><span class="p">));</span>
+  <span class="n">str</span><span class="p">.</span><span class="n">resize</span><span class="p">(</span><span class="n">strlen</span><span class="p">(</span><span class="n">str</span><span class="p">.</span><span class="n">c_str</span><span class="p">()));</span>
+<span class="p">}</span>
+
+<span class="n">std</span><span class="o">::</span><span class="n">list</span><span class="o">&lt;</span><span class="kt">char</span><span class="o">&gt;</span> <span class="n">RandomList</span><span class="p">(</span><span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">maxSize</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">std</span><span class="o">::</span><span class="n">list</span><span class="o">&lt;</span><span class="kt">char</span><span class="o">&gt;</span> <span class="n">lst</span><span class="p">(</span><span class="n">random</span><span class="p">(</span><span class="mi">0u</span><span class="p">,</span> <span class="n">maxSize</span><span class="p">));</span>
+  <span class="n">std</span><span class="o">::</span><span class="n">list</span><span class="o">&lt;</span><span class="kt">char</span><span class="o">&gt;::</span><span class="n">iterator</span> <span class="n">i</span> <span class="o">=</span> <span class="n">lst</span><span class="p">.</span><span class="n">begin</span><span class="p">();</span>
+  <span class="k">for</span> <span class="p">(;</span> <span class="n">i</span> <span class="o">!=</span> <span class="n">lst</span><span class="p">.</span><span class="n">end</span><span class="p">();</span> <span class="o">++</span><span class="n">i</span><span class="p">)</span> <span class="p">{</span>
+    <span class="o">*</span><span class="n">i</span> <span class="o">=</span> <span class="n">random</span><span class="p">(</span><span class="sc">&#39;a&#39;</span><span class="p">,</span> <span class="sc">&#39;z&#39;</span><span class="p">);</span>
+ <span class="p">}</span>
+  <span class="k">return</span> <span class="n">lst</span><span class="p">;</span>
+<span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-3"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-3">&#182;</a></div><p>void preventOptimization(void * p) {
+  return folly::preventOptimization((int)(long) p);
+}</p></td><td class="code"><div class="highlight"><pre></pre></div></td></tr>
+
+
+<tr id="section-4"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-4">&#182;</a></div><p>//////////////////////////////////////////////////////////////////////////////
+Tests begin here
+//////////////////////////////////////////////////////////////////////////////</p></td><td class="code"><div class="highlight"><pre><span class="k">template</span> <span class="o">&lt;</span><span class="k">class</span> <span class="nc">String</span><span class="o">&gt;</span> <span class="kt">void</span> <span class="n">clause_21_3_1_a</span><span class="p">(</span><span class="n">String</span> <span class="o">&amp;</span> <span class="n">test</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">test</span><span class="p">.</span><span class="n">String</span><span class="o">::~</span><span class="n">String</span><span class="p">();</span>
+  <span class="k">new</span><span class="p">(</span><span class="o">&amp;</span><span class="n">test</span><span class="p">)</span> <span class="n">String</span><span class="p">();</span>
+<span class="p">}</span>
+<span class="k">template</span> <span class="o">&lt;</span><span class="k">class</span> <span class="nc">String</span><span class="o">&gt;</span> <span class="kt">void</span> <span class="n">clause_21_3_1_b</span><span class="p">(</span><span class="n">String</span> <span class="o">&amp;</span> <span class="n">test</span><span class="p">)</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-5"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-5">&#182;</a></div><p>Copy constructor</p></td><td class="code"><div class="highlight"><pre>  <span class="k">const</span> <span class="n">size_t</span> <span class="n">pos</span> <span class="o">=</span> <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">());</span>
+  <span class="n">String</span> <span class="n">s</span><span class="p">(</span><span class="n">test</span><span class="p">,</span> <span class="n">pos</span><span class="p">,</span> <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="p">(</span><span class="n">size_t</span><span class="p">)(</span><span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">()</span> <span class="o">-</span> <span class="n">pos</span><span class="p">)));</span>
+  <span class="n">test</span> <span class="o">=</span> <span class="n">s</span><span class="p">;</span>
+<span class="p">}</span>
+<span class="k">template</span> <span class="o">&lt;</span><span class="k">class</span> <span class="nc">String</span><span class="o">&gt;</span> <span class="kt">void</span> <span class="n">clause_21_3_1_c</span><span class="p">(</span><span class="n">String</span> <span class="o">&amp;</span> <span class="n">test</span><span class="p">)</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-6"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-6">&#182;</a></div><p>Constructor from char*, size_t</p></td><td class="code"><div class="highlight"><pre>  <span class="k">const</span> <span class="n">size_t</span>
+    <span class="n">pos</span> <span class="o">=</span> <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">()),</span>
+    <span class="n">n</span> <span class="o">=</span> <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">()</span> <span class="o">-</span> <span class="n">pos</span><span class="p">);</span>
+  <span class="n">std</span><span class="o">::</span><span class="n">string</span> <span class="n">before</span><span class="p">(</span><span class="n">test</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">());</span>
+  <span class="n">String</span> <span class="n">s</span><span class="p">(</span><span class="n">test</span><span class="p">.</span><span class="n">c_str</span><span class="p">()</span> <span class="o">+</span> <span class="n">pos</span><span class="p">,</span> <span class="n">n</span><span class="p">);</span>
+  <span class="n">std</span><span class="o">::</span><span class="n">string</span> <span class="n">after</span><span class="p">(</span><span class="n">test</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">());</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">before</span><span class="p">,</span> <span class="n">after</span><span class="p">);</span></pre></div></td></tr>
+
+
+<tr id="section-7"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-7">&#182;</a></div><p>Constructor from char<em>, char</em></p></td><td class="code"><div class="highlight"><pre>  <span class="n">String</span> <span class="n">s1</span><span class="p">(</span><span class="n">test</span><span class="p">.</span><span class="n">begin</span><span class="p">(),</span> <span class="n">test</span><span class="p">.</span><span class="n">end</span><span class="p">());</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">test</span><span class="p">,</span> <span class="n">s1</span><span class="p">);</span>
+  <span class="n">String</span> <span class="n">s2</span><span class="p">(</span><span class="n">test</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span> <span class="n">test</span><span class="p">.</span><span class="n">data</span><span class="p">()</span> <span class="o">+</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">());</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">test</span><span class="p">,</span> <span class="n">s2</span><span class="p">);</span></pre></div></td></tr>
+
+
+<tr id="section-8"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-8">&#182;</a></div><p>Constructor from iterators</p></td><td class="code"><div class="highlight"><pre>  <span class="n">std</span><span class="o">::</span><span class="n">list</span><span class="o">&lt;</span><span class="kt">char</span><span class="o">&gt;</span> <span class="n">lst</span><span class="p">;</span>
+  <span class="k">for</span> <span class="p">(</span><span class="k">auto</span> <span class="n">c</span> <span class="o">:</span> <span class="n">test</span><span class="p">)</span> <span class="n">lst</span><span class="p">.</span><span class="n">push_back</span><span class="p">(</span><span class="n">c</span><span class="p">);</span>
+  <span class="n">String</span> <span class="n">s3</span><span class="p">(</span><span class="n">lst</span><span class="p">.</span><span class="n">begin</span><span class="p">(),</span> <span class="n">lst</span><span class="p">.</span><span class="n">end</span><span class="p">());</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">test</span><span class="p">,</span> <span class="n">s3</span><span class="p">);</span></pre></div></td></tr>
+
+
+<tr id="section-9"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-9">&#182;</a></div><p>Constructor from wchar_t iterators</p></td><td class="code"><div class="highlight"><pre>  <span class="n">std</span><span class="o">::</span><span class="n">list</span><span class="o">&lt;</span><span class="kt">wchar_t</span><span class="o">&gt;</span> <span class="n">lst1</span><span class="p">;</span>
+  <span class="k">for</span> <span class="p">(</span><span class="k">auto</span> <span class="n">c</span> <span class="o">:</span> <span class="n">test</span><span class="p">)</span> <span class="n">lst1</span><span class="p">.</span><span class="n">push_back</span><span class="p">(</span><span class="n">c</span><span class="p">);</span>
+  <span class="n">String</span> <span class="n">s4</span><span class="p">(</span><span class="n">lst1</span><span class="p">.</span><span class="n">begin</span><span class="p">(),</span> <span class="n">lst1</span><span class="p">.</span><span class="n">end</span><span class="p">());</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">test</span><span class="p">,</span> <span class="n">s4</span><span class="p">);</span></pre></div></td></tr>
+
+
+<tr id="section-10"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-10">&#182;</a></div><p>Constructor from wchar_t pointers</p></td><td class="code"><div class="highlight"><pre>  <span class="kt">wchar_t</span> <span class="n">t</span><span class="p">[</span><span class="mi">20</span><span class="p">];</span>
+  <span class="n">t</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="sc">&#39;a&#39;</span><span class="p">;</span>
+  <span class="n">t</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="sc">&#39;b&#39;</span><span class="p">;</span>
+  <span class="n">String</span> <span class="n">s5</span><span class="p">(</span><span class="n">t</span><span class="p">,</span> <span class="n">t</span> <span class="o">+</span> <span class="mi">2</span><span class="p">);;</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;ab&quot;</span><span class="p">,</span> <span class="n">s5</span><span class="p">);</span>
+
+  <span class="n">test</span> <span class="o">=</span> <span class="n">s</span><span class="p">;</span>
+<span class="p">}</span>
+<span class="k">template</span> <span class="o">&lt;</span><span class="k">class</span> <span class="nc">String</span><span class="o">&gt;</span> <span class="kt">void</span> <span class="n">clause_21_3_1_d</span><span class="p">(</span><span class="n">String</span> <span class="o">&amp;</span> <span class="n">test</span><span class="p">)</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-11"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-11">&#182;</a></div><p>Assignment</p></td><td class="code"><div class="highlight"><pre>  <span class="k">auto</span> <span class="n">size</span> <span class="o">=</span> <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2000</span><span class="p">);</span>
+  <span class="n">String</span> <span class="n">s</span><span class="p">(</span><span class="n">size</span><span class="p">,</span> <span class="sc">&#39;\0&#39;</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">s</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="n">size</span><span class="p">);</span>
+  <span class="n">FOR_EACH_RANGE</span> <span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">s</span><span class="p">.</span><span class="n">size</span><span class="p">())</span> <span class="p">{</span>
+    <span class="n">s</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">random</span><span class="p">(</span><span class="sc">&#39;a&#39;</span><span class="p">,</span> <span class="sc">&#39;z&#39;</span><span class="p">);</span>
+  <span class="p">}</span>
+  <span class="n">test</span> <span class="o">=</span> <span class="n">s</span><span class="p">;</span>
+<span class="p">}</span>
+<span class="k">template</span> <span class="o">&lt;</span><span class="k">class</span> <span class="nc">String</span><span class="o">&gt;</span> <span class="kt">void</span> <span class="n">clause_21_3_1_e</span><span class="p">(</span><span class="n">String</span> <span class="o">&amp;</span> <span class="n">test</span><span class="p">)</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-12"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-12">&#182;</a></div><p>Assignment from char*</p></td><td class="code"><div class="highlight"><pre>  <span class="n">String</span> <span class="n">s</span><span class="p">(</span><span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1000</span><span class="p">),</span> <span class="sc">&#39;\0&#39;</span><span class="p">);</span>
+  <span class="n">size_t</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+  <span class="k">for</span> <span class="p">(;</span> <span class="n">i</span> <span class="o">!=</span> <span class="n">s</span><span class="p">.</span><span class="n">size</span><span class="p">();</span> <span class="o">++</span><span class="n">i</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">s</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">random</span><span class="p">(</span><span class="sc">&#39;a&#39;</span><span class="p">,</span> <span class="sc">&#39;z&#39;</span><span class="p">);</span>
+  <span class="p">}</span>
+  <span class="n">test</span> <span class="o">=</span> <span class="n">s</span><span class="p">.</span><span class="n">c_str</span><span class="p">();</span>
+<span class="p">}</span>
+<span class="k">template</span> <span class="o">&lt;</span><span class="k">class</span> <span class="nc">String</span><span class="o">&gt;</span> <span class="kt">void</span> <span class="n">clause_21_3_1_f</span><span class="p">(</span><span class="n">String</span> <span class="o">&amp;</span> <span class="n">test</span><span class="p">)</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-13"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-13">&#182;</a></div><p>Aliased assign</p></td><td class="code"><div class="highlight"><pre>  <span class="k">const</span> <span class="n">size_t</span> <span class="n">pos</span> <span class="o">=</span> <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">());</span>
+  <span class="k">if</span> <span class="p">(</span><span class="n">avoidAliasing</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">test</span> <span class="o">=</span> <span class="n">String</span><span class="p">(</span><span class="n">test</span><span class="p">.</span><span class="n">c_str</span><span class="p">()</span> <span class="o">+</span> <span class="n">pos</span><span class="p">);</span>
+  <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+    <span class="n">test</span> <span class="o">=</span> <span class="n">test</span><span class="p">.</span><span class="n">c_str</span><span class="p">()</span> <span class="o">+</span> <span class="n">pos</span><span class="p">;</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+<span class="k">template</span> <span class="o">&lt;</span><span class="k">class</span> <span class="nc">String</span><span class="o">&gt;</span> <span class="kt">void</span> <span class="n">clause_21_3_1_g</span><span class="p">(</span><span class="n">String</span> <span class="o">&amp;</span> <span class="n">test</span><span class="p">)</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-14"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-14">&#182;</a></div><p>Assignment from char</p></td><td class="code"><div class="highlight"><pre>  <span class="n">test</span> <span class="o">=</span> <span class="n">random</span><span class="p">(</span><span class="sc">&#39;a&#39;</span><span class="p">,</span> <span class="sc">&#39;z&#39;</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="k">template</span> <span class="o">&lt;</span><span class="k">class</span> <span class="nc">String</span><span class="o">&gt;</span> <span class="kt">void</span> <span class="n">clause_21_3_2</span><span class="p">(</span><span class="n">String</span> <span class="o">&amp;</span> <span class="n">test</span><span class="p">)</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-15"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-15">&#182;</a></div><p>Iterators. The code below should leave test unchanged</p></td><td class="code"><div class="highlight"><pre>  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="n">test</span><span class="p">.</span><span class="n">end</span><span class="p">()</span> <span class="o">-</span> <span class="n">test</span><span class="p">.</span><span class="n">begin</span><span class="p">());</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="n">test</span><span class="p">.</span><span class="n">rend</span><span class="p">()</span> <span class="o">-</span> <span class="n">test</span><span class="p">.</span><span class="n">rbegin</span><span class="p">());</span>
+
+  <span class="k">auto</span> <span class="n">s</span> <span class="o">=</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">();</span>
+  <span class="n">test</span><span class="p">.</span><span class="n">resize</span><span class="p">(</span><span class="n">test</span><span class="p">.</span><span class="n">end</span><span class="p">()</span> <span class="o">-</span> <span class="n">test</span><span class="p">.</span><span class="n">begin</span><span class="p">());</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">s</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">());</span>
+  <span class="n">test</span><span class="p">.</span><span class="n">resize</span><span class="p">(</span><span class="n">test</span><span class="p">.</span><span class="n">rend</span><span class="p">()</span> <span class="o">-</span> <span class="n">test</span><span class="p">.</span><span class="n">rbegin</span><span class="p">());</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">s</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">());</span>
+<span class="p">}</span>
+
+<span class="k">template</span> <span class="o">&lt;</span><span class="k">class</span> <span class="nc">String</span><span class="o">&gt;</span> <span class="kt">void</span> <span class="n">clause_21_3_3</span><span class="p">(</span><span class="n">String</span> <span class="o">&amp;</span> <span class="n">test</span><span class="p">)</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-16"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-16">&#182;</a></div><p>exercise capacity, size, max_size</p></td><td class="code"><div class="highlight"><pre>  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="n">test</span><span class="p">.</span><span class="n">length</span><span class="p">());</span>
+  <span class="n">EXPECT_LE</span><span class="p">(</span><span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="n">test</span><span class="p">.</span><span class="n">max_size</span><span class="p">());</span>
+  <span class="n">EXPECT_LE</span><span class="p">(</span><span class="n">test</span><span class="p">.</span><span class="n">capacity</span><span class="p">(),</span> <span class="n">test</span><span class="p">.</span><span class="n">max_size</span><span class="p">());</span>
+  <span class="n">EXPECT_LE</span><span class="p">(</span><span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="n">test</span><span class="p">.</span><span class="n">capacity</span><span class="p">());</span></pre></div></td></tr>
+
+
+<tr id="section-17"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-17">&#182;</a></div><p>exercise empty</p></td><td class="code"><div class="highlight"><pre>  <span class="k">if</span> <span class="p">(</span><span class="n">test</span><span class="p">.</span><span class="n">empty</span><span class="p">())</span> <span class="n">test</span> <span class="o">=</span> <span class="s">&quot;empty&quot;</span><span class="p">;</span>
+  <span class="k">else</span> <span class="n">test</span> <span class="o">=</span> <span class="s">&quot;not empty&quot;</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="k">template</span> <span class="o">&lt;</span><span class="k">class</span> <span class="nc">String</span><span class="o">&gt;</span> <span class="kt">void</span> <span class="n">clause_21_3_4</span><span class="p">(</span><span class="n">String</span> <span class="o">&amp;</span> <span class="n">test</span><span class="p">)</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-18"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-18">&#182;</a></div><p>exercise element access 21.3.4</p></td><td class="code"><div class="highlight"><pre>  <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">test</span><span class="p">.</span><span class="n">empty</span><span class="p">())</span> <span class="p">{</span>
+    <span class="k">auto</span> <span class="k">const</span> <span class="n">i</span> <span class="o">=</span> <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">()</span> <span class="o">-</span> <span class="mi">1</span><span class="p">);</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">test</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="n">test</span><span class="p">.</span><span class="n">at</span><span class="p">(</span><span class="n">i</span><span class="p">));</span>
+    <span class="n">test</span> <span class="o">=</span> <span class="n">test</span><span class="p">[</span><span class="n">i</span><span class="p">];</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="k">template</span> <span class="o">&lt;</span><span class="k">class</span> <span class="nc">String</span><span class="o">&gt;</span> <span class="kt">void</span> <span class="n">clause_21_3_5_a</span><span class="p">(</span><span class="n">String</span> <span class="o">&amp;</span> <span class="n">test</span><span class="p">)</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-19"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-19">&#182;</a></div><p>21.3.5 modifiers (+=)</p></td><td class="code"><div class="highlight"><pre>  <span class="n">String</span> <span class="n">test1</span><span class="p">;</span>
+  <span class="n">randomString</span><span class="p">(</span><span class="o">&amp;</span><span class="n">test1</span><span class="p">);</span>
+  <span class="n">assert</span><span class="p">(</span><span class="n">test1</span><span class="p">.</span><span class="n">size</span><span class="p">()</span> <span class="o">==</span> <span class="n">strlen</span><span class="p">(</span><span class="n">test1</span><span class="p">.</span><span class="n">c_str</span><span class="p">()));</span>
+  <span class="k">auto</span> <span class="n">len</span> <span class="o">=</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">();</span>
+  <span class="n">test</span> <span class="o">+=</span> <span class="n">test1</span><span class="p">;</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="n">test1</span><span class="p">.</span><span class="n">size</span><span class="p">()</span> <span class="o">+</span> <span class="n">len</span><span class="p">);</span>
+  <span class="n">FOR_EACH_RANGE</span> <span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">test1</span><span class="p">.</span><span class="n">size</span><span class="p">())</span> <span class="p">{</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">test</span><span class="p">[</span><span class="n">len</span> <span class="o">+</span> <span class="n">i</span><span class="p">],</span> <span class="n">test1</span><span class="p">[</span><span class="n">i</span><span class="p">]);</span>
+  <span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-20"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-20">&#182;</a></div><p>aliasing modifiers</p></td><td class="code"><div class="highlight"><pre>  <span class="n">String</span> <span class="n">test2</span> <span class="o">=</span> <span class="n">test</span><span class="p">;</span>
+  <span class="k">auto</span> <span class="n">dt</span> <span class="o">=</span> <span class="n">test2</span><span class="p">.</span><span class="n">data</span><span class="p">();</span>
+  <span class="k">auto</span> <span class="n">sz</span> <span class="o">=</span> <span class="n">test</span><span class="p">.</span><span class="n">c_str</span><span class="p">();</span>
+  <span class="n">len</span> <span class="o">=</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">();</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">memcmp</span><span class="p">(</span><span class="n">sz</span><span class="p">,</span> <span class="n">dt</span><span class="p">,</span> <span class="n">len</span><span class="p">),</span> <span class="mi">0</span><span class="p">);</span>
+  <span class="n">String</span> <span class="n">copy</span><span class="p">(</span><span class="n">test</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">());</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">strlen</span><span class="p">(</span><span class="n">test</span><span class="p">.</span><span class="n">c_str</span><span class="p">()),</span> <span class="n">len</span><span class="p">);</span>
+  <span class="n">test</span> <span class="o">+=</span> <span class="n">test</span><span class="p">;</span></pre></div></td></tr>
+
+
+<tr id="section-21"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-21">&#182;</a></div><p>test.append(test);</p></td><td class="code"><div class="highlight"><pre>  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">len</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">strlen</span><span class="p">(</span><span class="n">test</span><span class="p">.</span><span class="n">c_str</span><span class="p">()),</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">len</span><span class="p">);</span>
+  <span class="n">FOR_EACH_RANGE</span> <span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">len</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">test</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="n">copy</span><span class="p">[</span><span class="n">i</span><span class="p">]);</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">test</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="n">test</span><span class="p">[</span><span class="n">len</span> <span class="o">+</span> <span class="n">i</span><span class="p">]);</span>
+  <span class="p">}</span>
+  <span class="n">len</span> <span class="o">=</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">();</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">strlen</span><span class="p">(</span><span class="n">test</span><span class="p">.</span><span class="n">c_str</span><span class="p">()),</span> <span class="n">len</span><span class="p">);</span></pre></div></td></tr>
+
+
+<tr id="section-22"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-22">&#182;</a></div><p>more aliasing</p></td><td class="code"><div class="highlight"><pre>  <span class="k">auto</span> <span class="k">const</span> <span class="n">pos</span> <span class="o">=</span> <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">());</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">strlen</span><span class="p">(</span><span class="n">test</span><span class="p">.</span><span class="n">c_str</span><span class="p">()</span> <span class="o">+</span> <span class="n">pos</span><span class="p">),</span> <span class="n">len</span> <span class="o">-</span> <span class="n">pos</span><span class="p">);</span>
+  <span class="k">if</span> <span class="p">(</span><span class="n">avoidAliasing</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">String</span> <span class="n">addMe</span><span class="p">(</span><span class="n">test</span><span class="p">.</span><span class="n">c_str</span><span class="p">()</span> <span class="o">+</span> <span class="n">pos</span><span class="p">);</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">addMe</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="n">len</span> <span class="o">-</span> <span class="n">pos</span><span class="p">);</span>
+    <span class="n">test</span> <span class="o">+=</span> <span class="n">addMe</span><span class="p">;</span>
+  <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+    <span class="n">test</span> <span class="o">+=</span> <span class="n">test</span><span class="p">.</span><span class="n">c_str</span><span class="p">()</span> <span class="o">+</span> <span class="n">pos</span><span class="p">;</span>
+  <span class="p">}</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">len</span> <span class="o">-</span> <span class="n">pos</span><span class="p">);</span></pre></div></td></tr>
+
+
+<tr id="section-23"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-23">&#182;</a></div><p>single char</p></td><td class="code"><div class="highlight"><pre>  <span class="n">len</span> <span class="o">=</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">();</span>
+  <span class="n">test</span> <span class="o">+=</span> <span class="n">random</span><span class="p">(</span><span class="sc">&#39;a&#39;</span><span class="p">,</span> <span class="sc">&#39;z&#39;</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="n">len</span> <span class="o">+</span> <span class="mi">1</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="k">template</span> <span class="o">&lt;</span><span class="k">class</span> <span class="nc">String</span><span class="o">&gt;</span> <span class="kt">void</span> <span class="n">clause_21_3_5_b</span><span class="p">(</span><span class="n">String</span> <span class="o">&amp;</span> <span class="n">test</span><span class="p">)</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-24"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-24">&#182;</a></div><p>21.3.5 modifiers (append, push_back)</p></td><td class="code"><div class="highlight"><pre>  <span class="n">String</span> <span class="n">s</span><span class="p">;</span></pre></div></td></tr>
+
+
+<tr id="section-25"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-25">&#182;</a></div><p>Test with a small string first</p></td><td class="code"><div class="highlight"><pre>  <span class="kt">char</span> <span class="n">c</span> <span class="o">=</span> <span class="n">random</span><span class="p">(</span><span class="sc">&#39;a&#39;</span><span class="p">,</span> <span class="sc">&#39;z&#39;</span><span class="p">);</span>
+  <span class="n">s</span><span class="p">.</span><span class="n">push_back</span><span class="p">(</span><span class="n">c</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">s</span><span class="p">[</span><span class="n">s</span><span class="p">.</span><span class="n">size</span><span class="p">()</span> <span class="o">-</span> <span class="mi">1</span><span class="p">],</span> <span class="n">c</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">s</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="mi">1</span><span class="p">);</span>
+  <span class="n">s</span><span class="p">.</span><span class="n">resize</span><span class="p">(</span><span class="n">s</span><span class="p">.</span><span class="n">size</span><span class="p">()</span> <span class="o">-</span> <span class="mi">1</span><span class="p">);</span>
+
+  <span class="n">randomString</span><span class="p">(</span><span class="o">&amp;</span><span class="n">s</span><span class="p">,</span> <span class="n">maxString</span><span class="p">);</span>
+  <span class="n">test</span><span class="p">.</span><span class="n">append</span><span class="p">(</span><span class="n">s</span><span class="p">);</span>
+  <span class="n">randomString</span><span class="p">(</span><span class="o">&amp;</span><span class="n">s</span><span class="p">,</span> <span class="n">maxString</span><span class="p">);</span>
+  <span class="n">test</span><span class="p">.</span><span class="n">append</span><span class="p">(</span><span class="n">s</span><span class="p">,</span> <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">s</span><span class="p">.</span><span class="n">size</span><span class="p">()),</span> <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">maxString</span><span class="p">));</span>
+  <span class="n">randomString</span><span class="p">(</span><span class="o">&amp;</span><span class="n">s</span><span class="p">,</span> <span class="n">maxString</span><span class="p">);</span>
+  <span class="n">test</span><span class="p">.</span><span class="n">append</span><span class="p">(</span><span class="n">s</span><span class="p">.</span><span class="n">c_str</span><span class="p">(),</span> <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">s</span><span class="p">.</span><span class="n">size</span><span class="p">()));</span>
+  <span class="n">randomString</span><span class="p">(</span><span class="o">&amp;</span><span class="n">s</span><span class="p">,</span> <span class="n">maxString</span><span class="p">);</span>
+  <span class="n">test</span><span class="p">.</span><span class="n">append</span><span class="p">(</span><span class="n">s</span><span class="p">.</span><span class="n">c_str</span><span class="p">());</span>
+  <span class="n">test</span><span class="p">.</span><span class="n">append</span><span class="p">(</span><span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">maxString</span><span class="p">),</span> <span class="n">random</span><span class="p">(</span><span class="sc">&#39;a&#39;</span><span class="p">,</span> <span class="sc">&#39;z&#39;</span><span class="p">));</span>
+  <span class="n">std</span><span class="o">::</span><span class="n">list</span><span class="o">&lt;</span><span class="kt">char</span><span class="o">&gt;</span> <span class="n">lst</span><span class="p">(</span><span class="n">RandomList</span><span class="p">(</span><span class="n">maxString</span><span class="p">));</span>
+  <span class="n">test</span><span class="p">.</span><span class="n">append</span><span class="p">(</span><span class="n">lst</span><span class="p">.</span><span class="n">begin</span><span class="p">(),</span> <span class="n">lst</span><span class="p">.</span><span class="n">end</span><span class="p">());</span>
+  <span class="n">c</span> <span class="o">=</span> <span class="n">random</span><span class="p">(</span><span class="sc">&#39;a&#39;</span><span class="p">,</span> <span class="sc">&#39;z&#39;</span><span class="p">);</span>
+  <span class="n">test</span><span class="p">.</span><span class="n">push_back</span><span class="p">(</span><span class="n">c</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">test</span><span class="p">[</span><span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">()</span> <span class="o">-</span> <span class="mi">1</span><span class="p">],</span> <span class="n">c</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="k">template</span> <span class="o">&lt;</span><span class="k">class</span> <span class="nc">String</span><span class="o">&gt;</span> <span class="kt">void</span> <span class="n">clause_21_3_5_c</span><span class="p">(</span><span class="n">String</span> <span class="o">&amp;</span> <span class="n">test</span><span class="p">)</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-26"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-26">&#182;</a></div><p>assign</p></td><td class="code"><div class="highlight"><pre>  <span class="n">String</span> <span class="n">s</span><span class="p">;</span>
+  <span class="n">randomString</span><span class="p">(</span><span class="o">&amp;</span><span class="n">s</span><span class="p">);</span>
+  <span class="n">test</span><span class="p">.</span><span class="n">assign</span><span class="p">(</span><span class="n">s</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="k">template</span> <span class="o">&lt;</span><span class="k">class</span> <span class="nc">String</span><span class="o">&gt;</span> <span class="kt">void</span> <span class="n">clause_21_3_5_d</span><span class="p">(</span><span class="n">String</span> <span class="o">&amp;</span> <span class="n">test</span><span class="p">)</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-27"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-27">&#182;</a></div><p>assign</p></td><td class="code"><div class="highlight"><pre>  <span class="n">String</span> <span class="n">s</span><span class="p">;</span>
+  <span class="n">randomString</span><span class="p">(</span><span class="o">&amp;</span><span class="n">s</span><span class="p">,</span> <span class="n">maxString</span><span class="p">);</span>
+  <span class="n">test</span><span class="p">.</span><span class="n">assign</span><span class="p">(</span><span class="n">s</span><span class="p">,</span> <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">s</span><span class="p">.</span><span class="n">size</span><span class="p">()),</span> <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">maxString</span><span class="p">));</span>
+<span class="p">}</span>
+
+<span class="k">template</span> <span class="o">&lt;</span><span class="k">class</span> <span class="nc">String</span><span class="o">&gt;</span> <span class="kt">void</span> <span class="n">clause_21_3_5_e</span><span class="p">(</span><span class="n">String</span> <span class="o">&amp;</span> <span class="n">test</span><span class="p">)</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-28"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-28">&#182;</a></div><p>assign</p></td><td class="code"><div class="highlight"><pre>  <span class="n">String</span> <span class="n">s</span><span class="p">;</span>
+  <span class="n">randomString</span><span class="p">(</span><span class="o">&amp;</span><span class="n">s</span><span class="p">,</span> <span class="n">maxString</span><span class="p">);</span>
+  <span class="n">test</span><span class="p">.</span><span class="n">assign</span><span class="p">(</span><span class="n">s</span><span class="p">.</span><span class="n">c_str</span><span class="p">(),</span> <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">s</span><span class="p">.</span><span class="n">size</span><span class="p">()));</span>
+<span class="p">}</span>
+
+<span class="k">template</span> <span class="o">&lt;</span><span class="k">class</span> <span class="nc">String</span><span class="o">&gt;</span> <span class="kt">void</span> <span class="n">clause_21_3_5_f</span><span class="p">(</span><span class="n">String</span> <span class="o">&amp;</span> <span class="n">test</span><span class="p">)</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-29"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-29">&#182;</a></div><p>assign</p></td><td class="code"><div class="highlight"><pre>  <span class="n">String</span> <span class="n">s</span><span class="p">;</span>
+  <span class="n">randomString</span><span class="p">(</span><span class="o">&amp;</span><span class="n">s</span><span class="p">,</span> <span class="n">maxString</span><span class="p">);</span>
+  <span class="n">test</span><span class="p">.</span><span class="n">assign</span><span class="p">(</span><span class="n">s</span><span class="p">.</span><span class="n">c_str</span><span class="p">());</span>
+<span class="p">}</span>
+
+<span class="k">template</span> <span class="o">&lt;</span><span class="k">class</span> <span class="nc">String</span><span class="o">&gt;</span> <span class="kt">void</span> <span class="n">clause_21_3_5_g</span><span class="p">(</span><span class="n">String</span> <span class="o">&amp;</span> <span class="n">test</span><span class="p">)</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-30"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-30">&#182;</a></div><p>assign</p></td><td class="code"><div class="highlight"><pre>  <span class="n">String</span> <span class="n">s</span><span class="p">;</span>
+  <span class="n">randomString</span><span class="p">(</span><span class="o">&amp;</span><span class="n">s</span><span class="p">,</span> <span class="n">maxString</span><span class="p">);</span>
+  <span class="n">test</span><span class="p">.</span><span class="n">assign</span><span class="p">(</span><span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">maxString</span><span class="p">),</span> <span class="n">random</span><span class="p">(</span><span class="sc">&#39;a&#39;</span><span class="p">,</span> <span class="sc">&#39;z&#39;</span><span class="p">));</span>
+<span class="p">}</span>
+
+<span class="k">template</span> <span class="o">&lt;</span><span class="k">class</span> <span class="nc">String</span><span class="o">&gt;</span> <span class="kt">void</span> <span class="n">clause_21_3_5_h</span><span class="p">(</span><span class="n">String</span> <span class="o">&amp;</span> <span class="n">test</span><span class="p">)</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-31"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-31">&#182;</a></div><p>assign from bidirectional iterator</p></td><td class="code"><div class="highlight"><pre>  <span class="n">std</span><span class="o">::</span><span class="n">list</span><span class="o">&lt;</span><span class="kt">char</span><span class="o">&gt;</span> <span class="n">lst</span><span class="p">(</span><span class="n">RandomList</span><span class="p">(</span><span class="n">maxString</span><span class="p">));</span>
+  <span class="n">test</span><span class="p">.</span><span class="n">assign</span><span class="p">(</span><span class="n">lst</span><span class="p">.</span><span class="n">begin</span><span class="p">(),</span> <span class="n">lst</span><span class="p">.</span><span class="n">end</span><span class="p">());</span>
+<span class="p">}</span>
+
+<span class="k">template</span> <span class="o">&lt;</span><span class="k">class</span> <span class="nc">String</span><span class="o">&gt;</span> <span class="kt">void</span> <span class="n">clause_21_3_5_i</span><span class="p">(</span><span class="n">String</span> <span class="o">&amp;</span> <span class="n">test</span><span class="p">)</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-32"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-32">&#182;</a></div><p>assign from aliased source</p></td><td class="code"><div class="highlight"><pre>  <span class="n">test</span><span class="p">.</span><span class="n">assign</span><span class="p">(</span><span class="n">test</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="k">template</span> <span class="o">&lt;</span><span class="k">class</span> <span class="nc">String</span><span class="o">&gt;</span> <span class="kt">void</span> <span class="n">clause_21_3_5_j</span><span class="p">(</span><span class="n">String</span> <span class="o">&amp;</span> <span class="n">test</span><span class="p">)</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-33"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-33">&#182;</a></div><p>assign from aliased source</p></td><td class="code"><div class="highlight"><pre>  <span class="n">test</span><span class="p">.</span><span class="n">assign</span><span class="p">(</span><span class="n">test</span><span class="p">,</span> <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">()),</span> <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">maxString</span><span class="p">));</span>
+<span class="p">}</span>
+
+<span class="k">template</span> <span class="o">&lt;</span><span class="k">class</span> <span class="nc">String</span><span class="o">&gt;</span> <span class="kt">void</span> <span class="n">clause_21_3_5_k</span><span class="p">(</span><span class="n">String</span> <span class="o">&amp;</span> <span class="n">test</span><span class="p">)</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-34"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-34">&#182;</a></div><p>assign from aliased source</p></td><td class="code"><div class="highlight"><pre>  <span class="n">test</span><span class="p">.</span><span class="n">assign</span><span class="p">(</span><span class="n">test</span><span class="p">.</span><span class="n">c_str</span><span class="p">(),</span> <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">()));</span>
+<span class="p">}</span>
+
+<span class="k">template</span> <span class="o">&lt;</span><span class="k">class</span> <span class="nc">String</span><span class="o">&gt;</span> <span class="kt">void</span> <span class="n">clause_21_3_5_l</span><span class="p">(</span><span class="n">String</span> <span class="o">&amp;</span> <span class="n">test</span><span class="p">)</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-35"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-35">&#182;</a></div><p>assign from aliased source</p></td><td class="code"><div class="highlight"><pre>  <span class="n">test</span><span class="p">.</span><span class="n">assign</span><span class="p">(</span><span class="n">test</span><span class="p">.</span><span class="n">c_str</span><span class="p">());</span>
+<span class="p">}</span>
+
+<span class="k">template</span> <span class="o">&lt;</span><span class="k">class</span> <span class="nc">String</span><span class="o">&gt;</span> <span class="kt">void</span> <span class="n">clause_21_3_5_m</span><span class="p">(</span><span class="n">String</span> <span class="o">&amp;</span> <span class="n">test</span><span class="p">)</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-36"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-36">&#182;</a></div><p>insert</p></td><td class="code"><div class="highlight"><pre>  <span class="n">String</span> <span class="n">s</span><span class="p">;</span>
+  <span class="n">randomString</span><span class="p">(</span><span class="o">&amp;</span><span class="n">s</span><span class="p">,</span> <span class="n">maxString</span><span class="p">);</span>
+  <span class="n">test</span><span class="p">.</span><span class="n">insert</span><span class="p">(</span><span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">()),</span> <span class="n">s</span><span class="p">);</span>
+  <span class="n">randomString</span><span class="p">(</span><span class="o">&amp;</span><span class="n">s</span><span class="p">,</span> <span class="n">maxString</span><span class="p">);</span>
+  <span class="n">test</span><span class="p">.</span><span class="n">insert</span><span class="p">(</span><span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">()),</span>
+              <span class="n">s</span><span class="p">,</span> <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">s</span><span class="p">.</span><span class="n">size</span><span class="p">()),</span>
+              <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">maxString</span><span class="p">));</span>
+  <span class="n">randomString</span><span class="p">(</span><span class="o">&amp;</span><span class="n">s</span><span class="p">,</span> <span class="n">maxString</span><span class="p">);</span>
+  <span class="n">test</span><span class="p">.</span><span class="n">insert</span><span class="p">(</span><span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">()),</span>
+              <span class="n">s</span><span class="p">.</span><span class="n">c_str</span><span class="p">(),</span> <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">s</span><span class="p">.</span><span class="n">size</span><span class="p">()));</span>
+  <span class="n">randomString</span><span class="p">(</span><span class="o">&amp;</span><span class="n">s</span><span class="p">,</span> <span class="n">maxString</span><span class="p">);</span>
+  <span class="n">test</span><span class="p">.</span><span class="n">insert</span><span class="p">(</span><span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">()),</span> <span class="n">s</span><span class="p">.</span><span class="n">c_str</span><span class="p">());</span>
+  <span class="n">test</span><span class="p">.</span><span class="n">insert</span><span class="p">(</span><span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">()),</span>
+              <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">maxString</span><span class="p">),</span> <span class="n">random</span><span class="p">(</span><span class="sc">&#39;a&#39;</span><span class="p">,</span> <span class="sc">&#39;z&#39;</span><span class="p">));</span>
+  <span class="n">test</span><span class="p">.</span><span class="n">insert</span><span class="p">(</span><span class="n">test</span><span class="p">.</span><span class="n">begin</span><span class="p">()</span> <span class="o">+</span> <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">()),</span>
+              <span class="n">random</span><span class="p">(</span><span class="sc">&#39;a&#39;</span><span class="p">,</span> <span class="sc">&#39;z&#39;</span><span class="p">));</span>
+  <span class="n">std</span><span class="o">::</span><span class="n">list</span><span class="o">&lt;</span><span class="kt">char</span><span class="o">&gt;</span> <span class="n">lst</span><span class="p">(</span><span class="n">RandomList</span><span class="p">(</span><span class="n">maxString</span><span class="p">));</span>
+  <span class="n">test</span><span class="p">.</span><span class="n">insert</span><span class="p">(</span><span class="n">test</span><span class="p">.</span><span class="n">begin</span><span class="p">()</span> <span class="o">+</span> <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">()),</span>
+              <span class="n">lst</span><span class="p">.</span><span class="n">begin</span><span class="p">(),</span> <span class="n">lst</span><span class="p">.</span><span class="n">end</span><span class="p">());</span>
+<span class="p">}</span>
+
+<span class="k">template</span> <span class="o">&lt;</span><span class="k">class</span> <span class="nc">String</span><span class="o">&gt;</span> <span class="kt">void</span> <span class="n">clause_21_3_5_n</span><span class="p">(</span><span class="n">String</span> <span class="o">&amp;</span> <span class="n">test</span><span class="p">)</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-37"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-37">&#182;</a></div><p>erase</p></td><td class="code"><div class="highlight"><pre>  <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">test</span><span class="p">.</span><span class="n">empty</span><span class="p">())</span> <span class="p">{</span>
+    <span class="n">test</span><span class="p">.</span><span class="n">erase</span><span class="p">(</span><span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">()),</span> <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">maxString</span><span class="p">));</span>
+  <span class="p">}</span>
+  <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">test</span><span class="p">.</span><span class="n">empty</span><span class="p">())</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-38"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-38">&#182;</a></div><p>TODO: is erase(end()) allowed?</p></td><td class="code"><div class="highlight"><pre>    <span class="n">test</span><span class="p">.</span><span class="n">erase</span><span class="p">(</span><span class="n">test</span><span class="p">.</span><span class="n">begin</span><span class="p">()</span> <span class="o">+</span> <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">()</span> <span class="o">-</span> <span class="mi">1</span><span class="p">));</span>
+  <span class="p">}</span>
+  <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">test</span><span class="p">.</span><span class="n">empty</span><span class="p">())</span> <span class="p">{</span>
+    <span class="k">auto</span> <span class="k">const</span> <span class="n">i</span> <span class="o">=</span> <span class="n">test</span><span class="p">.</span><span class="n">begin</span><span class="p">()</span> <span class="o">+</span> <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">());</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">i</span> <span class="o">!=</span> <span class="n">test</span><span class="p">.</span><span class="n">end</span><span class="p">())</span> <span class="p">{</span>
+      <span class="n">test</span><span class="p">.</span><span class="n">erase</span><span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="n">i</span> <span class="o">+</span> <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">size_t</span><span class="p">(</span><span class="n">test</span><span class="p">.</span><span class="n">end</span><span class="p">()</span> <span class="o">-</span> <span class="n">i</span><span class="p">)));</span>
+    <span class="p">}</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="k">template</span> <span class="o">&lt;</span><span class="k">class</span> <span class="nc">String</span><span class="o">&gt;</span> <span class="kt">void</span> <span class="n">clause_21_3_5_o</span><span class="p">(</span><span class="n">String</span> <span class="o">&amp;</span> <span class="n">test</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">auto</span> <span class="n">pos</span> <span class="o">=</span> <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">());</span>
+  <span class="k">if</span> <span class="p">(</span><span class="n">avoidAliasing</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">test</span><span class="p">.</span><span class="n">replace</span><span class="p">(</span><span class="n">pos</span><span class="p">,</span> <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">()</span> <span class="o">-</span> <span class="n">pos</span><span class="p">),</span>
+                 <span class="n">String</span><span class="p">(</span><span class="n">test</span><span class="p">));</span>
+  <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+    <span class="n">test</span><span class="p">.</span><span class="n">replace</span><span class="p">(</span><span class="n">pos</span><span class="p">,</span> <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">()</span> <span class="o">-</span> <span class="n">pos</span><span class="p">),</span> <span class="n">test</span><span class="p">);</span>
+  <span class="p">}</span>
+  <span class="n">pos</span> <span class="o">=</span> <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">());</span>
+  <span class="n">String</span> <span class="n">s</span><span class="p">;</span>
+  <span class="n">randomString</span><span class="p">(</span><span class="o">&amp;</span><span class="n">s</span><span class="p">,</span> <span class="n">maxString</span><span class="p">);</span>
+  <span class="n">test</span><span class="p">.</span><span class="n">replace</span><span class="p">(</span><span class="n">pos</span><span class="p">,</span> <span class="n">pos</span> <span class="o">+</span> <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">()</span> <span class="o">-</span> <span class="n">pos</span><span class="p">),</span> <span class="n">s</span><span class="p">);</span>
+  <span class="k">auto</span> <span class="n">pos1</span> <span class="o">=</span> <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">());</span>
+  <span class="k">auto</span> <span class="n">pos2</span> <span class="o">=</span> <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">());</span>
+  <span class="k">if</span> <span class="p">(</span><span class="n">avoidAliasing</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">test</span><span class="p">.</span><span class="n">replace</span><span class="p">(</span><span class="n">pos1</span><span class="p">,</span> <span class="n">pos1</span> <span class="o">+</span> <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">()</span> <span class="o">-</span> <span class="n">pos1</span><span class="p">),</span>
+                 <span class="n">String</span><span class="p">(</span><span class="n">test</span><span class="p">),</span>
+                 <span class="n">pos2</span><span class="p">,</span> <span class="n">pos2</span> <span class="o">+</span> <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">()</span> <span class="o">-</span> <span class="n">pos2</span><span class="p">));</span>
+  <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+    <span class="n">test</span><span class="p">.</span><span class="n">replace</span><span class="p">(</span><span class="n">pos1</span><span class="p">,</span> <span class="n">pos1</span> <span class="o">+</span> <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">()</span> <span class="o">-</span> <span class="n">pos1</span><span class="p">),</span>
+                 <span class="n">test</span><span class="p">,</span> <span class="n">pos2</span><span class="p">,</span> <span class="n">pos2</span> <span class="o">+</span> <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">()</span> <span class="o">-</span> <span class="n">pos2</span><span class="p">));</span>
+  <span class="p">}</span>
+  <span class="n">pos1</span> <span class="o">=</span> <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">());</span>
+  <span class="n">String</span> <span class="n">str</span><span class="p">;</span>
+  <span class="n">randomString</span><span class="p">(</span><span class="o">&amp;</span><span class="n">str</span><span class="p">,</span> <span class="n">maxString</span><span class="p">);</span>
+  <span class="n">pos2</span> <span class="o">=</span> <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">str</span><span class="p">.</span><span class="n">size</span><span class="p">());</span>
+  <span class="n">test</span><span class="p">.</span><span class="n">replace</span><span class="p">(</span><span class="n">pos1</span><span class="p">,</span> <span class="n">pos1</span> <span class="o">+</span> <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">()</span> <span class="o">-</span> <span class="n">pos1</span><span class="p">),</span>
+               <span class="n">str</span><span class="p">,</span> <span class="n">pos2</span><span class="p">,</span> <span class="n">pos2</span> <span class="o">+</span> <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">str</span><span class="p">.</span><span class="n">size</span><span class="p">()</span> <span class="o">-</span> <span class="n">pos2</span><span class="p">));</span>
+  <span class="n">pos</span> <span class="o">=</span> <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">());</span>
+  <span class="k">if</span> <span class="p">(</span><span class="n">avoidAliasing</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">test</span><span class="p">.</span><span class="n">replace</span><span class="p">(</span><span class="n">pos</span><span class="p">,</span> <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">()</span> <span class="o">-</span> <span class="n">pos</span><span class="p">),</span>
+                 <span class="n">String</span><span class="p">(</span><span class="n">test</span><span class="p">).</span><span class="n">c_str</span><span class="p">(),</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">());</span>
+  <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+    <span class="n">test</span><span class="p">.</span><span class="n">replace</span><span class="p">(</span><span class="n">pos</span><span class="p">,</span> <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">()</span> <span class="o">-</span> <span class="n">pos</span><span class="p">),</span>
+                 <span class="n">test</span><span class="p">.</span><span class="n">c_str</span><span class="p">(),</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">());</span>
+  <span class="p">}</span>
+  <span class="n">pos</span> <span class="o">=</span> <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">());</span>
+  <span class="n">randomString</span><span class="p">(</span><span class="o">&amp;</span><span class="n">str</span><span class="p">,</span> <span class="n">maxString</span><span class="p">);</span>
+  <span class="n">test</span><span class="p">.</span><span class="n">replace</span><span class="p">(</span><span class="n">pos</span><span class="p">,</span> <span class="n">pos</span> <span class="o">+</span> <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">()</span> <span class="o">-</span> <span class="n">pos</span><span class="p">),</span>
+               <span class="n">str</span><span class="p">.</span><span class="n">c_str</span><span class="p">(),</span> <span class="n">str</span><span class="p">.</span><span class="n">size</span><span class="p">());</span>
+  <span class="n">pos</span> <span class="o">=</span> <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">());</span>
+  <span class="n">randomString</span><span class="p">(</span><span class="o">&amp;</span><span class="n">str</span><span class="p">,</span> <span class="n">maxString</span><span class="p">);</span>
+  <span class="n">test</span><span class="p">.</span><span class="n">replace</span><span class="p">(</span><span class="n">pos</span><span class="p">,</span> <span class="n">pos</span> <span class="o">+</span> <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">()</span> <span class="o">-</span> <span class="n">pos</span><span class="p">),</span>
+               <span class="n">str</span><span class="p">.</span><span class="n">c_str</span><span class="p">());</span>
+  <span class="n">pos</span> <span class="o">=</span> <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">());</span>
+  <span class="n">test</span><span class="p">.</span><span class="n">replace</span><span class="p">(</span><span class="n">pos</span><span class="p">,</span> <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">()</span> <span class="o">-</span> <span class="n">pos</span><span class="p">),</span>
+               <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">maxString</span><span class="p">),</span> <span class="n">random</span><span class="p">(</span><span class="sc">&#39;a&#39;</span><span class="p">,</span> <span class="sc">&#39;z&#39;</span><span class="p">));</span>
+  <span class="n">pos</span> <span class="o">=</span> <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">());</span>
+  <span class="k">if</span> <span class="p">(</span><span class="n">avoidAliasing</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">test</span><span class="p">.</span><span class="n">replace</span><span class="p">(</span>
+      <span class="n">test</span><span class="p">.</span><span class="n">begin</span><span class="p">()</span> <span class="o">+</span> <span class="n">pos</span><span class="p">,</span>
+      <span class="n">test</span><span class="p">.</span><span class="n">begin</span><span class="p">()</span> <span class="o">+</span> <span class="n">pos</span> <span class="o">+</span> <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">()</span> <span class="o">-</span> <span class="n">pos</span><span class="p">),</span>
+      <span class="n">String</span><span class="p">(</span><span class="n">test</span><span class="p">));</span>
+  <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+    <span class="n">test</span><span class="p">.</span><span class="n">replace</span><span class="p">(</span>
+      <span class="n">test</span><span class="p">.</span><span class="n">begin</span><span class="p">()</span> <span class="o">+</span> <span class="n">pos</span><span class="p">,</span>
+      <span class="n">test</span><span class="p">.</span><span class="n">begin</span><span class="p">()</span> <span class="o">+</span> <span class="n">pos</span> <span class="o">+</span> <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">()</span> <span class="o">-</span> <span class="n">pos</span><span class="p">),</span>
+      <span class="n">test</span><span class="p">);</span>
+  <span class="p">}</span>
+  <span class="n">pos</span> <span class="o">=</span> <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">());</span>
+  <span class="k">if</span> <span class="p">(</span><span class="n">avoidAliasing</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">test</span><span class="p">.</span><span class="n">replace</span><span class="p">(</span>
+      <span class="n">test</span><span class="p">.</span><span class="n">begin</span><span class="p">()</span> <span class="o">+</span> <span class="n">pos</span><span class="p">,</span>
+      <span class="n">test</span><span class="p">.</span><span class="n">begin</span><span class="p">()</span> <span class="o">+</span> <span class="n">pos</span> <span class="o">+</span> <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">()</span> <span class="o">-</span> <span class="n">pos</span><span class="p">),</span>
+      <span class="n">String</span><span class="p">(</span><span class="n">test</span><span class="p">).</span><span class="n">c_str</span><span class="p">(),</span>
+      <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">()</span> <span class="o">-</span> <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">()));</span>
+  <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+    <span class="n">test</span><span class="p">.</span><span class="n">replace</span><span class="p">(</span>
+      <span class="n">test</span><span class="p">.</span><span class="n">begin</span><span class="p">()</span> <span class="o">+</span> <span class="n">pos</span><span class="p">,</span>
+      <span class="n">test</span><span class="p">.</span><span class="n">begin</span><span class="p">()</span> <span class="o">+</span> <span class="n">pos</span> <span class="o">+</span> <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">()</span> <span class="o">-</span> <span class="n">pos</span><span class="p">),</span>
+      <span class="n">test</span><span class="p">.</span><span class="n">c_str</span><span class="p">(),</span>
+      <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">()</span> <span class="o">-</span> <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">()));</span>
+  <span class="p">}</span>
+  <span class="n">pos</span> <span class="o">=</span> <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">());</span>
+  <span class="k">auto</span> <span class="k">const</span> <span class="n">n</span> <span class="o">=</span> <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">()</span> <span class="o">-</span> <span class="n">pos</span><span class="p">);</span>
+  <span class="k">typename</span> <span class="n">String</span><span class="o">::</span><span class="n">iterator</span> <span class="n">b</span> <span class="o">=</span> <span class="n">test</span><span class="p">.</span><span class="n">begin</span><span class="p">();</span>
+  <span class="n">String</span> <span class="n">str1</span><span class="p">;</span>
+  <span class="n">randomString</span><span class="p">(</span><span class="o">&amp;</span><span class="n">str1</span><span class="p">,</span> <span class="n">maxString</span><span class="p">);</span>
+  <span class="k">const</span> <span class="n">String</span> <span class="o">&amp;</span> <span class="n">str3</span> <span class="o">=</span> <span class="n">str1</span><span class="p">;</span>
+  <span class="k">const</span> <span class="k">typename</span> <span class="n">String</span><span class="o">::</span><span class="n">value_type</span><span class="o">*</span> <span class="n">ss</span> <span class="o">=</span> <span class="n">str3</span><span class="p">.</span><span class="n">c_str</span><span class="p">();</span>
+  <span class="n">test</span><span class="p">.</span><span class="n">replace</span><span class="p">(</span>
+    <span class="n">b</span> <span class="o">+</span> <span class="n">pos</span><span class="p">,</span>
+    <span class="n">b</span> <span class="o">+</span> <span class="n">pos</span> <span class="o">+</span> <span class="n">n</span><span class="p">,</span>
+    <span class="n">ss</span><span class="p">);</span>
+  <span class="n">pos</span> <span class="o">=</span> <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">());</span>
+  <span class="n">test</span><span class="p">.</span><span class="n">replace</span><span class="p">(</span>
+    <span class="n">test</span><span class="p">.</span><span class="n">begin</span><span class="p">()</span> <span class="o">+</span> <span class="n">pos</span><span class="p">,</span>
+    <span class="n">test</span><span class="p">.</span><span class="n">begin</span><span class="p">()</span> <span class="o">+</span> <span class="n">pos</span> <span class="o">+</span> <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">()</span> <span class="o">-</span> <span class="n">pos</span><span class="p">),</span>
+    <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">maxString</span><span class="p">),</span> <span class="n">random</span><span class="p">(</span><span class="sc">&#39;a&#39;</span><span class="p">,</span> <span class="sc">&#39;z&#39;</span><span class="p">));</span>
+<span class="p">}</span>
+
+<span class="k">template</span> <span class="o">&lt;</span><span class="k">class</span> <span class="nc">String</span><span class="o">&gt;</span> <span class="kt">void</span> <span class="n">clause_21_3_5_p</span><span class="p">(</span><span class="n">String</span> <span class="o">&amp;</span> <span class="n">test</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="k">typename</span> <span class="n">String</span><span class="o">::</span><span class="n">value_type</span><span class="o">&gt;</span>
+    <span class="n">vec</span><span class="p">(</span><span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">maxString</span><span class="p">));</span>
+  <span class="n">test</span><span class="p">.</span><span class="n">copy</span><span class="p">(</span>
+    <span class="o">&amp;</span><span class="n">vec</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
+    <span class="n">vec</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span>
+    <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">()));</span>
+<span class="p">}</span>
+
+<span class="k">template</span> <span class="o">&lt;</span><span class="k">class</span> <span class="nc">String</span><span class="o">&gt;</span> <span class="kt">void</span> <span class="n">clause_21_3_5_q</span><span class="p">(</span><span class="n">String</span> <span class="o">&amp;</span> <span class="n">test</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">String</span> <span class="n">s</span><span class="p">;</span>
+  <span class="n">randomString</span><span class="p">(</span><span class="o">&amp;</span><span class="n">s</span><span class="p">,</span> <span class="n">maxString</span><span class="p">);</span>
+  <span class="n">s</span><span class="p">.</span><span class="n">swap</span><span class="p">(</span><span class="n">test</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="k">template</span> <span class="o">&lt;</span><span class="k">class</span> <span class="nc">String</span><span class="o">&gt;</span> <span class="kt">void</span> <span class="n">clause_21_3_6_a</span><span class="p">(</span><span class="n">String</span> <span class="o">&amp;</span> <span class="n">test</span><span class="p">)</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-39"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-39">&#182;</a></div><p>21.3.6 string operations
+exercise c_str() and data()</p></td><td class="code"><div class="highlight"><pre>  <span class="n">assert</span><span class="p">(</span><span class="n">test</span><span class="p">.</span><span class="n">c_str</span><span class="p">()</span> <span class="o">==</span> <span class="n">test</span><span class="p">.</span><span class="n">data</span><span class="p">());</span></pre></div></td></tr>
+
+
+<tr id="section-40"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-40">&#182;</a></div><p>exercise get_allocator()</p></td><td class="code"><div class="highlight"><pre>  <span class="n">String</span> <span class="n">s</span><span class="p">;</span>
+  <span class="n">randomString</span><span class="p">(</span><span class="o">&amp;</span><span class="n">s</span><span class="p">,</span> <span class="n">maxString</span><span class="p">);</span>
+  <span class="n">assert</span><span class="p">(</span><span class="n">test</span><span class="p">.</span><span class="n">get_allocator</span><span class="p">()</span> <span class="o">==</span> <span class="n">s</span><span class="p">.</span><span class="n">get_allocator</span><span class="p">());</span>
+<span class="p">}</span>
+
+<span class="k">template</span> <span class="o">&lt;</span><span class="k">class</span> <span class="nc">String</span><span class="o">&gt;</span> <span class="kt">void</span> <span class="n">clause_21_3_6_b</span><span class="p">(</span><span class="n">String</span> <span class="o">&amp;</span> <span class="n">test</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">String</span> <span class="n">str</span> <span class="o">=</span> <span class="n">test</span><span class="p">.</span><span class="n">substr</span><span class="p">(</span>
+    <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">()),</span>
+    <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">()));</span>
+  <span class="n">Num2String</span><span class="p">(</span><span class="n">test</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">find</span><span class="p">(</span><span class="n">str</span><span class="p">,</span> <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">())));</span>
+<span class="p">}</span>
+
+<span class="k">template</span> <span class="o">&lt;</span><span class="k">class</span> <span class="nc">String</span><span class="o">&gt;</span> <span class="kt">void</span> <span class="n">clause_21_3_6_c</span><span class="p">(</span><span class="n">String</span> <span class="o">&amp;</span> <span class="n">test</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">auto</span> <span class="n">from</span> <span class="o">=</span> <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">());</span>
+  <span class="k">auto</span> <span class="n">length</span> <span class="o">=</span> <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">()</span> <span class="o">-</span> <span class="n">from</span><span class="p">);</span>
+  <span class="n">String</span> <span class="n">str</span> <span class="o">=</span> <span class="n">test</span><span class="p">.</span><span class="n">substr</span><span class="p">(</span><span class="n">from</span><span class="p">,</span> <span class="n">length</span><span class="p">);</span>
+  <span class="n">Num2String</span><span class="p">(</span><span class="n">test</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">find</span><span class="p">(</span><span class="n">str</span><span class="p">.</span><span class="n">c_str</span><span class="p">(),</span>
+                             <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">()),</span>
+                             <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">str</span><span class="p">.</span><span class="n">size</span><span class="p">())));</span>
+<span class="p">}</span>
+
+<span class="k">template</span> <span class="o">&lt;</span><span class="k">class</span> <span class="nc">String</span><span class="o">&gt;</span> <span class="kt">void</span> <span class="n">clause_21_3_6_d</span><span class="p">(</span><span class="n">String</span> <span class="o">&amp;</span> <span class="n">test</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">String</span> <span class="n">str</span> <span class="o">=</span> <span class="n">test</span><span class="p">.</span><span class="n">substr</span><span class="p">(</span>
+    <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">()),</span>
+    <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">()));</span>
+  <span class="n">Num2String</span><span class="p">(</span><span class="n">test</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">find</span><span class="p">(</span><span class="n">str</span><span class="p">.</span><span class="n">c_str</span><span class="p">(),</span>
+                             <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">())));</span>
+<span class="p">}</span>
+
+<span class="k">template</span> <span class="o">&lt;</span><span class="k">class</span> <span class="nc">String</span><span class="o">&gt;</span> <span class="kt">void</span> <span class="n">clause_21_3_6_e</span><span class="p">(</span><span class="n">String</span> <span class="o">&amp;</span> <span class="n">test</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">Num2String</span><span class="p">(</span><span class="n">test</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">find</span><span class="p">(</span>
+               <span class="n">random</span><span class="p">(</span><span class="sc">&#39;a&#39;</span><span class="p">,</span> <span class="sc">&#39;z&#39;</span><span class="p">),</span>
+               <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">())));</span>
+<span class="p">}</span>
+
+<span class="k">template</span> <span class="o">&lt;</span><span class="k">class</span> <span class="nc">String</span><span class="o">&gt;</span> <span class="kt">void</span> <span class="n">clause_21_3_6_f</span><span class="p">(</span><span class="n">String</span> <span class="o">&amp;</span> <span class="n">test</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">String</span> <span class="n">str</span> <span class="o">=</span> <span class="n">test</span><span class="p">.</span><span class="n">substr</span><span class="p">(</span>
+    <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">()),</span>
+    <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">()));</span>
+  <span class="n">Num2String</span><span class="p">(</span><span class="n">test</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">rfind</span><span class="p">(</span><span class="n">str</span><span class="p">,</span> <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">())));</span>
+<span class="p">}</span>
+
+<span class="k">template</span> <span class="o">&lt;</span><span class="k">class</span> <span class="nc">String</span><span class="o">&gt;</span> <span class="kt">void</span> <span class="n">clause_21_3_6_g</span><span class="p">(</span><span class="n">String</span> <span class="o">&amp;</span> <span class="n">test</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">String</span> <span class="n">str</span> <span class="o">=</span> <span class="n">test</span><span class="p">.</span><span class="n">substr</span><span class="p">(</span>
+    <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">()),</span>
+    <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">()));</span>
+  <span class="n">Num2String</span><span class="p">(</span><span class="n">test</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">rfind</span><span class="p">(</span><span class="n">str</span><span class="p">.</span><span class="n">c_str</span><span class="p">(),</span>
+                              <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">()),</span>
+                              <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">str</span><span class="p">.</span><span class="n">size</span><span class="p">())));</span>
+<span class="p">}</span>
+
+<span class="k">template</span> <span class="o">&lt;</span><span class="k">class</span> <span class="nc">String</span><span class="o">&gt;</span> <span class="kt">void</span> <span class="n">clause_21_3_6_h</span><span class="p">(</span><span class="n">String</span> <span class="o">&amp;</span> <span class="n">test</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">String</span> <span class="n">str</span> <span class="o">=</span> <span class="n">test</span><span class="p">.</span><span class="n">substr</span><span class="p">(</span>
+    <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">()),</span>
+    <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">()));</span>
+  <span class="n">Num2String</span><span class="p">(</span><span class="n">test</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">rfind</span><span class="p">(</span><span class="n">str</span><span class="p">.</span><span class="n">c_str</span><span class="p">(),</span>
+                              <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">())));</span>
+<span class="p">}</span>
+
+<span class="k">template</span> <span class="o">&lt;</span><span class="k">class</span> <span class="nc">String</span><span class="o">&gt;</span> <span class="kt">void</span> <span class="n">clause_21_3_6_i</span><span class="p">(</span><span class="n">String</span> <span class="o">&amp;</span> <span class="n">test</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">Num2String</span><span class="p">(</span><span class="n">test</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">rfind</span><span class="p">(</span>
+               <span class="n">random</span><span class="p">(</span><span class="sc">&#39;a&#39;</span><span class="p">,</span> <span class="sc">&#39;z&#39;</span><span class="p">),</span>
+               <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">())));</span>
+<span class="p">}</span>
+
+<span class="k">template</span> <span class="o">&lt;</span><span class="k">class</span> <span class="nc">String</span><span class="o">&gt;</span> <span class="kt">void</span> <span class="n">clause_21_3_6_j</span><span class="p">(</span><span class="n">String</span> <span class="o">&amp;</span> <span class="n">test</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">String</span> <span class="n">str</span><span class="p">;</span>
+  <span class="n">randomString</span><span class="p">(</span><span class="o">&amp;</span><span class="n">str</span><span class="p">,</span> <span class="n">maxString</span><span class="p">);</span>
+  <span class="n">Num2String</span><span class="p">(</span><span class="n">test</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">find_first_of</span><span class="p">(</span><span class="n">str</span><span class="p">,</span>
+                                      <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">())));</span>
+<span class="p">}</span>
+
+<span class="k">template</span> <span class="o">&lt;</span><span class="k">class</span> <span class="nc">String</span><span class="o">&gt;</span> <span class="kt">void</span> <span class="n">clause_21_3_6_k</span><span class="p">(</span><span class="n">String</span> <span class="o">&amp;</span> <span class="n">test</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">String</span> <span class="n">str</span><span class="p">;</span>
+  <span class="n">randomString</span><span class="p">(</span><span class="o">&amp;</span><span class="n">str</span><span class="p">,</span> <span class="n">maxString</span><span class="p">);</span>
+  <span class="n">Num2String</span><span class="p">(</span><span class="n">test</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">find_first_of</span><span class="p">(</span><span class="n">str</span><span class="p">.</span><span class="n">c_str</span><span class="p">(),</span>
+                                      <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">()),</span>
+                                      <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">str</span><span class="p">.</span><span class="n">size</span><span class="p">())));</span>
+<span class="p">}</span>
+
+<span class="k">template</span> <span class="o">&lt;</span><span class="k">class</span> <span class="nc">String</span><span class="o">&gt;</span> <span class="kt">void</span> <span class="n">clause_21_3_6_l</span><span class="p">(</span><span class="n">String</span> <span class="o">&amp;</span> <span class="n">test</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">String</span> <span class="n">str</span><span class="p">;</span>
+  <span class="n">randomString</span><span class="p">(</span><span class="o">&amp;</span><span class="n">str</span><span class="p">,</span> <span class="n">maxString</span><span class="p">);</span>
+  <span class="n">Num2String</span><span class="p">(</span><span class="n">test</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">find_first_of</span><span class="p">(</span><span class="n">str</span><span class="p">.</span><span class="n">c_str</span><span class="p">(),</span>
+                                      <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">())));</span>
+<span class="p">}</span>
+
+<span class="k">template</span> <span class="o">&lt;</span><span class="k">class</span> <span class="nc">String</span><span class="o">&gt;</span> <span class="kt">void</span> <span class="n">clause_21_3_6_m</span><span class="p">(</span><span class="n">String</span> <span class="o">&amp;</span> <span class="n">test</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">Num2String</span><span class="p">(</span><span class="n">test</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">find_first_of</span><span class="p">(</span>
+               <span class="n">random</span><span class="p">(</span><span class="sc">&#39;a&#39;</span><span class="p">,</span> <span class="sc">&#39;z&#39;</span><span class="p">),</span>
+               <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">())));</span>
+<span class="p">}</span>
+
+<span class="k">template</span> <span class="o">&lt;</span><span class="k">class</span> <span class="nc">String</span><span class="o">&gt;</span> <span class="kt">void</span> <span class="n">clause_21_3_6_n</span><span class="p">(</span><span class="n">String</span> <span class="o">&amp;</span> <span class="n">test</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">String</span> <span class="n">str</span><span class="p">;</span>
+  <span class="n">randomString</span><span class="p">(</span><span class="o">&amp;</span><span class="n">str</span><span class="p">,</span> <span class="n">maxString</span><span class="p">);</span>
+  <span class="n">Num2String</span><span class="p">(</span><span class="n">test</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">find_last_of</span><span class="p">(</span><span class="n">str</span><span class="p">,</span>
+                                     <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">())));</span>
+<span class="p">}</span>
+
+<span class="k">template</span> <span class="o">&lt;</span><span class="k">class</span> <span class="nc">String</span><span class="o">&gt;</span> <span class="kt">void</span> <span class="n">clause_21_3_6_o</span><span class="p">(</span><span class="n">String</span> <span class="o">&amp;</span> <span class="n">test</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">String</span> <span class="n">str</span><span class="p">;</span>
+  <span class="n">randomString</span><span class="p">(</span><span class="o">&amp;</span><span class="n">str</span><span class="p">,</span> <span class="n">maxString</span><span class="p">);</span>
+  <span class="n">Num2String</span><span class="p">(</span><span class="n">test</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">find_last_of</span><span class="p">(</span><span class="n">str</span><span class="p">.</span><span class="n">c_str</span><span class="p">(),</span>
+                                     <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">()),</span>
+                                     <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">str</span><span class="p">.</span><span class="n">size</span><span class="p">())));</span>
+<span class="p">}</span>
+
+<span class="k">template</span> <span class="o">&lt;</span><span class="k">class</span> <span class="nc">String</span><span class="o">&gt;</span> <span class="kt">void</span> <span class="n">clause_21_3_6_p</span><span class="p">(</span><span class="n">String</span> <span class="o">&amp;</span> <span class="n">test</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">String</span> <span class="n">str</span><span class="p">;</span>
+  <span class="n">randomString</span><span class="p">(</span><span class="o">&amp;</span><span class="n">str</span><span class="p">,</span> <span class="n">maxString</span><span class="p">);</span>
+  <span class="n">Num2String</span><span class="p">(</span><span class="n">test</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">find_last_of</span><span class="p">(</span><span class="n">str</span><span class="p">.</span><span class="n">c_str</span><span class="p">(),</span>
+                                     <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">())));</span>
+<span class="p">}</span>
+
+<span class="k">template</span> <span class="o">&lt;</span><span class="k">class</span> <span class="nc">String</span><span class="o">&gt;</span> <span class="kt">void</span> <span class="n">clause_21_3_6_q</span><span class="p">(</span><span class="n">String</span> <span class="o">&amp;</span> <span class="n">test</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">Num2String</span><span class="p">(</span><span class="n">test</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">find_last_of</span><span class="p">(</span>
+               <span class="n">random</span><span class="p">(</span><span class="sc">&#39;a&#39;</span><span class="p">,</span> <span class="sc">&#39;z&#39;</span><span class="p">),</span>
+               <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">())));</span>
+<span class="p">}</span>
+
+<span class="k">template</span> <span class="o">&lt;</span><span class="k">class</span> <span class="nc">String</span><span class="o">&gt;</span> <span class="kt">void</span> <span class="n">clause_21_3_6_r</span><span class="p">(</span><span class="n">String</span> <span class="o">&amp;</span> <span class="n">test</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">String</span> <span class="n">str</span><span class="p">;</span>
+  <span class="n">randomString</span><span class="p">(</span><span class="o">&amp;</span><span class="n">str</span><span class="p">,</span> <span class="n">maxString</span><span class="p">);</span>
+  <span class="n">Num2String</span><span class="p">(</span><span class="n">test</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">find_first_not_of</span><span class="p">(</span><span class="n">str</span><span class="p">,</span>
+                                          <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">())));</span>
+<span class="p">}</span>
+
+<span class="k">template</span> <span class="o">&lt;</span><span class="k">class</span> <span class="nc">String</span><span class="o">&gt;</span> <span class="kt">void</span> <span class="n">clause_21_3_6_s</span><span class="p">(</span><span class="n">String</span> <span class="o">&amp;</span> <span class="n">test</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">String</span> <span class="n">str</span><span class="p">;</span>
+  <span class="n">randomString</span><span class="p">(</span><span class="o">&amp;</span><span class="n">str</span><span class="p">,</span> <span class="n">maxString</span><span class="p">);</span>
+  <span class="n">Num2String</span><span class="p">(</span><span class="n">test</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">find_first_not_of</span><span class="p">(</span><span class="n">str</span><span class="p">.</span><span class="n">c_str</span><span class="p">(),</span>
+                                          <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">()),</span>
+                                          <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">str</span><span class="p">.</span><span class="n">size</span><span class="p">())));</span>
+<span class="p">}</span>
+
+<span class="k">template</span> <span class="o">&lt;</span><span class="k">class</span> <span class="nc">String</span><span class="o">&gt;</span> <span class="kt">void</span> <span class="n">clause_21_3_6_t</span><span class="p">(</span><span class="n">String</span> <span class="o">&amp;</span> <span class="n">test</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">String</span> <span class="n">str</span><span class="p">;</span>
+  <span class="n">randomString</span><span class="p">(</span><span class="o">&amp;</span><span class="n">str</span><span class="p">,</span> <span class="n">maxString</span><span class="p">);</span>
+  <span class="n">Num2String</span><span class="p">(</span><span class="n">test</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">find_first_not_of</span><span class="p">(</span><span class="n">str</span><span class="p">.</span><span class="n">c_str</span><span class="p">(),</span>
+                                          <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">())));</span>
+<span class="p">}</span>
+
+<span class="k">template</span> <span class="o">&lt;</span><span class="k">class</span> <span class="nc">String</span><span class="o">&gt;</span> <span class="kt">void</span> <span class="n">clause_21_3_6_u</span><span class="p">(</span><span class="n">String</span> <span class="o">&amp;</span> <span class="n">test</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">Num2String</span><span class="p">(</span><span class="n">test</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">find_first_not_of</span><span class="p">(</span>
+               <span class="n">random</span><span class="p">(</span><span class="sc">&#39;a&#39;</span><span class="p">,</span> <span class="sc">&#39;z&#39;</span><span class="p">),</span>
+               <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">())));</span>
+<span class="p">}</span>
+
+<span class="k">template</span> <span class="o">&lt;</span><span class="k">class</span> <span class="nc">String</span><span class="o">&gt;</span> <span class="kt">void</span> <span class="n">clause_21_3_6_v</span><span class="p">(</span><span class="n">String</span> <span class="o">&amp;</span> <span class="n">test</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">String</span> <span class="n">str</span><span class="p">;</span>
+  <span class="n">randomString</span><span class="p">(</span><span class="o">&amp;</span><span class="n">str</span><span class="p">,</span> <span class="n">maxString</span><span class="p">);</span>
+  <span class="n">Num2String</span><span class="p">(</span><span class="n">test</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">find_last_not_of</span><span class="p">(</span><span class="n">str</span><span class="p">,</span>
+                                         <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">())));</span>
+<span class="p">}</span>
+
+<span class="k">template</span> <span class="o">&lt;</span><span class="k">class</span> <span class="nc">String</span><span class="o">&gt;</span> <span class="kt">void</span> <span class="n">clause_21_3_6_w</span><span class="p">(</span><span class="n">String</span> <span class="o">&amp;</span> <span class="n">test</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">String</span> <span class="n">str</span><span class="p">;</span>
+  <span class="n">randomString</span><span class="p">(</span><span class="o">&amp;</span><span class="n">str</span><span class="p">,</span> <span class="n">maxString</span><span class="p">);</span>
+  <span class="n">Num2String</span><span class="p">(</span><span class="n">test</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">find_last_not_of</span><span class="p">(</span><span class="n">str</span><span class="p">.</span><span class="n">c_str</span><span class="p">(),</span>
+                                         <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">()),</span>
+                                         <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">str</span><span class="p">.</span><span class="n">size</span><span class="p">())));</span>
+<span class="p">}</span>
+
+<span class="k">template</span> <span class="o">&lt;</span><span class="k">class</span> <span class="nc">String</span><span class="o">&gt;</span> <span class="kt">void</span> <span class="n">clause_21_3_6_x</span><span class="p">(</span><span class="n">String</span> <span class="o">&amp;</span> <span class="n">test</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">String</span> <span class="n">str</span><span class="p">;</span>
+  <span class="n">randomString</span><span class="p">(</span><span class="o">&amp;</span><span class="n">str</span><span class="p">,</span> <span class="n">maxString</span><span class="p">);</span>
+  <span class="n">Num2String</span><span class="p">(</span><span class="n">test</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">find_last_not_of</span><span class="p">(</span><span class="n">str</span><span class="p">.</span><span class="n">c_str</span><span class="p">(),</span>
+                                         <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">())));</span>
+<span class="p">}</span>
+
+<span class="k">template</span> <span class="o">&lt;</span><span class="k">class</span> <span class="nc">String</span><span class="o">&gt;</span> <span class="kt">void</span> <span class="n">clause_21_3_6_y</span><span class="p">(</span><span class="n">String</span> <span class="o">&amp;</span> <span class="n">test</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">Num2String</span><span class="p">(</span><span class="n">test</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">find_last_not_of</span><span class="p">(</span>
+               <span class="n">random</span><span class="p">(</span><span class="sc">&#39;a&#39;</span><span class="p">,</span> <span class="sc">&#39;z&#39;</span><span class="p">),</span>
+               <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">())));</span>
+<span class="p">}</span>
+
+<span class="k">template</span> <span class="o">&lt;</span><span class="k">class</span> <span class="nc">String</span><span class="o">&gt;</span> <span class="kt">void</span> <span class="n">clause_21_3_6_z</span><span class="p">(</span><span class="n">String</span> <span class="o">&amp;</span> <span class="n">test</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">test</span> <span class="o">=</span> <span class="n">test</span><span class="p">.</span><span class="n">substr</span><span class="p">(</span><span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">()),</span> <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">()));</span>
+<span class="p">}</span>
+
+<span class="k">template</span> <span class="o">&lt;</span><span class="k">class</span> <span class="nc">String</span><span class="o">&gt;</span> <span class="kt">void</span> <span class="n">clause_21_3_7_a</span><span class="p">(</span><span class="n">String</span> <span class="o">&amp;</span> <span class="n">test</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">String</span> <span class="n">s</span><span class="p">;</span>
+  <span class="n">randomString</span><span class="p">(</span><span class="o">&amp;</span><span class="n">s</span><span class="p">,</span> <span class="n">maxString</span><span class="p">);</span>
+  <span class="kt">int</span> <span class="n">tristate</span> <span class="o">=</span> <span class="n">test</span><span class="p">.</span><span class="n">compare</span><span class="p">(</span><span class="n">s</span><span class="p">);</span>
+  <span class="k">if</span> <span class="p">(</span><span class="n">tristate</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">)</span> <span class="n">tristate</span> <span class="o">=</span> <span class="mi">1</span><span class="p">;</span>
+  <span class="k">else</span> <span class="k">if</span> <span class="p">(</span><span class="n">tristate</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span> <span class="n">tristate</span> <span class="o">=</span> <span class="mi">2</span><span class="p">;</span>
+  <span class="n">Num2String</span><span class="p">(</span><span class="n">test</span><span class="p">,</span> <span class="n">tristate</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="k">template</span> <span class="o">&lt;</span><span class="k">class</span> <span class="nc">String</span><span class="o">&gt;</span> <span class="kt">void</span> <span class="n">clause_21_3_7_b</span><span class="p">(</span><span class="n">String</span> <span class="o">&amp;</span> <span class="n">test</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">String</span> <span class="n">s</span><span class="p">;</span>
+  <span class="n">randomString</span><span class="p">(</span><span class="o">&amp;</span><span class="n">s</span><span class="p">,</span> <span class="n">maxString</span><span class="p">);</span>
+  <span class="kt">int</span> <span class="n">tristate</span> <span class="o">=</span> <span class="n">test</span><span class="p">.</span><span class="n">compare</span><span class="p">(</span>
+    <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">()),</span>
+    <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">()),</span>
+    <span class="n">s</span><span class="p">);</span>
+  <span class="k">if</span> <span class="p">(</span><span class="n">tristate</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">)</span> <span class="n">tristate</span> <span class="o">=</span> <span class="mi">1</span><span class="p">;</span>
+  <span class="k">else</span> <span class="k">if</span> <span class="p">(</span><span class="n">tristate</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span> <span class="n">tristate</span> <span class="o">=</span> <span class="mi">2</span><span class="p">;</span>
+  <span class="n">Num2String</span><span class="p">(</span><span class="n">test</span><span class="p">,</span> <span class="n">tristate</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="k">template</span> <span class="o">&lt;</span><span class="k">class</span> <span class="nc">String</span><span class="o">&gt;</span> <span class="kt">void</span> <span class="n">clause_21_3_7_c</span><span class="p">(</span><span class="n">String</span> <span class="o">&amp;</span> <span class="n">test</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">String</span> <span class="n">str</span><span class="p">;</span>
+  <span class="n">randomString</span><span class="p">(</span><span class="o">&amp;</span><span class="n">str</span><span class="p">,</span> <span class="n">maxString</span><span class="p">);</span>
+  <span class="kt">int</span> <span class="n">tristate</span> <span class="o">=</span> <span class="n">test</span><span class="p">.</span><span class="n">compare</span><span class="p">(</span>
+    <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">()),</span>
+    <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">()),</span>
+    <span class="n">str</span><span class="p">,</span>
+    <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">str</span><span class="p">.</span><span class="n">size</span><span class="p">()),</span>
+    <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">str</span><span class="p">.</span><span class="n">size</span><span class="p">()));</span>
+  <span class="k">if</span> <span class="p">(</span><span class="n">tristate</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">)</span> <span class="n">tristate</span> <span class="o">=</span> <span class="mi">1</span><span class="p">;</span>
+  <span class="k">else</span> <span class="k">if</span> <span class="p">(</span><span class="n">tristate</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span> <span class="n">tristate</span> <span class="o">=</span> <span class="mi">2</span><span class="p">;</span>
+  <span class="n">Num2String</span><span class="p">(</span><span class="n">test</span><span class="p">,</span> <span class="n">tristate</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="k">template</span> <span class="o">&lt;</span><span class="k">class</span> <span class="nc">String</span><span class="o">&gt;</span> <span class="kt">void</span> <span class="n">clause_21_3_7_d</span><span class="p">(</span><span class="n">String</span> <span class="o">&amp;</span> <span class="n">test</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">String</span> <span class="n">s</span><span class="p">;</span>
+  <span class="n">randomString</span><span class="p">(</span><span class="o">&amp;</span><span class="n">s</span><span class="p">,</span> <span class="n">maxString</span><span class="p">);</span>
+  <span class="kt">int</span> <span class="n">tristate</span> <span class="o">=</span> <span class="n">test</span><span class="p">.</span><span class="n">compare</span><span class="p">(</span><span class="n">s</span><span class="p">.</span><span class="n">c_str</span><span class="p">());</span>
+  <span class="k">if</span> <span class="p">(</span><span class="n">tristate</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">)</span> <span class="n">tristate</span> <span class="o">=</span> <span class="mi">1</span><span class="p">;</span>
+  <span class="k">else</span> <span class="k">if</span> <span class="p">(</span><span class="n">tristate</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span> <span class="n">tristate</span> <span class="o">=</span> <span class="mi">2</span><span class="p">;</span>
+                <span class="n">Num2String</span><span class="p">(</span><span class="n">test</span><span class="p">,</span> <span class="n">tristate</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="k">template</span> <span class="o">&lt;</span><span class="k">class</span> <span class="nc">String</span><span class="o">&gt;</span> <span class="kt">void</span> <span class="n">clause_21_3_7_e</span><span class="p">(</span><span class="n">String</span> <span class="o">&amp;</span> <span class="n">test</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">String</span> <span class="n">str</span><span class="p">;</span>
+  <span class="n">randomString</span><span class="p">(</span><span class="o">&amp;</span><span class="n">str</span><span class="p">,</span> <span class="n">maxString</span><span class="p">);</span>
+  <span class="kt">int</span> <span class="n">tristate</span> <span class="o">=</span> <span class="n">test</span><span class="p">.</span><span class="n">compare</span><span class="p">(</span>
+    <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">()),</span>
+    <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">()),</span>
+    <span class="n">str</span><span class="p">.</span><span class="n">c_str</span><span class="p">(),</span>
+    <span class="n">random</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">str</span><span class="p">.</span><span class="n">size</span><span class="p">()));</span>
+  <span class="k">if</span> <span class="p">(</span><span class="n">tristate</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">)</span> <span class="n">tristate</span> <span class="o">=</span> <span class="mi">1</span><span class="p">;</span>
+  <span class="k">else</span> <span class="k">if</span> <span class="p">(</span><span class="n">tristate</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span> <span class="n">tristate</span> <span class="o">=</span> <span class="mi">2</span><span class="p">;</span>
+  <span class="n">Num2String</span><span class="p">(</span><span class="n">test</span><span class="p">,</span> <span class="n">tristate</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="k">template</span> <span class="o">&lt;</span><span class="k">class</span> <span class="nc">String</span><span class="o">&gt;</span> <span class="kt">void</span> <span class="n">clause_21_3_7_f</span><span class="p">(</span><span class="n">String</span> <span class="o">&amp;</span> <span class="n">test</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">String</span> <span class="n">s1</span><span class="p">;</span>
+  <span class="n">randomString</span><span class="p">(</span><span class="o">&amp;</span><span class="n">s1</span><span class="p">,</span> <span class="n">maxString</span><span class="p">);</span>
+  <span class="n">String</span> <span class="n">s2</span><span class="p">;</span>
+  <span class="n">randomString</span><span class="p">(</span><span class="o">&amp;</span><span class="n">s2</span><span class="p">,</span> <span class="n">maxString</span><span class="p">);</span>
+  <span class="n">test</span> <span class="o">=</span> <span class="n">s1</span> <span class="o">+</span> <span class="n">s2</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="k">template</span> <span class="o">&lt;</span><span class="k">class</span> <span class="nc">String</span><span class="o">&gt;</span> <span class="kt">void</span> <span class="n">clause_21_3_7_g</span><span class="p">(</span><span class="n">String</span> <span class="o">&amp;</span> <span class="n">test</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">String</span> <span class="n">s</span><span class="p">;</span>
+  <span class="n">randomString</span><span class="p">(</span><span class="o">&amp;</span><span class="n">s</span><span class="p">,</span> <span class="n">maxString</span><span class="p">);</span>
+  <span class="n">String</span> <span class="n">s1</span><span class="p">;</span>
+  <span class="n">randomString</span><span class="p">(</span><span class="o">&amp;</span><span class="n">s1</span><span class="p">,</span> <span class="n">maxString</span><span class="p">);</span>
+  <span class="n">test</span> <span class="o">=</span> <span class="n">s</span><span class="p">.</span><span class="n">c_str</span><span class="p">()</span> <span class="o">+</span> <span class="n">s1</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="k">template</span> <span class="o">&lt;</span><span class="k">class</span> <span class="nc">String</span><span class="o">&gt;</span> <span class="kt">void</span> <span class="n">clause_21_3_7_h</span><span class="p">(</span><span class="n">String</span> <span class="o">&amp;</span> <span class="n">test</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">String</span> <span class="n">s</span><span class="p">;</span>
+  <span class="n">randomString</span><span class="p">(</span><span class="o">&amp;</span><span class="n">s</span><span class="p">,</span> <span class="n">maxString</span><span class="p">);</span>
+  <span class="n">test</span> <span class="o">=</span> <span class="k">typename</span> <span class="n">String</span><span class="o">::</span><span class="n">value_type</span><span class="p">(</span><span class="n">random</span><span class="p">(</span><span class="sc">&#39;a&#39;</span><span class="p">,</span> <span class="sc">&#39;z&#39;</span><span class="p">))</span> <span class="o">+</span> <span class="n">s</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="k">template</span> <span class="o">&lt;</span><span class="k">class</span> <span class="nc">String</span><span class="o">&gt;</span> <span class="kt">void</span> <span class="n">clause_21_3_7_i</span><span class="p">(</span><span class="n">String</span> <span class="o">&amp;</span> <span class="n">test</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">String</span> <span class="n">s</span><span class="p">;</span>
+  <span class="n">randomString</span><span class="p">(</span><span class="o">&amp;</span><span class="n">s</span><span class="p">,</span> <span class="n">maxString</span><span class="p">);</span>
+  <span class="n">String</span> <span class="n">s1</span><span class="p">;</span>
+  <span class="n">randomString</span><span class="p">(</span><span class="o">&amp;</span><span class="n">s1</span><span class="p">,</span> <span class="n">maxString</span><span class="p">);</span>
+  <span class="n">test</span> <span class="o">=</span> <span class="n">s</span> <span class="o">+</span> <span class="n">s1</span><span class="p">.</span><span class="n">c_str</span><span class="p">();</span>
+<span class="p">}</span>
+
+<span class="k">template</span> <span class="o">&lt;</span><span class="k">class</span> <span class="nc">String</span><span class="o">&gt;</span> <span class="kt">void</span> <span class="n">clause_21_3_7_j</span><span class="p">(</span><span class="n">String</span> <span class="o">&amp;</span> <span class="n">test</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">String</span> <span class="n">s</span><span class="p">;</span>
+  <span class="n">randomString</span><span class="p">(</span><span class="o">&amp;</span><span class="n">s</span><span class="p">,</span> <span class="n">maxString</span><span class="p">);</span>
+  <span class="n">String</span> <span class="n">s1</span><span class="p">;</span>
+  <span class="n">randomString</span><span class="p">(</span><span class="o">&amp;</span><span class="n">s1</span><span class="p">,</span> <span class="n">maxString</span><span class="p">);</span>
+  <span class="n">test</span> <span class="o">=</span> <span class="n">s</span> <span class="o">+</span> <span class="n">s1</span><span class="p">.</span><span class="n">c_str</span><span class="p">();</span>
+<span class="p">}</span>
+
+<span class="k">template</span> <span class="o">&lt;</span><span class="k">class</span> <span class="nc">String</span><span class="o">&gt;</span> <span class="kt">void</span> <span class="n">clause_21_3_7_k</span><span class="p">(</span><span class="n">String</span> <span class="o">&amp;</span> <span class="n">test</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">String</span> <span class="n">s</span><span class="p">;</span>
+  <span class="n">randomString</span><span class="p">(</span><span class="o">&amp;</span><span class="n">s</span><span class="p">,</span> <span class="n">maxString</span><span class="p">);</span>
+  <span class="n">test</span> <span class="o">=</span> <span class="n">s</span> <span class="o">+</span> <span class="k">typename</span> <span class="n">String</span><span class="o">::</span><span class="n">value_type</span><span class="p">(</span><span class="n">random</span><span class="p">(</span><span class="sc">&#39;a&#39;</span><span class="p">,</span> <span class="sc">&#39;z&#39;</span><span class="p">));</span>
+<span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-41"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-41">&#182;</a></div><p>Numbering here is from C++11</p></td><td class="code"><div class="highlight"><pre><span class="k">template</span> <span class="o">&lt;</span><span class="k">class</span> <span class="nc">String</span><span class="o">&gt;</span> <span class="kt">void</span> <span class="n">clause_21_4_8_9_a</span><span class="p">(</span><span class="n">String</span> <span class="o">&amp;</span> <span class="n">test</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">stringstream</span> <span class="n">s</span><span class="p">(</span><span class="s">&quot;asd asdfjhuhdf    asdfasdf</span><span class="se">\t</span><span class="s">asdsdf&quot;</span><span class="p">);</span>
+  <span class="n">String</span> <span class="n">str</span><span class="p">;</span>
+  <span class="k">while</span> <span class="p">(</span><span class="n">s</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">s</span> <span class="o">&gt;&gt;</span> <span class="n">str</span><span class="p">;</span>
+    <span class="n">test</span> <span class="o">+=</span> <span class="n">str</span> <span class="o">+</span> <span class="n">test</span><span class="p">;</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">FBString</span><span class="p">,</span> <span class="n">testAllClauses</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span> <span class="o">&lt;&lt;</span> <span class="s">&quot;Starting with seed: &quot;</span> <span class="o">&lt;&lt;</span> <span class="n">seed</span><span class="p">;</span>
+  <span class="n">std</span><span class="o">::</span><span class="n">string</span> <span class="n">r</span><span class="p">;</span>
+  <span class="n">folly</span><span class="o">::</span><span class="n">fbstring</span> <span class="n">c</span><span class="p">;</span>
+<span class="cp">#define TEST_CLAUSE(x)                                              \</span>
+<span class="cp">  do {                                                              \</span>
+<span class="cp">      if (1) {} else EXPECT_TRUE(1) &lt;&lt; &quot;Testing clause &quot; &lt;&lt; #x;     \</span>
+<span class="cp">      randomString(&amp;r);                                             \</span>
+<span class="cp">      c = r;                                                        \</span>
+<span class="cp">      EXPECT_EQ(c, r);                                              \</span>
+<span class="cp">      auto localSeed = seed + count;                                \</span>
+<span class="cp">      rng = RandomT(localSeed);                                     \</span>
+<span class="cp">      clause_##x(r);                                                \</span>
+<span class="cp">      rng = RandomT(localSeed);                                     \</span>
+<span class="cp">      clause_##x(c);                                                \</span>
+<span class="cp">      EXPECT_EQ(r, c)                                               \</span>
+<span class="cp">        &lt;&lt; &quot;Lengths: &quot; &lt;&lt; r.size() &lt;&lt; &quot; vs. &quot; &lt;&lt; c.size()           \</span>
+<span class="cp">        &lt;&lt; &quot;\nReference: &#39;&quot; &lt;&lt; r &lt;&lt; &quot;&#39;&quot;                             \</span>
+<span class="cp">        &lt;&lt; &quot;\nActual:    &#39;&quot; &lt;&lt; c.data()[0] &lt;&lt; &quot;&#39;&quot;;                  \</span>
+<span class="cp">    } while (++count % 100 != 0)</span>
+
+  <span class="kt">int</span> <span class="n">count</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+  <span class="n">TEST_CLAUSE</span><span class="p">(</span><span class="mi">21</span><span class="n">_3_1_a</span><span class="p">);</span>
+  <span class="n">TEST_CLAUSE</span><span class="p">(</span><span class="mi">21</span><span class="n">_3_1_b</span><span class="p">);</span>
+  <span class="n">TEST_CLAUSE</span><span class="p">(</span><span class="mi">21</span><span class="n">_3_1_c</span><span class="p">);</span>
+  <span class="n">TEST_CLAUSE</span><span class="p">(</span><span class="mi">21</span><span class="n">_3_1_d</span><span class="p">);</span>
+  <span class="n">TEST_CLAUSE</span><span class="p">(</span><span class="mi">21</span><span class="n">_3_1_e</span><span class="p">);</span>
+  <span class="n">TEST_CLAUSE</span><span class="p">(</span><span class="mi">21</span><span class="n">_3_1_f</span><span class="p">);</span>
+  <span class="n">TEST_CLAUSE</span><span class="p">(</span><span class="mi">21</span><span class="n">_3_1_g</span><span class="p">);</span>
+
+  <span class="n">TEST_CLAUSE</span><span class="p">(</span><span class="mi">21</span><span class="n">_3_2</span><span class="p">);</span>
+  <span class="n">TEST_CLAUSE</span><span class="p">(</span><span class="mi">21</span><span class="n">_3_3</span><span class="p">);</span>
+  <span class="n">TEST_CLAUSE</span><span class="p">(</span><span class="mi">21</span><span class="n">_3_4</span><span class="p">);</span>
+  <span class="n">TEST_CLAUSE</span><span class="p">(</span><span class="mi">21</span><span class="n">_3_5_a</span><span class="p">);</span>
+  <span class="n">TEST_CLAUSE</span><span class="p">(</span><span class="mi">21</span><span class="n">_3_5_b</span><span class="p">);</span>
+  <span class="n">TEST_CLAUSE</span><span class="p">(</span><span class="mi">21</span><span class="n">_3_5_c</span><span class="p">);</span>
+  <span class="n">TEST_CLAUSE</span><span class="p">(</span><span class="mi">21</span><span class="n">_3_5_d</span><span class="p">);</span>
+  <span class="n">TEST_CLAUSE</span><span class="p">(</span><span class="mi">21</span><span class="n">_3_5_e</span><span class="p">);</span>
+  <span class="n">TEST_CLAUSE</span><span class="p">(</span><span class="mi">21</span><span class="n">_3_5_f</span><span class="p">);</span>
+  <span class="n">TEST_CLAUSE</span><span class="p">(</span><span class="mi">21</span><span class="n">_3_5_g</span><span class="p">);</span>
+  <span class="n">TEST_CLAUSE</span><span class="p">(</span><span class="mi">21</span><span class="n">_3_5_h</span><span class="p">);</span>
+  <span class="n">TEST_CLAUSE</span><span class="p">(</span><span class="mi">21</span><span class="n">_3_5_i</span><span class="p">);</span>
+  <span class="n">TEST_CLAUSE</span><span class="p">(</span><span class="mi">21</span><span class="n">_3_5_j</span><span class="p">);</span>
+  <span class="n">TEST_CLAUSE</span><span class="p">(</span><span class="mi">21</span><span class="n">_3_5_k</span><span class="p">);</span>
+  <span class="n">TEST_CLAUSE</span><span class="p">(</span><span class="mi">21</span><span class="n">_3_5_l</span><span class="p">);</span>
+  <span class="n">TEST_CLAUSE</span><span class="p">(</span><span class="mi">21</span><span class="n">_3_5_m</span><span class="p">);</span>
+  <span class="n">TEST_CLAUSE</span><span class="p">(</span><span class="mi">21</span><span class="n">_3_5_n</span><span class="p">);</span>
+  <span class="n">TEST_CLAUSE</span><span class="p">(</span><span class="mi">21</span><span class="n">_3_5_o</span><span class="p">);</span>
+  <span class="n">TEST_CLAUSE</span><span class="p">(</span><span class="mi">21</span><span class="n">_3_5_p</span><span class="p">);</span>
+
+  <span class="n">TEST_CLAUSE</span><span class="p">(</span><span class="mi">21</span><span class="n">_3_6_a</span><span class="p">);</span>
+  <span class="n">TEST_CLAUSE</span><span class="p">(</span><span class="mi">21</span><span class="n">_3_6_b</span><span class="p">);</span>
+  <span class="n">TEST_CLAUSE</span><span class="p">(</span><span class="mi">21</span><span class="n">_3_6_c</span><span class="p">);</span>
+  <span class="n">TEST_CLAUSE</span><span class="p">(</span><span class="mi">21</span><span class="n">_3_6_d</span><span class="p">);</span>
+  <span class="n">TEST_CLAUSE</span><span class="p">(</span><span class="mi">21</span><span class="n">_3_6_e</span><span class="p">);</span>
+  <span class="n">TEST_CLAUSE</span><span class="p">(</span><span class="mi">21</span><span class="n">_3_6_f</span><span class="p">);</span>
+  <span class="n">TEST_CLAUSE</span><span class="p">(</span><span class="mi">21</span><span class="n">_3_6_g</span><span class="p">);</span>
+  <span class="n">TEST_CLAUSE</span><span class="p">(</span><span class="mi">21</span><span class="n">_3_6_h</span><span class="p">);</span>
+  <span class="n">TEST_CLAUSE</span><span class="p">(</span><span class="mi">21</span><span class="n">_3_6_i</span><span class="p">);</span>
+  <span class="n">TEST_CLAUSE</span><span class="p">(</span><span class="mi">21</span><span class="n">_3_6_j</span><span class="p">);</span>
+  <span class="n">TEST_CLAUSE</span><span class="p">(</span><span class="mi">21</span><span class="n">_3_6_k</span><span class="p">);</span>
+  <span class="n">TEST_CLAUSE</span><span class="p">(</span><span class="mi">21</span><span class="n">_3_6_l</span><span class="p">);</span>
+  <span class="n">TEST_CLAUSE</span><span class="p">(</span><span class="mi">21</span><span class="n">_3_6_m</span><span class="p">);</span>
+  <span class="n">TEST_CLAUSE</span><span class="p">(</span><span class="mi">21</span><span class="n">_3_6_n</span><span class="p">);</span>
+  <span class="n">TEST_CLAUSE</span><span class="p">(</span><span class="mi">21</span><span class="n">_3_6_o</span><span class="p">);</span>
+  <span class="n">TEST_CLAUSE</span><span class="p">(</span><span class="mi">21</span><span class="n">_3_6_p</span><span class="p">);</span>
+  <span class="n">TEST_CLAUSE</span><span class="p">(</span><span class="mi">21</span><span class="n">_3_6_q</span><span class="p">);</span>
+  <span class="n">TEST_CLAUSE</span><span class="p">(</span><span class="mi">21</span><span class="n">_3_6_r</span><span class="p">);</span>
+  <span class="n">TEST_CLAUSE</span><span class="p">(</span><span class="mi">21</span><span class="n">_3_6_s</span><span class="p">);</span>
+  <span class="n">TEST_CLAUSE</span><span class="p">(</span><span class="mi">21</span><span class="n">_3_6_t</span><span class="p">);</span>
+  <span class="n">TEST_CLAUSE</span><span class="p">(</span><span class="mi">21</span><span class="n">_3_6_u</span><span class="p">);</span>
+  <span class="n">TEST_CLAUSE</span><span class="p">(</span><span class="mi">21</span><span class="n">_3_6_v</span><span class="p">);</span>
+  <span class="n">TEST_CLAUSE</span><span class="p">(</span><span class="mi">21</span><span class="n">_3_6_w</span><span class="p">);</span>
+  <span class="n">TEST_CLAUSE</span><span class="p">(</span><span class="mi">21</span><span class="n">_3_6_x</span><span class="p">);</span>
+  <span class="n">TEST_CLAUSE</span><span class="p">(</span><span class="mi">21</span><span class="n">_3_6_y</span><span class="p">);</span>
+  <span class="n">TEST_CLAUSE</span><span class="p">(</span><span class="mi">21</span><span class="n">_3_6_z</span><span class="p">);</span>
+
+  <span class="n">TEST_CLAUSE</span><span class="p">(</span><span class="mi">21</span><span class="n">_3_7_a</span><span class="p">);</span>
+  <span class="n">TEST_CLAUSE</span><span class="p">(</span><span class="mi">21</span><span class="n">_3_7_b</span><span class="p">);</span>
+  <span class="n">TEST_CLAUSE</span><span class="p">(</span><span class="mi">21</span><span class="n">_3_7_c</span><span class="p">);</span>
+  <span class="n">TEST_CLAUSE</span><span class="p">(</span><span class="mi">21</span><span class="n">_3_7_d</span><span class="p">);</span>
+  <span class="n">TEST_CLAUSE</span><span class="p">(</span><span class="mi">21</span><span class="n">_3_7_e</span><span class="p">);</span>
+  <span class="n">TEST_CLAUSE</span><span class="p">(</span><span class="mi">21</span><span class="n">_3_7_f</span><span class="p">);</span>
+  <span class="n">TEST_CLAUSE</span><span class="p">(</span><span class="mi">21</span><span class="n">_3_7_g</span><span class="p">);</span>
+  <span class="n">TEST_CLAUSE</span><span class="p">(</span><span class="mi">21</span><span class="n">_3_7_h</span><span class="p">);</span>
+  <span class="n">TEST_CLAUSE</span><span class="p">(</span><span class="mi">21</span><span class="n">_3_7_i</span><span class="p">);</span>
+  <span class="n">TEST_CLAUSE</span><span class="p">(</span><span class="mi">21</span><span class="n">_3_7_j</span><span class="p">);</span>
+  <span class="n">TEST_CLAUSE</span><span class="p">(</span><span class="mi">21</span><span class="n">_3_7_k</span><span class="p">);</span>
+
+  <span class="n">TEST_CLAUSE</span><span class="p">(</span><span class="mi">21</span><span class="n">_4_8_9_a</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">FBString</span><span class="p">,</span> <span class="n">testGetline</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">fbstring</span> <span class="n">s1</span> <span class="o">=</span> <span class="s">&quot;\</span>
+<span class="s">Lorem ipsum dolor sit amet, consectetur adipiscing elit. Cras accumsan </span><span class="se">\n</span><span class="s">\</span>
+<span class="s">elit ut urna consectetur in sagittis mi auctor. Nulla facilisi. In nec </span><span class="se">\n</span><span class="s">\</span>
+<span class="s">dolor leo, vitae imperdiet neque. Donec ut erat mauris, a faucibus </span><span class="se">\n</span><span class="s">\</span>
+<span class="s">elit. Integer consectetur gravida augue, sit amet mattis mauris auctor </span><span class="se">\n</span><span class="s">\</span>
+<span class="s">sed. Morbi congue libero eu nunc sodales adipiscing. In lectus nunc, </span><span class="se">\n</span><span class="s">\</span>
+<span class="s">vulputate a fringilla at, venenatis quis justo. Proin eu velit </span><span class="se">\n</span><span class="s">\</span>
+<span class="s">nibh. Maecenas vitae tellus eros. Pellentesque habitant morbi </span><span class="se">\n</span><span class="s">\</span>
+<span class="s">tristique senectus et netus et malesuada fames ac turpis </span><span class="se">\n</span><span class="s">\</span>
+<span class="s">egestas. Vivamus faucibus feugiat consequat. Donec fermentum neque sit </span><span class="se">\n</span><span class="s">\</span>
+<span class="s">amet ligula suscipit porta. Phasellus facilisis felis in purus luctus </span><span class="se">\n</span><span class="s">\</span>
+<span class="s">quis posuere leo tempor. Nam nunc purus, luctus a pharetra ut, </span><span class="se">\n</span><span class="s">\</span>
+<span class="s">placerat at dui. Donec imperdiet, diam quis convallis pulvinar, dui </span><span class="se">\n</span><span class="s">\</span>
+<span class="s">est commodo lorem, ut tincidunt diam nibh et nibh. Maecenas nec velit </span><span class="se">\n</span><span class="s">\</span>
+<span class="s">massa, ut accumsan magna. Donec imperdiet tempor nisi et </span><span class="se">\n</span><span class="s">\</span>
+<span class="s">laoreet. Phasellus lectus quam, ultricies ut tincidunt in, dignissim </span><span class="se">\n</span><span class="s">\</span>
+<span class="s">id eros. Mauris vulputate tortor nec neque pellentesque sagittis quis </span><span class="se">\n</span><span class="s">\</span>
+<span class="s">sed nisl. In diam lacus, lobortis ut posuere nec, ornare id quam.&quot;</span><span class="p">;</span>
+  <span class="kt">char</span> <span class="n">f</span><span class="p">[]</span> <span class="o">=</span> <span class="s">&quot;/tmp/fbstring_testing.XXXXXX&quot;</span><span class="p">;</span>
+  <span class="kt">int</span> <span class="n">fd</span> <span class="o">=</span> <span class="n">mkstemp</span><span class="p">(</span><span class="n">f</span><span class="p">);</span>
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">fd</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">);</span>
+  <span class="k">if</span> <span class="p">(</span><span class="n">fd</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">close</span><span class="p">(</span><span class="n">fd</span><span class="p">);</span>  <span class="c1">// Yeah</span>
+    <span class="n">std</span><span class="o">::</span><span class="n">ofstream</span> <span class="n">out</span><span class="p">(</span><span class="n">f</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="p">(</span><span class="n">out</span> <span class="o">&lt;&lt;</span> <span class="n">s1</span><span class="p">))</span> <span class="p">{</span>
+      <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span> <span class="o">&lt;&lt;</span> <span class="s">&quot;Couldn&#39;t write to temp file.&quot;</span><span class="p">;</span>
+      <span class="k">return</span><span class="p">;</span>
+    <span class="p">}</span>
+  <span class="p">}</span>
+  <span class="n">vector</span><span class="o">&lt;</span><span class="n">fbstring</span><span class="o">&gt;</span> <span class="n">v</span><span class="p">;</span>
+  <span class="n">boost</span><span class="o">::</span><span class="n">split</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="n">s1</span><span class="p">,</span> <span class="n">boost</span><span class="o">::</span><span class="n">is_any_of</span><span class="p">(</span><span class="s">&quot;</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">));</span>
+  <span class="p">{</span>
+    <span class="n">ifstream</span> <span class="n">input</span><span class="p">(</span><span class="n">f</span><span class="p">);</span>
+    <span class="n">fbstring</span> <span class="n">line</span><span class="p">;</span>
+    <span class="n">FOR_EACH</span> <span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="n">v</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">getline</span><span class="p">(</span><span class="n">input</span><span class="p">,</span> <span class="n">line</span><span class="p">));</span>
+      <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">line</span><span class="p">,</span> <span class="o">*</span><span class="n">i</span><span class="p">);</span>
+    <span class="p">}</span>
+  <span class="p">}</span>
+  <span class="n">unlink</span><span class="p">(</span><span class="n">f</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">FBString</span><span class="p">,</span> <span class="n">testMoveCtor</span><span class="p">)</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-42"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-42">&#182;</a></div><p>Move constructor. Make sure we allocate a large string, so the
+small string optimization doesn't kick in.</p></td><td class="code"><div class="highlight"><pre>  <span class="k">auto</span> <span class="n">size</span> <span class="o">=</span> <span class="n">random</span><span class="p">(</span><span class="mi">100</span><span class="p">,</span> <span class="mi">2000</span><span class="p">);</span>
+  <span class="n">fbstring</span> <span class="n">s</span><span class="p">(</span><span class="n">size</span><span class="p">,</span> <span class="sc">&#39;a&#39;</span><span class="p">);</span>
+  <span class="n">fbstring</span> <span class="n">test</span> <span class="o">=</span> <span class="n">std</span><span class="o">::</span><span class="n">move</span><span class="p">(</span><span class="n">s</span><span class="p">);</span>
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">s</span><span class="p">.</span><span class="n">empty</span><span class="p">());</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">size</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">());</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">FBString</span><span class="p">,</span> <span class="n">testMoveAssign</span><span class="p">)</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-43"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-43">&#182;</a></div><p>Move constructor. Make sure we allocate a large string, so the
+small string optimization doesn't kick in.</p></td><td class="code"><div class="highlight"><pre>  <span class="k">auto</span> <span class="n">size</span> <span class="o">=</span> <span class="n">random</span><span class="p">(</span><span class="mi">100</span><span class="p">,</span> <span class="mi">2000</span><span class="p">);</span>
+  <span class="n">fbstring</span> <span class="n">s</span><span class="p">(</span><span class="n">size</span><span class="p">,</span> <span class="sc">&#39;a&#39;</span><span class="p">);</span>
+  <span class="n">fbstring</span> <span class="n">test</span><span class="p">;</span>
+  <span class="n">test</span> <span class="o">=</span> <span class="n">std</span><span class="o">::</span><span class="n">move</span><span class="p">(</span><span class="n">s</span><span class="p">);</span>
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">s</span><span class="p">.</span><span class="n">empty</span><span class="p">());</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">size</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">());</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">FBString</span><span class="p">,</span> <span class="n">testMoveOperatorPlusLhs</span><span class="p">)</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-44"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-44">&#182;</a></div><p>Make sure we allocate a large string, so the
+small string optimization doesn't kick in.</p></td><td class="code"><div class="highlight"><pre>  <span class="k">auto</span> <span class="n">size1</span> <span class="o">=</span> <span class="n">random</span><span class="p">(</span><span class="mi">100</span><span class="p">,</span> <span class="mi">2000</span><span class="p">);</span>
+  <span class="k">auto</span> <span class="n">size2</span> <span class="o">=</span> <span class="n">random</span><span class="p">(</span><span class="mi">100</span><span class="p">,</span> <span class="mi">2000</span><span class="p">);</span>
+  <span class="n">fbstring</span> <span class="n">s1</span><span class="p">(</span><span class="n">size1</span><span class="p">,</span> <span class="sc">&#39;a&#39;</span><span class="p">);</span>
+  <span class="n">fbstring</span> <span class="n">s2</span><span class="p">(</span><span class="n">size2</span><span class="p">,</span> <span class="sc">&#39;b&#39;</span><span class="p">);</span>
+  <span class="n">fbstring</span> <span class="n">test</span><span class="p">;</span>
+  <span class="n">test</span> <span class="o">=</span> <span class="n">std</span><span class="o">::</span><span class="n">move</span><span class="p">(</span><span class="n">s1</span><span class="p">)</span> <span class="o">+</span> <span class="n">s2</span><span class="p">;</span>
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">s1</span><span class="p">.</span><span class="n">empty</span><span class="p">());</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">size1</span> <span class="o">+</span> <span class="n">size2</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">());</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">FBString</span><span class="p">,</span> <span class="n">testMoveOperatorPlusRhs</span><span class="p">)</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-45"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-45">&#182;</a></div><p>Make sure we allocate a large string, so the
+small string optimization doesn't kick in.</p></td><td class="code"><div class="highlight"><pre>  <span class="k">auto</span> <span class="n">size1</span> <span class="o">=</span> <span class="n">random</span><span class="p">(</span><span class="mi">100</span><span class="p">,</span> <span class="mi">2000</span><span class="p">);</span>
+  <span class="k">auto</span> <span class="n">size2</span> <span class="o">=</span> <span class="n">random</span><span class="p">(</span><span class="mi">100</span><span class="p">,</span> <span class="mi">2000</span><span class="p">);</span>
+  <span class="n">fbstring</span> <span class="n">s1</span><span class="p">(</span><span class="n">size1</span><span class="p">,</span> <span class="sc">&#39;a&#39;</span><span class="p">);</span>
+  <span class="n">fbstring</span> <span class="n">s2</span><span class="p">(</span><span class="n">size2</span><span class="p">,</span> <span class="sc">&#39;b&#39;</span><span class="p">);</span>
+  <span class="n">fbstring</span> <span class="n">test</span><span class="p">;</span>
+  <span class="n">test</span> <span class="o">=</span> <span class="n">s1</span> <span class="o">+</span> <span class="n">std</span><span class="o">::</span><span class="n">move</span><span class="p">(</span><span class="n">s2</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">size1</span> <span class="o">+</span> <span class="n">size2</span><span class="p">,</span> <span class="n">test</span><span class="p">.</span><span class="n">size</span><span class="p">());</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">FBString</span><span class="p">,</span> <span class="n">testConstructionFromLiteralZero</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">try</span> <span class="p">{</span>
+    <span class="n">std</span><span class="o">::</span><span class="n">string</span> <span class="n">s</span><span class="p">(</span><span class="mi">0</span><span class="p">);</span>
+    <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="kc">false</span><span class="p">);</span>
+  <span class="p">}</span> <span class="k">catch</span> <span class="p">(</span><span class="k">const</span> <span class="n">std</span><span class="o">::</span><span class="n">logic_error</span><span class="o">&amp;</span><span class="p">)</span> <span class="p">{</span>
+  <span class="p">}</span> <span class="k">catch</span> <span class="p">(...)</span> <span class="p">{</span>
+    <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="kc">false</span><span class="p">);</span>
+  <span class="p">}</span>
+
+  <span class="k">try</span> <span class="p">{</span>
+    <span class="n">fbstring</span> <span class="n">s</span><span class="p">(</span><span class="mi">0</span><span class="p">);</span>
+    <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="kc">false</span><span class="p">);</span>
+  <span class="p">}</span> <span class="k">catch</span> <span class="p">(</span><span class="k">const</span> <span class="n">std</span><span class="o">::</span><span class="n">logic_error</span><span class="o">&amp;</span> <span class="n">e</span><span class="p">)</span> <span class="p">{</span>
+  <span class="p">}</span> <span class="k">catch</span> <span class="p">(...)</span> <span class="p">{</span>
+    <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="kc">false</span><span class="p">);</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">FBString</span><span class="p">,</span> <span class="n">testFixedBugs</span><span class="p">)</span> <span class="p">{</span>
+  <span class="p">{</span> <span class="c1">// D479397</span>
+    <span class="n">fbstring</span> <span class="n">str</span><span class="p">(</span><span class="mi">1337</span><span class="p">,</span> <span class="sc">&#39;f&#39;</span><span class="p">);</span>
+    <span class="n">fbstring</span> <span class="n">cp</span> <span class="o">=</span> <span class="n">str</span><span class="p">;</span>
+    <span class="n">cp</span><span class="p">.</span><span class="n">clear</span><span class="p">();</span>
+    <span class="n">cp</span><span class="p">.</span><span class="n">c_str</span><span class="p">();</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">str</span><span class="p">.</span><span class="n">front</span><span class="p">(),</span> <span class="sc">&#39;f&#39;</span><span class="p">);</span>
+  <span class="p">}</span>
+  <span class="p">{</span> <span class="c1">// D481173, --extra-cxxflags=-DFBSTRING_CONSERVATIVE</span>
+    <span class="n">fbstring</span> <span class="n">str</span><span class="p">(</span><span class="mi">1337</span><span class="p">,</span> <span class="sc">&#39;f&#39;</span><span class="p">);</span>
+    <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="mi">2</span><span class="p">;</span> <span class="o">++</span><span class="n">i</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">fbstring</span> <span class="n">cp</span> <span class="o">=</span> <span class="n">str</span><span class="p">;</span>
+      <span class="n">cp</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="sc">&#39;b&#39;</span><span class="p">;</span>
+      <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">cp</span><span class="p">.</span><span class="n">c_str</span><span class="p">()[</span><span class="n">cp</span><span class="p">.</span><span class="n">size</span><span class="p">()],</span> <span class="sc">&#39;\0&#39;</span><span class="p">);</span>
+      <span class="n">cp</span><span class="p">.</span><span class="n">push_back</span><span class="p">(</span><span class="sc">&#39;?&#39;</span><span class="p">);</span>
+    <span class="p">}</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="cp">#define CONCAT(A, B) CONCAT_HELPER(A, B)</span>
+<span class="cp">#define CONCAT_HELPER(A, B) A##B</span>
+<span class="cp">#define BENCHFUN(F) CONCAT(CONCAT(BM_, F), CONCAT(_, STRING))</span>
+
+<span class="cp">#define STRING string</span>
+<span class="cp">#include &quot;folly/test/FBStringTestBenchmarks.cpp.h&quot;</span>
+<span class="cp">#undef STRING</span>
+<span class="cp">#define STRING fbstring</span>
+<span class="cp">#include &quot;folly/test/FBStringTestBenchmarks.cpp.h&quot;</span>
+<span class="cp">#undef STRING</span>
+
+<span class="kt">int</span> <span class="n">main</span><span class="p">(</span><span class="kt">int</span> <span class="n">argc</span><span class="p">,</span> <span class="kt">char</span><span class="o">**</span> <span class="n">argv</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">testing</span><span class="o">::</span><span class="n">InitGoogleTest</span><span class="p">(</span><span class="o">&amp;</span><span class="n">argc</span><span class="p">,</span> <span class="n">argv</span><span class="p">);</span>
+  <span class="n">google</span><span class="o">::</span><span class="n">ParseCommandLineFlags</span><span class="p">(</span><span class="o">&amp;</span><span class="n">argc</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">argv</span><span class="p">,</span> <span class="kc">true</span><span class="p">);</span>
+  <span class="k">auto</span> <span class="n">ret</span> <span class="o">=</span> <span class="n">RUN_ALL_TESTS</span><span class="p">();</span>
+  <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">ret</span> <span class="o">&amp;&amp;</span> <span class="n">FLAGS_benchmark</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">folly</span><span class="o">::</span><span class="n">runBenchmarks</span><span class="p">();</span>
+  <span class="p">}</span>
+
+  <span class="k">return</span> <span class="n">ret</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="cm">/*</span>
+<span class="cm">malloc</span>
+
+<span class="cm">BENCHFUN(defaultCtor)                  100000  1.426 s   14.26 us  68.47 k</span>
+<span class="cm">BM_copyCtor_string/32k                 100000  63.48 ms  634.8 ns  1.502 M</span>
+<span class="cm">BM_ctorFromArray_string/32k            100000  303.3 ms  3.033 us  321.9 k</span>
+<span class="cm">BM_ctorFromChar_string/1M              100000  9.915 ms  99.15 ns  9.619 M</span>
+<span class="cm">BM_assignmentOp_string/256             100000  69.09 ms  690.9 ns   1.38 M</span>
+<span class="cm">BENCHFUN(assignmentFill)               100000  1.775 ms  17.75 ns  53.73 M</span>
+<span class="cm">BM_resize_string/512k                  100000  1.667 s   16.67 us  58.58 k</span>
+<span class="cm">BM_findSuccessful_string/512k          100000  287.3 ms  2.873 us  339.9 k</span>
+<span class="cm">BM_findUnsuccessful_string/512k        100000  320.3 ms  3.203 us  304.9 k</span>
+<span class="cm">BM_replace_string/256                  100000  69.68 ms  696.8 ns  1.369 M</span>
+<span class="cm">BM_push_back_string/1k                 100000  433.1 ms  4.331 us  225.5 k</span>
+
+<span class="cm">BENCHFUN(defaultCtor)                  100000  1.086 s   10.86 us  89.91 k</span>
+<span class="cm">BM_copyCtor_fbstring/32k               100000  4.218 ms  42.18 ns  22.61 M</span>
+<span class="cm">BM_ctorFromArray_fbstring/32k          100000  145.2 ms  1.452 us  672.7 k</span>
+<span class="cm">BM_ctorFromChar_fbstring/1M            100000   9.21 ms   92.1 ns  10.35 M</span>
+<span class="cm">BM_assignmentOp_fbstring/256           100000  61.95 ms  619.5 ns   1.54 M</span>
+<span class="cm">BENCHFUN(assignmentFill)               100000   1.41 ms   14.1 ns  67.64 M</span>
+<span class="cm">BM_resize_fbstring/512k                100000  1.668 s   16.68 us  58.56 k</span>
+<span class="cm">BM_findSuccessful_fbstring/512k        100000   20.6 ms    206 ns  4.629 M</span>
+<span class="cm">BM_findUnsuccessful_fbstring/512k      100000  141.3 ms  1.413 us  691.1 k</span>
+<span class="cm">BM_replace_fbstring/256                100000  77.12 ms  771.2 ns  1.237 M</span>
+<span class="cm">BM_push_back_fbstring/1k               100000  1.745 s   17.45 us  55.95 k</span>
+
+<span class="cm">jemalloc</span>
+
+<span class="cm">BENCHFUN(defaultCtor)                  100000  1.426 s   14.26 us   68.5 k</span>
+<span class="cm">BM_copyCtor_string/32k                 100000  275.7 ms  2.757 us  354.2 k</span>
+<span class="cm">BM_ctorFromArray_string/32k            100000    270 ms    2.7 us  361.7 k</span>
+<span class="cm">BM_ctorFromChar_string/1M              100000  10.36 ms  103.6 ns  9.206 M</span>
+<span class="cm">BM_assignmentOp_string/256             100000  70.44 ms  704.3 ns  1.354 M</span>
+<span class="cm">BENCHFUN(assignmentFill)               100000  1.766 ms  17.66 ns     54 M</span>
+<span class="cm">BM_resize_string/512k                  100000  1.675 s   16.75 us  58.29 k</span>
+<span class="cm">BM_findSuccessful_string/512k          100000  90.89 ms  908.9 ns  1.049 M</span>
+<span class="cm">BM_findUnsuccessful_string/512k        100000  315.1 ms  3.151 us  309.9 k</span>
+<span class="cm">BM_replace_string/256                  100000  71.14 ms  711.4 ns  1.341 M</span>
+<span class="cm">BM_push_back_string/1k                 100000  425.1 ms  4.251 us  229.7 k</span>
+
+<span class="cm">BENCHFUN(defaultCtor)                  100000  1.082 s   10.82 us  90.23 k</span>
+<span class="cm">BM_copyCtor_fbstring/32k               100000  4.213 ms  42.13 ns  22.64 M</span>
+<span class="cm">BM_ctorFromArray_fbstring/32k          100000  113.2 ms  1.132 us    863 k</span>
+<span class="cm">BM_ctorFromChar_fbstring/1M            100000  9.162 ms  91.62 ns  10.41 M</span>
+<span class="cm">BM_assignmentOp_fbstring/256           100000  61.34 ms  613.4 ns  1.555 M</span>
+<span class="cm">BENCHFUN(assignmentFill)               100000  1.408 ms  14.08 ns  67.73 M</span>
+<span class="cm">BM_resize_fbstring/512k                100000  1.671 s   16.71 us  58.43 k</span>
+<span class="cm">BM_findSuccessful_fbstring/512k        100000  8.723 ms  87.23 ns  10.93 M</span>
+<span class="cm">BM_findUnsuccessful_fbstring/512k      100000  141.3 ms  1.413 us  691.2 k</span>
+<span class="cm">BM_replace_fbstring/256                100000  77.83 ms  778.3 ns  1.225 M</span>
+<span class="cm">BM_push_back_fbstring/1k               100000  1.744 s   17.44 us  55.99 k</span>
+<span class="cm">*/</span>
+
+</pre></div></td></tr>
+
+</tbody>
+</table>
+</div>
+
+</body>
+<script>docas={repo:"joekychen/folly",depth:2}</script>
+<script>document.write('<script src=' + ('__proto__' in {} ? 'http://cdnjs.cloudflare.com/ajax/libs/zepto/1.0rc1/zepto.min.js' : 'https://ajax.googleapis.com/ajax/libs/jquery/1.7.2/jquery.min.js')+'><\\/script>')</script>
+<script src="http://baoshan.github.com/moment/min/moment.min.js"></script>
+<script src="../../javascript/docco.min.js"></script>
+</html>

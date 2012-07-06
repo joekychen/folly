@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html><head><title>joekychen/folly » folly › test › FormatTest.cpp
+
+</title>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+<meta name="generator" content="Docco">
+<link rel="stylesheet" media="all" href="../../stylesheets/docco.min.css" />
+
+
+</head>
+<body>
+<div id="container">
+<div id="background"></div>
+<table cellpadding="0" cellspacing="0">
+<thead><tr><th class="docs"><a id="home" href="../../index.html"></a><h1>FormatTest.cpp</h1></th><th class="code"></th></tr></thead>
+<tbody>
+
+
+<tr id="section-1"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-1">&#182;</a></div></td><td class="code"><div class="highlight"><pre><span class="cm">/*</span>
+<span class="cm"> * Copyright 2012 Facebook, Inc.</span>
+<span class="cm"> *</span>
+<span class="cm"> * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span class="cm"> * you may not use this file except in compliance with the License.</span>
+<span class="cm"> * You may obtain a copy of the License at</span>
+<span class="cm"> *</span>
+<span class="cm"> *   http://www.apache.org/licenses/LICENSE-2.0</span>
+<span class="cm"> *</span>
+<span class="cm"> * Unless required by applicable law or agreed to in writing, software</span>
+<span class="cm"> * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span class="cm"> * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span class="cm"> * See the License for the specific language governing permissions and</span>
+<span class="cm"> * limitations under the License.</span>
+<span class="cm"> */</span>
+
+<span class="cp">#include &quot;folly/Format.h&quot;</span>
+
+<span class="cp">#include &lt;glog/logging.h&gt;</span>
+<span class="cp">#include &lt;gtest/gtest.h&gt;</span>
+
+<span class="cp">#include &quot;folly/FBVector.h&quot;</span>
+<span class="cp">#include &quot;folly/Benchmark.h&quot;</span>
+<span class="cp">#include &quot;folly/dynamic.h&quot;</span>
+<span class="cp">#include &quot;folly/json.h&quot;</span>
+
+<span class="k">using</span> <span class="k">namespace</span> <span class="n">folly</span><span class="p">;</span>
+
+<span class="k">template</span> <span class="o">&lt;</span><span class="n">class</span><span class="p">...</span> <span class="n">Args</span><span class="o">&gt;</span>
+<span class="n">std</span><span class="o">::</span><span class="n">string</span> <span class="n">fstr</span><span class="p">(</span><span class="n">StringPiece</span> <span class="n">fmt</span><span class="p">,</span> <span class="n">Args</span><span class="o">&amp;&amp;</span><span class="p">...</span> <span class="n">args</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">return</span> <span class="n">format</span><span class="p">(</span><span class="n">fmt</span><span class="p">,</span> <span class="n">std</span><span class="o">::</span><span class="n">forward</span><span class="o">&lt;</span><span class="n">Args</span><span class="o">&gt;</span><span class="p">(</span><span class="n">args</span><span class="p">)...).</span><span class="n">str</span><span class="p">();</span>
+<span class="p">}</span>
+
+<span class="k">template</span> <span class="o">&lt;</span><span class="k">class</span> <span class="nc">C</span><span class="o">&gt;</span>
+<span class="n">std</span><span class="o">::</span><span class="n">string</span> <span class="n">vstr</span><span class="p">(</span><span class="n">StringPiece</span> <span class="n">fmt</span><span class="p">,</span> <span class="k">const</span> <span class="n">C</span><span class="o">&amp;</span> <span class="n">c</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">return</span> <span class="n">vformat</span><span class="p">(</span><span class="n">fmt</span><span class="p">,</span> <span class="n">c</span><span class="p">).</span><span class="n">str</span><span class="p">();</span>
+<span class="p">}</span>
+
+<span class="k">template</span> <span class="o">&lt;</span><span class="k">class</span> <span class="nc">Uint</span><span class="o">&gt;</span>
+<span class="kt">void</span> <span class="n">compareOctal</span><span class="p">(</span><span class="n">Uint</span> <span class="n">u</span><span class="p">)</span> <span class="p">{</span>
+  <span class="kt">char</span> <span class="n">buf1</span><span class="p">[</span><span class="n">detail</span><span class="o">::</span><span class="n">kMaxOctalLength</span> <span class="o">+</span> <span class="mi">1</span><span class="p">];</span>
+  <span class="n">buf1</span><span class="p">[</span><span class="n">detail</span><span class="o">::</span><span class="n">kMaxOctalLength</span><span class="p">]</span> <span class="o">=</span> <span class="sc">&#39;\0&#39;</span><span class="p">;</span>
+  <span class="kt">char</span><span class="o">*</span> <span class="n">p</span> <span class="o">=</span> <span class="n">buf1</span> <span class="o">+</span> <span class="n">detail</span><span class="o">::</span><span class="n">uintToOctal</span><span class="p">(</span><span class="n">buf1</span><span class="p">,</span> <span class="n">detail</span><span class="o">::</span><span class="n">kMaxOctalLength</span><span class="p">,</span> <span class="n">u</span><span class="p">);</span>
+
+  <span class="kt">char</span> <span class="n">buf2</span><span class="p">[</span><span class="n">detail</span><span class="o">::</span><span class="n">kMaxOctalLength</span> <span class="o">+</span> <span class="mi">1</span><span class="p">];</span>
+  <span class="n">sprintf</span><span class="p">(</span><span class="n">buf2</span><span class="p">,</span> <span class="s">&quot;%jo&quot;</span><span class="p">,</span> <span class="k">static_cast</span><span class="o">&lt;</span><span class="n">uintmax_t</span><span class="o">&gt;</span><span class="p">(</span><span class="n">u</span><span class="p">));</span>
+
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="p">(</span><span class="n">buf2</span><span class="p">),</span> <span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="p">(</span><span class="n">p</span><span class="p">));</span>
+<span class="p">}</span>
+
+<span class="k">template</span> <span class="o">&lt;</span><span class="k">class</span> <span class="nc">Uint</span><span class="o">&gt;</span>
+<span class="kt">void</span> <span class="n">compareHex</span><span class="p">(</span><span class="n">Uint</span> <span class="n">u</span><span class="p">)</span> <span class="p">{</span>
+  <span class="kt">char</span> <span class="n">buf1</span><span class="p">[</span><span class="n">detail</span><span class="o">::</span><span class="n">kMaxHexLength</span> <span class="o">+</span> <span class="mi">1</span><span class="p">];</span>
+  <span class="n">buf1</span><span class="p">[</span><span class="n">detail</span><span class="o">::</span><span class="n">kMaxHexLength</span><span class="p">]</span> <span class="o">=</span> <span class="sc">&#39;\0&#39;</span><span class="p">;</span>
+  <span class="kt">char</span><span class="o">*</span> <span class="n">p</span> <span class="o">=</span> <span class="n">buf1</span> <span class="o">+</span> <span class="n">detail</span><span class="o">::</span><span class="n">uintToHexLower</span><span class="p">(</span><span class="n">buf1</span><span class="p">,</span> <span class="n">detail</span><span class="o">::</span><span class="n">kMaxHexLength</span><span class="p">,</span> <span class="n">u</span><span class="p">);</span>
+
+  <span class="kt">char</span> <span class="n">buf2</span><span class="p">[</span><span class="n">detail</span><span class="o">::</span><span class="n">kMaxHexLength</span> <span class="o">+</span> <span class="mi">1</span><span class="p">];</span>
+  <span class="n">sprintf</span><span class="p">(</span><span class="n">buf2</span><span class="p">,</span> <span class="s">&quot;%jx&quot;</span><span class="p">,</span> <span class="k">static_cast</span><span class="o">&lt;</span><span class="n">uintmax_t</span><span class="o">&gt;</span><span class="p">(</span><span class="n">u</span><span class="p">));</span>
+
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="p">(</span><span class="n">buf2</span><span class="p">),</span> <span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="p">(</span><span class="n">p</span><span class="p">));</span>
+<span class="p">}</span>
+
+<span class="k">template</span> <span class="o">&lt;</span><span class="k">class</span> <span class="nc">Uint</span><span class="o">&gt;</span>
+<span class="kt">void</span> <span class="n">compareBinary</span><span class="p">(</span><span class="n">Uint</span> <span class="n">u</span><span class="p">)</span> <span class="p">{</span>
+  <span class="kt">char</span> <span class="n">buf</span><span class="p">[</span><span class="n">detail</span><span class="o">::</span><span class="n">kMaxBinaryLength</span> <span class="o">+</span> <span class="mi">1</span><span class="p">];</span>
+  <span class="n">buf</span><span class="p">[</span><span class="n">detail</span><span class="o">::</span><span class="n">kMaxBinaryLength</span><span class="p">]</span> <span class="o">=</span> <span class="sc">&#39;\0&#39;</span><span class="p">;</span>
+  <span class="kt">char</span><span class="o">*</span> <span class="n">p</span> <span class="o">=</span> <span class="n">buf</span> <span class="o">+</span> <span class="n">detail</span><span class="o">::</span><span class="n">uintToBinary</span><span class="p">(</span><span class="n">buf</span><span class="p">,</span> <span class="n">detail</span><span class="o">::</span><span class="n">kMaxBinaryLength</span><span class="p">,</span> <span class="n">u</span><span class="p">);</span>
+
+  <span class="n">std</span><span class="o">::</span><span class="n">string</span> <span class="n">repr</span><span class="p">;</span>
+  <span class="k">if</span> <span class="p">(</span><span class="n">u</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">repr</span> <span class="o">=</span> <span class="sc">&#39;0&#39;</span><span class="p">;</span>
+  <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+    <span class="n">std</span><span class="o">::</span><span class="n">string</span> <span class="n">tmp</span><span class="p">;</span>
+    <span class="k">for</span> <span class="p">(;</span> <span class="n">u</span><span class="p">;</span> <span class="n">u</span> <span class="o">&gt;&gt;=</span> <span class="mi">1</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">tmp</span><span class="p">.</span><span class="n">push_back</span><span class="p">(</span><span class="n">u</span> <span class="o">&amp;</span> <span class="mi">1</span> <span class="o">?</span> <span class="sc">&#39;1&#39;</span> <span class="o">:</span> <span class="sc">&#39;0&#39;</span><span class="p">);</span>
+    <span class="p">}</span>
+    <span class="n">repr</span><span class="p">.</span><span class="n">assign</span><span class="p">(</span><span class="n">tmp</span><span class="p">.</span><span class="n">rbegin</span><span class="p">(),</span> <span class="n">tmp</span><span class="p">.</span><span class="n">rend</span><span class="p">());</span>
+  <span class="p">}</span>
+
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">repr</span><span class="p">,</span> <span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="p">(</span><span class="n">p</span><span class="p">));</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">Format</span><span class="p">,</span> <span class="n">uintToOctal</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">for</span> <span class="p">(</span><span class="kt">unsigned</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="p">(</span><span class="mi">1u</span> <span class="o">&lt;&lt;</span> <span class="mi">16</span><span class="p">)</span> <span class="o">+</span> <span class="mi">2</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">compareOctal</span><span class="p">(</span><span class="n">i</span><span class="p">);</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">Format</span><span class="p">,</span> <span class="n">uintToHex</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">for</span> <span class="p">(</span><span class="kt">unsigned</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="p">(</span><span class="mi">1u</span> <span class="o">&lt;&lt;</span> <span class="mi">16</span><span class="p">)</span> <span class="o">+</span> <span class="mi">2</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">compareHex</span><span class="p">(</span><span class="n">i</span><span class="p">);</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">Format</span><span class="p">,</span> <span class="n">uintToBinary</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">for</span> <span class="p">(</span><span class="kt">unsigned</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="p">(</span><span class="mi">1u</span> <span class="o">&lt;&lt;</span> <span class="mi">16</span><span class="p">)</span> <span class="o">+</span> <span class="mi">2</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">compareBinary</span><span class="p">(</span><span class="n">i</span><span class="p">);</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">Format</span><span class="p">,</span> <span class="n">Simple</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;hello&quot;</span><span class="p">,</span> <span class="n">fstr</span><span class="p">(</span><span class="s">&quot;hello&quot;</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;42&quot;</span><span class="p">,</span> <span class="n">fstr</span><span class="p">(</span><span class="s">&quot;{}&quot;</span><span class="p">,</span> <span class="mi">42</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;42 42&quot;</span><span class="p">,</span> <span class="n">fstr</span><span class="p">(</span><span class="s">&quot;{0} {0}&quot;</span><span class="p">,</span> <span class="mi">42</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;00042  23   42&quot;</span><span class="p">,</span> <span class="n">fstr</span><span class="p">(</span><span class="s">&quot;{0:05} {1:3} {0:4}&quot;</span><span class="p">,</span> <span class="mi">42</span><span class="p">,</span> <span class="mi">23</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;hello world hello 42&quot;</span><span class="p">,</span>
+            <span class="n">fstr</span><span class="p">(</span><span class="s">&quot;{0} {1} {0} {2}&quot;</span><span class="p">,</span> <span class="s">&quot;hello&quot;</span><span class="p">,</span> <span class="s">&quot;world&quot;</span><span class="p">,</span> <span class="mi">42</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;XXhelloXX&quot;</span><span class="p">,</span> <span class="n">fstr</span><span class="p">(</span><span class="s">&quot;{:X^9}&quot;</span><span class="p">,</span> <span class="s">&quot;hello&quot;</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;XXX42XXXX&quot;</span><span class="p">,</span> <span class="n">fstr</span><span class="p">(</span><span class="s">&quot;{:X^9}&quot;</span><span class="p">,</span> <span class="mi">42</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;-0xYYYY2a&quot;</span><span class="p">,</span> <span class="n">fstr</span><span class="p">(</span><span class="s">&quot;{:Y=#9x}&quot;</span><span class="p">,</span> <span class="o">-</span><span class="mi">42</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;*&quot;</span><span class="p">,</span> <span class="n">fstr</span><span class="p">(</span><span class="s">&quot;{}&quot;</span><span class="p">,</span> <span class="sc">&#39;*&#39;</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;42&quot;</span><span class="p">,</span> <span class="n">fstr</span><span class="p">(</span><span class="s">&quot;{}&quot;</span><span class="p">,</span> <span class="mi">42</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;0042&quot;</span><span class="p">,</span> <span class="n">fstr</span><span class="p">(</span><span class="s">&quot;{:04}&quot;</span><span class="p">,</span> <span class="mi">42</span><span class="p">));</span>
+
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;hello  &quot;</span><span class="p">,</span> <span class="n">fstr</span><span class="p">(</span><span class="s">&quot;{:7}&quot;</span><span class="p">,</span> <span class="s">&quot;hello&quot;</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;hello  &quot;</span><span class="p">,</span> <span class="n">fstr</span><span class="p">(</span><span class="s">&quot;{:&lt;7}&quot;</span><span class="p">,</span> <span class="s">&quot;hello&quot;</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;  hello&quot;</span><span class="p">,</span> <span class="n">fstr</span><span class="p">(</span><span class="s">&quot;{:&gt;7}&quot;</span><span class="p">,</span> <span class="s">&quot;hello&quot;</span><span class="p">));</span>
+
+  <span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="kt">int</span><span class="o">&gt;</span> <span class="n">v1</span> <span class="p">{</span><span class="mi">10</span><span class="p">,</span> <span class="mi">20</span><span class="p">,</span> <span class="mi">30</span><span class="p">};</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;0020&quot;</span><span class="p">,</span> <span class="n">fstr</span><span class="p">(</span><span class="s">&quot;{0[1]:04}&quot;</span><span class="p">,</span> <span class="n">v1</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;0020&quot;</span><span class="p">,</span> <span class="n">vstr</span><span class="p">(</span><span class="s">&quot;{1:04}&quot;</span><span class="p">,</span> <span class="n">v1</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;10 20&quot;</span><span class="p">,</span> <span class="n">vstr</span><span class="p">(</span><span class="s">&quot;{} {}&quot;</span><span class="p">,</span> <span class="n">v1</span><span class="p">));</span>
+
+  <span class="k">const</span> <span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="kt">int</span><span class="o">&gt;</span> <span class="n">v2</span> <span class="o">=</span> <span class="n">v1</span><span class="p">;</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;0020&quot;</span><span class="p">,</span> <span class="n">fstr</span><span class="p">(</span><span class="s">&quot;{0[1]:04}&quot;</span><span class="p">,</span> <span class="n">v2</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;0020&quot;</span><span class="p">,</span> <span class="n">vstr</span><span class="p">(</span><span class="s">&quot;{1:04}&quot;</span><span class="p">,</span> <span class="n">v2</span><span class="p">));</span>
+
+  <span class="k">const</span> <span class="kt">int</span> <span class="n">p</span><span class="p">[]</span> <span class="o">=</span> <span class="p">{</span><span class="mi">10</span><span class="p">,</span> <span class="mi">20</span><span class="p">,</span> <span class="mi">30</span><span class="p">};</span>
+  <span class="k">const</span> <span class="kt">int</span><span class="o">*</span> <span class="n">q</span> <span class="o">=</span> <span class="n">p</span><span class="p">;</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;0020&quot;</span><span class="p">,</span> <span class="n">fstr</span><span class="p">(</span><span class="s">&quot;{0[1]:04}&quot;</span><span class="p">,</span> <span class="n">p</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;0020&quot;</span><span class="p">,</span> <span class="n">vstr</span><span class="p">(</span><span class="s">&quot;{1:04}&quot;</span><span class="p">,</span> <span class="n">p</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;0020&quot;</span><span class="p">,</span> <span class="n">fstr</span><span class="p">(</span><span class="s">&quot;{0[1]:04}&quot;</span><span class="p">,</span> <span class="n">q</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;0020&quot;</span><span class="p">,</span> <span class="n">vstr</span><span class="p">(</span><span class="s">&quot;{1:04}&quot;</span><span class="p">,</span> <span class="n">q</span><span class="p">));</span>
+
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;0x&quot;</span><span class="p">,</span> <span class="n">fstr</span><span class="p">(</span><span class="s">&quot;{}&quot;</span><span class="p">,</span> <span class="n">p</span><span class="p">).</span><span class="n">substr</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;10&quot;</span><span class="p">,</span> <span class="n">vstr</span><span class="p">(</span><span class="s">&quot;{}&quot;</span><span class="p">,</span> <span class="n">p</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;0x&quot;</span><span class="p">,</span> <span class="n">fstr</span><span class="p">(</span><span class="s">&quot;{}&quot;</span><span class="p">,</span> <span class="n">q</span><span class="p">).</span><span class="n">substr</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;10&quot;</span><span class="p">,</span> <span class="n">vstr</span><span class="p">(</span><span class="s">&quot;{}&quot;</span><span class="p">,</span> <span class="n">q</span><span class="p">));</span>
+  <span class="n">q</span> <span class="o">=</span> <span class="n">nullptr</span><span class="p">;</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;(null)&quot;</span><span class="p">,</span> <span class="n">fstr</span><span class="p">(</span><span class="s">&quot;{}&quot;</span><span class="p">,</span> <span class="n">q</span><span class="p">));</span>
+
+  <span class="n">std</span><span class="o">::</span><span class="n">map</span><span class="o">&lt;</span><span class="kt">int</span><span class="p">,</span> <span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="o">&gt;</span> <span class="n">m</span> <span class="p">{</span> <span class="p">{</span><span class="mi">10</span><span class="p">,</span> <span class="s">&quot;hello&quot;</span><span class="p">},</span> <span class="p">{</span><span class="mi">20</span><span class="p">,</span> <span class="s">&quot;world&quot;</span><span class="p">}</span> <span class="p">};</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;worldXX&quot;</span><span class="p">,</span> <span class="n">fstr</span><span class="p">(</span><span class="s">&quot;{[20]:X&lt;7}&quot;</span><span class="p">,</span> <span class="n">m</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;worldXX&quot;</span><span class="p">,</span> <span class="n">vstr</span><span class="p">(</span><span class="s">&quot;{20:X&lt;7}&quot;</span><span class="p">,</span> <span class="n">m</span><span class="p">));</span>
+
+  <span class="n">std</span><span class="o">::</span><span class="n">map</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="p">,</span> <span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="o">&gt;</span> <span class="n">m2</span> <span class="p">{</span> <span class="p">{</span><span class="s">&quot;hello&quot;</span><span class="p">,</span> <span class="s">&quot;world&quot;</span><span class="p">}</span> <span class="p">};</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;worldXX&quot;</span><span class="p">,</span> <span class="n">fstr</span><span class="p">(</span><span class="s">&quot;{[hello]:X&lt;7}&quot;</span><span class="p">,</span> <span class="n">m2</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;worldXX&quot;</span><span class="p">,</span> <span class="n">vstr</span><span class="p">(</span><span class="s">&quot;{hello:X&lt;7}&quot;</span><span class="p">,</span> <span class="n">m2</span><span class="p">));</span></pre></div></td></tr>
+
+
+<tr id="section-2"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-2">&#182;</a></div><p>Test indexing in strings</p></td><td class="code"><div class="highlight"><pre>  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;61 62&quot;</span><span class="p">,</span> <span class="n">fstr</span><span class="p">(</span><span class="s">&quot;{0[0]:x} {0[1]:x}&quot;</span><span class="p">,</span> <span class="s">&quot;abcde&quot;</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;61 62&quot;</span><span class="p">,</span> <span class="n">vstr</span><span class="p">(</span><span class="s">&quot;{0:x} {1:x}&quot;</span><span class="p">,</span> <span class="s">&quot;abcde&quot;</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;61 62&quot;</span><span class="p">,</span> <span class="n">fstr</span><span class="p">(</span><span class="s">&quot;{0[0]:x} {0[1]:x}&quot;</span><span class="p">,</span> <span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="p">(</span><span class="s">&quot;abcde&quot;</span><span class="p">)));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;61 62&quot;</span><span class="p">,</span> <span class="n">vstr</span><span class="p">(</span><span class="s">&quot;{0:x} {1:x}&quot;</span><span class="p">,</span> <span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="p">(</span><span class="s">&quot;abcde&quot;</span><span class="p">)));</span></pre></div></td></tr>
+
+
+<tr id="section-3"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-3">&#182;</a></div><p>Test booleans</p></td><td class="code"><div class="highlight"><pre>  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;true&quot;</span><span class="p">,</span> <span class="n">fstr</span><span class="p">(</span><span class="s">&quot;{}&quot;</span><span class="p">,</span> <span class="kc">true</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;1&quot;</span><span class="p">,</span> <span class="n">fstr</span><span class="p">(</span><span class="s">&quot;{:d}&quot;</span><span class="p">,</span> <span class="kc">true</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;false&quot;</span><span class="p">,</span> <span class="n">fstr</span><span class="p">(</span><span class="s">&quot;{}&quot;</span><span class="p">,</span> <span class="kc">false</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;0&quot;</span><span class="p">,</span> <span class="n">fstr</span><span class="p">(</span><span class="s">&quot;{:d}&quot;</span><span class="p">,</span> <span class="kc">false</span><span class="p">));</span></pre></div></td></tr>
+
+
+<tr id="section-4"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-4">&#182;</a></div><p>Test pairs</p></td><td class="code"><div class="highlight"><pre>  <span class="p">{</span>
+    <span class="n">std</span><span class="o">::</span><span class="n">pair</span><span class="o">&lt;</span><span class="kt">int</span><span class="p">,</span> <span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="o">&gt;</span> <span class="n">p</span> <span class="p">{</span><span class="mi">42</span><span class="p">,</span> <span class="s">&quot;hello&quot;</span><span class="p">};</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;    42 hello &quot;</span><span class="p">,</span> <span class="n">fstr</span><span class="p">(</span><span class="s">&quot;{0[0]:6} {0[1]:6}&quot;</span><span class="p">,</span> <span class="n">p</span><span class="p">));</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;    42 hello &quot;</span><span class="p">,</span> <span class="n">vstr</span><span class="p">(</span><span class="s">&quot;{:6} {:6}&quot;</span><span class="p">,</span> <span class="n">p</span><span class="p">));</span>
+  <span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-5"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-5">&#182;</a></div><p>Test tuples</p></td><td class="code"><div class="highlight"><pre>  <span class="p">{</span>
+    <span class="n">std</span><span class="o">::</span><span class="n">tuple</span><span class="o">&lt;</span><span class="kt">int</span><span class="p">,</span> <span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="p">,</span> <span class="kt">int</span><span class="o">&gt;</span> <span class="n">t</span> <span class="p">{</span> <span class="mi">42</span><span class="p">,</span> <span class="s">&quot;hello&quot;</span><span class="p">,</span> <span class="mi">23</span> <span class="p">};</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;    42 hello      23&quot;</span><span class="p">,</span> <span class="n">fstr</span><span class="p">(</span><span class="s">&quot;{0[0]:6} {0[1]:6} {0[2]:6}&quot;</span><span class="p">,</span> <span class="n">t</span><span class="p">));</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;    42 hello      23&quot;</span><span class="p">,</span> <span class="n">vstr</span><span class="p">(</span><span class="s">&quot;{:6} {:6} {:6}&quot;</span><span class="p">,</span> <span class="n">t</span><span class="p">));</span>
+  <span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-6"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-6">&#182;</a></div><p>Test writing to stream</p></td><td class="code"><div class="highlight"><pre>  <span class="n">std</span><span class="o">::</span><span class="n">ostringstream</span> <span class="n">os</span><span class="p">;</span>
+  <span class="n">os</span> <span class="o">&lt;&lt;</span> <span class="n">format</span><span class="p">(</span><span class="s">&quot;{} {}&quot;</span><span class="p">,</span> <span class="mi">42</span><span class="p">,</span> <span class="mi">23</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;42 23&quot;</span><span class="p">,</span> <span class="n">os</span><span class="p">.</span><span class="n">str</span><span class="p">());</span></pre></div></td></tr>
+
+
+<tr id="section-7"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-7">&#182;</a></div><p>Test appending to string</p></td><td class="code"><div class="highlight"><pre>  <span class="n">std</span><span class="o">::</span><span class="n">string</span> <span class="n">s</span><span class="p">;</span>
+  <span class="n">format</span><span class="p">(</span><span class="o">&amp;</span><span class="n">s</span><span class="p">,</span> <span class="s">&quot;{} {}&quot;</span><span class="p">,</span> <span class="mi">42</span><span class="p">,</span> <span class="mi">23</span><span class="p">);</span>
+  <span class="n">format</span><span class="p">(</span><span class="o">&amp;</span><span class="n">s</span><span class="p">,</span> <span class="s">&quot; hello {:X&lt;7}&quot;</span><span class="p">,</span> <span class="s">&quot;world&quot;</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;42 23 hello worldXX&quot;</span><span class="p">,</span> <span class="n">s</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="k">namespace</span> <span class="p">{</span>
+<span class="kt">void</span> <span class="n">testFloat</span><span class="p">(</span><span class="k">const</span> <span class="kt">char</span><span class="o">*</span> <span class="n">fmt</span><span class="p">,</span> <span class="kt">double</span> <span class="n">val</span><span class="p">)</span> <span class="p">{</span>
+  <span class="kt">char</span> <span class="n">buf</span><span class="p">[</span><span class="mi">100</span><span class="p">];</span>
+  <span class="n">sprintf</span><span class="p">(</span><span class="n">buf</span><span class="p">,</span> <span class="n">to</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="o">&gt;</span><span class="p">(</span><span class="s">&quot;%&quot;</span><span class="p">,</span> <span class="n">fmt</span><span class="p">).</span><span class="n">c_str</span><span class="p">(),</span> <span class="n">val</span><span class="p">);</span>
+
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">buf</span><span class="p">,</span> <span class="n">fstr</span><span class="p">(</span><span class="n">to</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="o">&gt;</span><span class="p">(</span><span class="s">&quot;{:&quot;</span><span class="p">,</span> <span class="n">fmt</span><span class="p">,</span> <span class="s">&quot;}&quot;</span><span class="p">),</span> <span class="n">val</span><span class="p">));</span>
+<span class="p">}</span>
+<span class="p">}</span>  <span class="c1">// namespace</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">Format</span><span class="p">,</span> <span class="n">Float</span><span class="p">)</span> <span class="p">{</span>
+  <span class="kt">double</span> <span class="n">d</span> <span class="o">=</span> <span class="mi">1</span><span class="p">;</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;1&quot;</span><span class="p">,</span> <span class="n">fstr</span><span class="p">(</span><span class="s">&quot;{}&quot;</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;0.1&quot;</span><span class="p">,</span> <span class="n">fstr</span><span class="p">(</span><span class="s">&quot;{}&quot;</span><span class="p">,</span> <span class="mf">0.1</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;0.01&quot;</span><span class="p">,</span> <span class="n">fstr</span><span class="p">(</span><span class="s">&quot;{}&quot;</span><span class="p">,</span> <span class="mf">0.01</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;0.001&quot;</span><span class="p">,</span> <span class="n">fstr</span><span class="p">(</span><span class="s">&quot;{}&quot;</span><span class="p">,</span> <span class="mf">0.001</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;0.0001&quot;</span><span class="p">,</span> <span class="n">fstr</span><span class="p">(</span><span class="s">&quot;{}&quot;</span><span class="p">,</span> <span class="mf">0.0001</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;1e-5&quot;</span><span class="p">,</span> <span class="n">fstr</span><span class="p">(</span><span class="s">&quot;{}&quot;</span><span class="p">,</span> <span class="mf">0.00001</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;1e-6&quot;</span><span class="p">,</span> <span class="n">fstr</span><span class="p">(</span><span class="s">&quot;{}&quot;</span><span class="p">,</span> <span class="mf">0.000001</span><span class="p">));</span>
+
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;10&quot;</span><span class="p">,</span> <span class="n">fstr</span><span class="p">(</span><span class="s">&quot;{}&quot;</span><span class="p">,</span> <span class="mf">10.0</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;100&quot;</span><span class="p">,</span> <span class="n">fstr</span><span class="p">(</span><span class="s">&quot;{}&quot;</span><span class="p">,</span> <span class="mf">100.0</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;1000&quot;</span><span class="p">,</span> <span class="n">fstr</span><span class="p">(</span><span class="s">&quot;{}&quot;</span><span class="p">,</span> <span class="mf">1000.0</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;10000&quot;</span><span class="p">,</span> <span class="n">fstr</span><span class="p">(</span><span class="s">&quot;{}&quot;</span><span class="p">,</span> <span class="mf">10000.0</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;100000&quot;</span><span class="p">,</span> <span class="n">fstr</span><span class="p">(</span><span class="s">&quot;{}&quot;</span><span class="p">,</span> <span class="mf">100000.0</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;1e+6&quot;</span><span class="p">,</span> <span class="n">fstr</span><span class="p">(</span><span class="s">&quot;{}&quot;</span><span class="p">,</span> <span class="mf">1000000.0</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;1e+7&quot;</span><span class="p">,</span> <span class="n">fstr</span><span class="p">(</span><span class="s">&quot;{}&quot;</span><span class="p">,</span> <span class="mf">10000000.0</span><span class="p">));</span>
+
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;1.00&quot;</span><span class="p">,</span> <span class="n">fstr</span><span class="p">(</span><span class="s">&quot;{:.2f}&quot;</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;0.10&quot;</span><span class="p">,</span> <span class="n">fstr</span><span class="p">(</span><span class="s">&quot;{:.2f}&quot;</span><span class="p">,</span> <span class="mf">0.1</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;0.01&quot;</span><span class="p">,</span> <span class="n">fstr</span><span class="p">(</span><span class="s">&quot;{:.2f}&quot;</span><span class="p">,</span> <span class="mf">0.01</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;0.00&quot;</span><span class="p">,</span> <span class="n">fstr</span><span class="p">(</span><span class="s">&quot;{:.2f}&quot;</span><span class="p">,</span> <span class="mf">0.001</span><span class="p">));</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">Format</span><span class="p">,</span> <span class="n">MultiLevel</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">map</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="p">,</span> <span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="o">&gt;&gt;</span> <span class="n">v</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="p">{</span>
+      <span class="p">{</span><span class="s">&quot;hello&quot;</span><span class="p">,</span> <span class="s">&quot;world&quot;</span><span class="p">},</span>
+    <span class="p">},</span>
+  <span class="p">};</span>
+
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;world&quot;</span><span class="p">,</span> <span class="n">fstr</span><span class="p">(</span><span class="s">&quot;{[0.hello]}&quot;</span><span class="p">,</span> <span class="n">v</span><span class="p">));</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">Format</span><span class="p">,</span> <span class="n">dynamic</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">auto</span> <span class="n">dyn</span> <span class="o">=</span> <span class="n">parseJson</span><span class="p">(</span>
+      <span class="s">&quot;{</span><span class="se">\n</span><span class="s">&quot;</span>
+      <span class="s">&quot;  </span><span class="se">\&quot;</span><span class="s">hello</span><span class="se">\&quot;</span><span class="s">: </span><span class="se">\&quot;</span><span class="s">world</span><span class="se">\&quot;</span><span class="s">,</span><span class="se">\n</span><span class="s">&quot;</span>
+      <span class="s">&quot;  </span><span class="se">\&quot;</span><span class="s">x</span><span class="se">\&quot;</span><span class="s">: [20, 30],</span><span class="se">\n</span><span class="s">&quot;</span>
+      <span class="s">&quot;  </span><span class="se">\&quot;</span><span class="s">y</span><span class="se">\&quot;</span><span class="s">: {</span><span class="se">\&quot;</span><span class="s">a</span><span class="se">\&quot;</span><span class="s"> : 42}</span><span class="se">\n</span><span class="s">&quot;</span>
+      <span class="s">&quot;}&quot;</span><span class="p">);</span>
+
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;world&quot;</span><span class="p">,</span> <span class="n">fstr</span><span class="p">(</span><span class="s">&quot;{0[hello]}&quot;</span><span class="p">,</span> <span class="n">dyn</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;20&quot;</span><span class="p">,</span> <span class="n">fstr</span><span class="p">(</span><span class="s">&quot;{0[x.0]}&quot;</span><span class="p">,</span> <span class="n">dyn</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;42&quot;</span><span class="p">,</span> <span class="n">fstr</span><span class="p">(</span><span class="s">&quot;{0[y.a]}&quot;</span><span class="p">,</span> <span class="n">dyn</span><span class="p">));</span>
+
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;(null)&quot;</span><span class="p">,</span> <span class="n">fstr</span><span class="p">(</span><span class="s">&quot;{}&quot;</span><span class="p">,</span> <span class="n">dynamic</span><span class="p">(</span><span class="n">nullptr</span><span class="p">)));</span>
+<span class="p">}</span>
+
+<span class="k">namespace</span> <span class="p">{</span>
+
+<span class="k">struct</span> <span class="n">KeyValue</span> <span class="p">{</span>
+  <span class="n">std</span><span class="o">::</span><span class="n">string</span> <span class="n">key</span><span class="p">;</span>
+  <span class="kt">int</span> <span class="n">value</span><span class="p">;</span>
+<span class="p">};</span>
+
+<span class="p">}</span>  <span class="c1">// namespace</span>
+
+<span class="k">namespace</span> <span class="n">folly</span> <span class="p">{</span>
+
+<span class="k">template</span> <span class="o">&lt;&gt;</span> <span class="k">class</span> <span class="nc">FormatValue</span><span class="o">&lt;</span><span class="n">KeyValue</span><span class="o">&gt;</span> <span class="p">{</span>
+ <span class="k">public</span><span class="o">:</span>
+  <span class="k">explicit</span> <span class="n">FormatValue</span><span class="p">(</span><span class="k">const</span> <span class="n">KeyValue</span><span class="o">&amp;</span> <span class="n">kv</span><span class="p">)</span> <span class="o">:</span> <span class="n">kv_</span><span class="p">(</span><span class="n">kv</span><span class="p">)</span> <span class="p">{</span> <span class="p">}</span>
+
+  <span class="k">template</span> <span class="o">&lt;</span><span class="k">class</span> <span class="nc">FormatCallback</span><span class="o">&gt;</span>
+  <span class="kt">void</span> <span class="n">format</span><span class="p">(</span><span class="n">FormatArg</span><span class="o">&amp;</span> <span class="n">arg</span><span class="p">,</span> <span class="n">FormatCallback</span><span class="o">&amp;</span> <span class="n">cb</span><span class="p">)</span> <span class="k">const</span> <span class="p">{</span>
+    <span class="n">format_value</span><span class="o">::</span><span class="n">formatFormatter</span><span class="p">(</span>
+        <span class="n">folly</span><span class="o">::</span><span class="n">format</span><span class="p">(</span><span class="s">&quot;&lt;key={}, value={}&gt;&quot;</span><span class="p">,</span> <span class="n">kv_</span><span class="p">.</span><span class="n">key</span><span class="p">,</span> <span class="n">kv_</span><span class="p">.</span><span class="n">value</span><span class="p">),</span>
+        <span class="n">arg</span><span class="p">,</span> <span class="n">cb</span><span class="p">);</span>
+  <span class="p">}</span>
+
+ <span class="k">private</span><span class="o">:</span>
+  <span class="k">const</span> <span class="n">KeyValue</span><span class="o">&amp;</span> <span class="n">kv_</span><span class="p">;</span>
+<span class="p">};</span>
+
+<span class="p">}</span>  <span class="c1">// namespace</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">Format</span><span class="p">,</span> <span class="n">Custom</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">KeyValue</span> <span class="n">kv</span> <span class="p">{</span> <span class="s">&quot;hello&quot;</span><span class="p">,</span> <span class="mi">42</span> <span class="p">};</span>
+
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;&lt;key=hello, value=42&gt;&quot;</span><span class="p">,</span> <span class="n">fstr</span><span class="p">(</span><span class="s">&quot;{}&quot;</span><span class="p">,</span> <span class="n">kv</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;&lt;key=hello, value=42&gt;&quot;</span><span class="p">,</span> <span class="n">fstr</span><span class="p">(</span><span class="s">&quot;{:10}&quot;</span><span class="p">,</span> <span class="n">kv</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;&lt;key=hello&quot;</span><span class="p">,</span> <span class="n">fstr</span><span class="p">(</span><span class="s">&quot;{:.10}&quot;</span><span class="p">,</span> <span class="n">kv</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;&lt;key=hello, value=42&gt;XX&quot;</span><span class="p">,</span> <span class="n">fstr</span><span class="p">(</span><span class="s">&quot;{:X&lt;23}&quot;</span><span class="p">,</span> <span class="n">kv</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;XX&lt;key=hello, value=42&gt;&quot;</span><span class="p">,</span> <span class="n">fstr</span><span class="p">(</span><span class="s">&quot;{:X&gt;23}&quot;</span><span class="p">,</span> <span class="n">kv</span><span class="p">));</span>
+<span class="p">}</span>
+
+<span class="k">namespace</span> <span class="p">{</span>
+
+<span class="kt">char</span> <span class="n">bigBuf</span><span class="p">[</span><span class="mi">300</span><span class="p">];</span>
+
+<span class="p">}</span>  <span class="c1">// namespace</span>
+
+<span class="n">BENCHMARK</span><span class="p">(</span><span class="n">octal_sprintf</span><span class="p">,</span> <span class="n">iters</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">while</span> <span class="p">(</span><span class="n">iters</span><span class="o">--</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">sprintf</span><span class="p">(</span><span class="n">bigBuf</span><span class="p">,</span> <span class="s">&quot;%o&quot;</span><span class="p">,</span> <span class="k">static_cast</span><span class="o">&lt;</span><span class="kt">unsigned</span> <span class="kt">int</span><span class="o">&gt;</span><span class="p">(</span><span class="n">iters</span><span class="p">));</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="n">BENCHMARK_RELATIVE</span><span class="p">(</span><span class="n">octal_uintToOctal</span><span class="p">,</span> <span class="n">iters</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">while</span> <span class="p">(</span><span class="n">iters</span><span class="o">--</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">detail</span><span class="o">::</span><span class="n">uintToOctal</span><span class="p">(</span><span class="n">bigBuf</span><span class="p">,</span> <span class="n">detail</span><span class="o">::</span><span class="n">kMaxOctalLength</span><span class="p">,</span>
+                        <span class="k">static_cast</span><span class="o">&lt;</span><span class="kt">unsigned</span> <span class="kt">int</span><span class="o">&gt;</span><span class="p">(</span><span class="n">iters</span><span class="p">));</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="n">BENCHMARK_DRAW_LINE</span><span class="p">()</span>
+
+<span class="n">BENCHMARK</span><span class="p">(</span><span class="n">hex_sprintf</span><span class="p">,</span> <span class="n">iters</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">while</span> <span class="p">(</span><span class="n">iters</span><span class="o">--</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">sprintf</span><span class="p">(</span><span class="n">bigBuf</span><span class="p">,</span> <span class="s">&quot;%x&quot;</span><span class="p">,</span> <span class="k">static_cast</span><span class="o">&lt;</span><span class="kt">unsigned</span> <span class="kt">int</span><span class="o">&gt;</span><span class="p">(</span><span class="n">iters</span><span class="p">));</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="n">BENCHMARK_RELATIVE</span><span class="p">(</span><span class="n">hex_uintToHex</span><span class="p">,</span> <span class="n">iters</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">while</span> <span class="p">(</span><span class="n">iters</span><span class="o">--</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">detail</span><span class="o">::</span><span class="n">uintToHexLower</span><span class="p">(</span><span class="n">bigBuf</span><span class="p">,</span> <span class="n">detail</span><span class="o">::</span><span class="n">kMaxHexLength</span><span class="p">,</span>
+                           <span class="k">static_cast</span><span class="o">&lt;</span><span class="kt">unsigned</span> <span class="kt">int</span><span class="o">&gt;</span><span class="p">(</span><span class="n">iters</span><span class="p">));</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="n">BENCHMARK_DRAW_LINE</span><span class="p">()</span>
+
+<span class="n">BENCHMARK</span><span class="p">(</span><span class="n">intAppend_sprintf</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">fbstring</span> <span class="n">out</span><span class="p">;</span>
+  <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1000</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="mi">1000</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">sprintf</span><span class="p">(</span><span class="n">bigBuf</span><span class="p">,</span> <span class="s">&quot;%d&quot;</span><span class="p">,</span> <span class="n">i</span><span class="p">);</span>
+    <span class="n">out</span><span class="p">.</span><span class="n">append</span><span class="p">(</span><span class="n">bigBuf</span><span class="p">);</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="n">BENCHMARK_RELATIVE</span><span class="p">(</span><span class="n">intAppend_to</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">fbstring</span> <span class="n">out</span><span class="p">;</span>
+  <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1000</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="mi">1000</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">toAppend</span><span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">out</span><span class="p">);</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="n">BENCHMARK_RELATIVE</span><span class="p">(</span><span class="n">intAppend_format</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">fbstring</span> <span class="n">out</span><span class="p">;</span>
+  <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1000</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="mi">1000</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">format</span><span class="p">(</span><span class="o">&amp;</span><span class="n">out</span><span class="p">,</span> <span class="s">&quot;{}&quot;</span><span class="p">,</span> <span class="n">i</span><span class="p">);</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="n">BENCHMARK_DRAW_LINE</span><span class="p">()</span>
+
+<span class="n">BENCHMARK</span><span class="p">(</span><span class="n">bigFormat_sprintf</span><span class="p">,</span> <span class="n">iters</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">while</span> <span class="p">(</span><span class="n">iters</span><span class="o">--</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="o">-</span><span class="mi">100</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="mi">100</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">sprintf</span><span class="p">(</span><span class="n">bigBuf</span><span class="p">,</span>
+              <span class="s">&quot;%d %d %d %d %d&quot;</span>
+              <span class="s">&quot;%d %d %d %d %d&quot;</span>
+              <span class="s">&quot;%d %d %d %d %d&quot;</span>
+              <span class="s">&quot;%d %d %d %d %d&quot;</span><span class="p">,</span>
+              <span class="n">i</span><span class="p">,</span> <span class="n">i</span><span class="o">+</span><span class="mi">1</span><span class="p">,</span> <span class="n">i</span><span class="o">+</span><span class="mi">2</span><span class="p">,</span> <span class="n">i</span><span class="o">+</span><span class="mi">3</span><span class="p">,</span> <span class="n">i</span><span class="o">+</span><span class="mi">4</span><span class="p">,</span>
+              <span class="n">i</span><span class="o">+</span><span class="mi">5</span><span class="p">,</span> <span class="n">i</span><span class="o">+</span><span class="mi">6</span><span class="p">,</span> <span class="n">i</span><span class="o">+</span><span class="mi">7</span><span class="p">,</span> <span class="n">i</span><span class="o">+</span><span class="mi">8</span><span class="p">,</span> <span class="n">i</span><span class="o">+</span><span class="mi">9</span><span class="p">,</span>
+              <span class="n">i</span><span class="o">+</span><span class="mi">10</span><span class="p">,</span> <span class="n">i</span><span class="o">+</span><span class="mi">11</span><span class="p">,</span> <span class="n">i</span><span class="o">+</span><span class="mi">12</span><span class="p">,</span> <span class="n">i</span><span class="o">+</span><span class="mi">13</span><span class="p">,</span> <span class="n">i</span><span class="o">+</span><span class="mi">14</span><span class="p">,</span>
+              <span class="n">i</span><span class="o">+</span><span class="mi">15</span><span class="p">,</span> <span class="n">i</span><span class="o">+</span><span class="mi">16</span><span class="p">,</span> <span class="n">i</span><span class="o">+</span><span class="mi">17</span><span class="p">,</span> <span class="n">i</span><span class="o">+</span><span class="mi">18</span><span class="p">,</span> <span class="n">i</span><span class="o">+</span><span class="mi">19</span><span class="p">);</span>
+    <span class="p">}</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="n">BENCHMARK_RELATIVE</span><span class="p">(</span><span class="n">bigFormat_format</span><span class="p">,</span> <span class="n">iters</span><span class="p">)</span> <span class="p">{</span>
+  <span class="kt">char</span><span class="o">*</span> <span class="n">p</span><span class="p">;</span>
+  <span class="k">auto</span> <span class="n">writeToBuf</span> <span class="o">=</span> <span class="p">[</span><span class="o">&amp;</span><span class="n">p</span><span class="p">]</span> <span class="p">(</span><span class="n">StringPiece</span> <span class="n">sp</span><span class="p">)</span> <span class="k">mutable</span> <span class="p">{</span>
+    <span class="n">memcpy</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="n">sp</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span> <span class="n">sp</span><span class="p">.</span><span class="n">size</span><span class="p">());</span>
+    <span class="n">p</span> <span class="o">+=</span> <span class="n">sp</span><span class="p">.</span><span class="n">size</span><span class="p">();</span>
+  <span class="p">};</span>
+
+  <span class="k">while</span> <span class="p">(</span><span class="n">iters</span><span class="o">--</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="o">-</span><span class="mi">100</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="mi">100</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">p</span> <span class="o">=</span> <span class="n">bigBuf</span><span class="p">;</span>
+      <span class="n">format</span><span class="p">(</span><span class="s">&quot;{} {} {} {} {}&quot;</span>
+             <span class="s">&quot;{} {} {} {} {}&quot;</span>
+             <span class="s">&quot;{} {} {} {} {}&quot;</span>
+             <span class="s">&quot;{} {} {} {} {}&quot;</span><span class="p">,</span>
+              <span class="n">i</span><span class="p">,</span> <span class="n">i</span><span class="o">+</span><span class="mi">1</span><span class="p">,</span> <span class="n">i</span><span class="o">+</span><span class="mi">2</span><span class="p">,</span> <span class="n">i</span><span class="o">+</span><span class="mi">3</span><span class="p">,</span> <span class="n">i</span><span class="o">+</span><span class="mi">4</span><span class="p">,</span>
+              <span class="n">i</span><span class="o">+</span><span class="mi">5</span><span class="p">,</span> <span class="n">i</span><span class="o">+</span><span class="mi">6</span><span class="p">,</span> <span class="n">i</span><span class="o">+</span><span class="mi">7</span><span class="p">,</span> <span class="n">i</span><span class="o">+</span><span class="mi">8</span><span class="p">,</span> <span class="n">i</span><span class="o">+</span><span class="mi">9</span><span class="p">,</span>
+              <span class="n">i</span><span class="o">+</span><span class="mi">10</span><span class="p">,</span> <span class="n">i</span><span class="o">+</span><span class="mi">11</span><span class="p">,</span> <span class="n">i</span><span class="o">+</span><span class="mi">12</span><span class="p">,</span> <span class="n">i</span><span class="o">+</span><span class="mi">13</span><span class="p">,</span> <span class="n">i</span><span class="o">+</span><span class="mi">14</span><span class="p">,</span>
+              <span class="n">i</span><span class="o">+</span><span class="mi">15</span><span class="p">,</span> <span class="n">i</span><span class="o">+</span><span class="mi">16</span><span class="p">,</span> <span class="n">i</span><span class="o">+</span><span class="mi">17</span><span class="p">,</span> <span class="n">i</span><span class="o">+</span><span class="mi">18</span><span class="p">,</span> <span class="n">i</span><span class="o">+</span><span class="mi">19</span><span class="p">)(</span><span class="n">writeToBuf</span><span class="p">);</span>
+    <span class="p">}</span>
+  <span class="p">}</span>
+<span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-8"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-8">&#182;</a></div><p>Benchmark results on my dev server (dual-CPU Xeon L5520 @ 2.7GHz)</p>
+
+<p>============================================================================</p>
+
+<h1>folly/test/FormatTest.cpp                         relative  ns/iter  iters/s</h1>
+
+<p>octal_sprintf                                               100.57     9.94M</p>
+
+<h2>octal_uintToOctal                                 2599.47%    3.87   258.46M</h2>
+
+<p>hex_sprintf                                                 100.13     9.99M</p>
+
+<h2>hex_uintToHex                                     3331.75%    3.01   332.73M</h2>
+
+<p>intAppend<em>sprintf                                           406.07K    2.46K
+intAppend</em>to                                       166.03%  244.58K    4.09K</p>
+
+<h2>intAppend_format                                   147.57%  275.17K    3.63K</h2>
+
+<p>bigFormat_sprintf                                           255.40K    3.92K</p>
+
+<h1>bigFormat_format                                   102.18%  249.94K    4.00K</h1></td><td class="code"><div class="highlight"><pre><span class="kt">int</span> <span class="n">main</span><span class="p">(</span><span class="kt">int</span> <span class="n">argc</span><span class="p">,</span> <span class="kt">char</span> <span class="o">*</span><span class="n">argv</span><span class="p">[])</span> <span class="p">{</span>
+  <span class="n">testing</span><span class="o">::</span><span class="n">InitGoogleTest</span><span class="p">(</span><span class="o">&amp;</span><span class="n">argc</span><span class="p">,</span> <span class="n">argv</span><span class="p">);</span>
+  <span class="n">google</span><span class="o">::</span><span class="n">ParseCommandLineFlags</span><span class="p">(</span><span class="o">&amp;</span><span class="n">argc</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">argv</span><span class="p">,</span> <span class="kc">true</span><span class="p">);</span>
+  <span class="k">auto</span> <span class="n">ret</span> <span class="o">=</span> <span class="n">RUN_ALL_TESTS</span><span class="p">();</span>
+  <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">ret</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">runBenchmarksOnFlag</span><span class="p">();</span>
+  <span class="p">}</span>
+  <span class="k">return</span> <span class="n">ret</span><span class="p">;</span>
+<span class="p">}</span>
+
+</pre></div></td></tr>
+
+</tbody>
+</table>
+</div>
+
+</body>
+<script>docas={repo:"joekychen/folly",depth:2}</script>
+<script>document.write('<script src=' + ('__proto__' in {} ? 'http://cdnjs.cloudflare.com/ajax/libs/zepto/1.0rc1/zepto.min.js' : 'https://ajax.googleapis.com/ajax/libs/jquery/1.7.2/jquery.min.js')+'><\\/script>')</script>
+<script src="http://baoshan.github.com/moment/min/moment.min.js"></script>
+<script src="../../javascript/docco.min.js"></script>
+</html>

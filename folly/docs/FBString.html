@@ -1,0 +1,44 @@
+<h2><code>folly/FBString.h</code></h2>
+
+<p><code>fbstring</code> is a drop-in replacement for <code>std::string</code>. The main
+benefit of <code>fbstring</code> is significantly increased performance on
+virtually all important primitives. This is achieved by using a
+three-tiered storage strategy and by cooperating with the memory
+allocator. In particular, <code>fbstring</code> is designed to detect use of
+jemalloc and cooperate with it to achieve significant improvements in
+speed and memory usage.</p>
+
+<p><code>fbstring</code> supports x32 and x64 architectures. Porting it to big endian
+architectures would require some changes.</p>
+
+<h3>Storage strategies</h3>
+
+<hr />
+
+<ul>
+<li><p>Small strings (&lt;= 23 chars) are stored in-situ without memory
+allocation.</p></li>
+<li><p>Medium strings (24 - 255 chars) are stored in malloc-allocated
+memory and copied eagerly.</p></li>
+<li><p>Large strings (> 255 chars) are stored in malloc-allocated memory and
+copied lazily.</p></li>
+</ul>
+
+<h3>Implementation highlights</h3>
+
+<hr />
+
+<ul>
+<li><p>100% compatible with <code>std::string</code>.</p></li>
+<li><p>Thread-safe reference counted copy-on-write for strings "large"
+strings (> 255 chars).</p></li>
+<li><p>Uses <code>malloc</code> instead of allocators.</p></li>
+<li><p>Jemalloc-friendly. <code>fbstring</code> automatically detects if application
+uses jemalloc and if so, significantly improves allocation
+strategy by using non-standard jemalloc extensions.</p></li>
+<li><p><code>find()</code> is implemented using simplified Boyer-Moore
+algorithm. Casual tests indicate a 30x speed improvement over
+<code>string::find()</code> for successful searches and a 1.5x speed
+improvement for failed searches.</p></li>
+<li><p>Offers conversions to and from <code>std::string</code>.</p></li>
+</ul>

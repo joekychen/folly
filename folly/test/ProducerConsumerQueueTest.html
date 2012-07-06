@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html><head><title>joekychen/folly » folly › test › ProducerConsumerQueueTest.cpp
+
+</title>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+<meta name="generator" content="Docco">
+<link rel="stylesheet" media="all" href="../../stylesheets/docco.min.css" />
+
+
+</head>
+<body>
+<div id="container">
+<div id="background"></div>
+<table cellpadding="0" cellspacing="0">
+<thead><tr><th class="docs"><a id="home" href="../../index.html"></a><h1>ProducerConsumerQueueTest.cpp</h1></th><th class="code"></th></tr></thead>
+<tbody>
+
+
+<tr id="section-1"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-1">&#182;</a></div></td><td class="code"><div class="highlight"><pre><span class="cm">/*</span>
+<span class="cm"> * Copyright 2012 Facebook, Inc.</span>
+<span class="cm"> *</span>
+<span class="cm"> * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span class="cm"> * you may not use this file except in compliance with the License.</span>
+<span class="cm"> * You may obtain a copy of the License at</span>
+<span class="cm"> *</span>
+<span class="cm"> *   http://www.apache.org/licenses/LICENSE-2.0</span>
+<span class="cm"> *</span>
+<span class="cm"> * Unless required by applicable law or agreed to in writing, software</span>
+<span class="cm"> * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span class="cm"> * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span class="cm"> * See the License for the specific language governing permissions and</span>
+<span class="cm"> * limitations under the License.</span>
+<span class="cm"> */</span>
+
+<span class="cp">#include &quot;folly/ProducerConsumerQueue.h&quot;</span>
+
+<span class="cp">#include &lt;gtest/gtest.h&gt;</span>
+<span class="cp">#include &lt;vector&gt;</span>
+<span class="cp">#include &lt;atomic&gt;</span>
+<span class="cp">#include &lt;chrono&gt;</span>
+<span class="cp">#include &lt;memory&gt;</span>
+<span class="cp">#include &lt;thread&gt;</span>
+<span class="cp">#include &lt;glog/logging.h&gt;</span></pre></div></td></tr>
+
+
+<tr id="section-2"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-2">&#182;</a></div><p>////////////////////////////////////////////////////////////////////</p></td><td class="code"><div class="highlight"><pre><span class="k">namespace</span> <span class="p">{</span>
+
+<span class="k">template</span><span class="o">&lt;</span><span class="k">class</span> <span class="nc">T</span><span class="o">&gt;</span> <span class="k">struct</span> <span class="n">TestTraits</span> <span class="p">{</span>
+  <span class="n">T</span> <span class="n">limit</span><span class="p">()</span> <span class="k">const</span> <span class="p">{</span> <span class="k">return</span> <span class="mi">1</span> <span class="o">&lt;&lt;</span> <span class="mi">24</span><span class="p">;</span> <span class="p">}</span>
+  <span class="n">T</span> <span class="n">generate</span><span class="p">()</span> <span class="k">const</span> <span class="p">{</span> <span class="k">return</span> <span class="n">rand</span><span class="p">()</span> <span class="o">%</span> <span class="mi">26</span><span class="p">;</span> <span class="p">}</span>
+<span class="p">};</span>
+
+<span class="k">template</span><span class="o">&lt;&gt;</span> <span class="k">struct</span> <span class="n">TestTraits</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="o">&gt;</span> <span class="p">{</span>
+  <span class="kt">int</span> <span class="n">limit</span><span class="p">()</span> <span class="k">const</span> <span class="p">{</span> <span class="k">return</span> <span class="mi">1</span> <span class="o">&lt;&lt;</span> <span class="mi">22</span><span class="p">;</span> <span class="p">}</span>
+  <span class="n">std</span><span class="o">::</span><span class="n">string</span> <span class="n">generate</span><span class="p">()</span> <span class="k">const</span> <span class="p">{</span> <span class="k">return</span> <span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="p">(</span><span class="mi">12</span><span class="p">,</span> <span class="sc">&#39; &#39;</span><span class="p">);</span> <span class="p">}</span>
+<span class="p">};</span>
+
+<span class="k">template</span><span class="o">&lt;</span><span class="k">class</span> <span class="nc">QueueType</span><span class="p">,</span> <span class="n">size_t</span> <span class="n">Size</span><span class="p">,</span> <span class="kt">bool</span> <span class="n">Pop</span> <span class="o">=</span> <span class="kc">false</span><span class="o">&gt;</span>
+<span class="k">struct</span> <span class="n">PerfTest</span> <span class="p">{</span>
+  <span class="k">typedef</span> <span class="k">typename</span> <span class="n">QueueType</span><span class="o">::</span><span class="n">value_type</span> <span class="n">T</span><span class="p">;</span>
+
+  <span class="k">explicit</span> <span class="n">PerfTest</span><span class="p">()</span> <span class="o">:</span> <span class="n">queue_</span><span class="p">(</span><span class="n">Size</span><span class="p">),</span> <span class="n">done_</span><span class="p">(</span><span class="kc">false</span><span class="p">)</span> <span class="p">{}</span>
+
+  <span class="kt">void</span> <span class="k">operator</span><span class="p">()()</span> <span class="p">{</span>
+    <span class="k">using</span> <span class="k">namespace</span> <span class="n">std</span><span class="o">::</span><span class="n">chrono</span><span class="p">;</span>
+    <span class="k">auto</span> <span class="k">const</span> <span class="n">startTime</span> <span class="o">=</span> <span class="n">system_clock</span><span class="o">::</span><span class="n">now</span><span class="p">();</span>
+
+    <span class="n">std</span><span class="o">::</span><span class="kr">thread</span> <span class="n">producer</span><span class="p">([</span><span class="k">this</span><span class="p">]</span> <span class="p">{</span> <span class="k">this</span><span class="o">-&gt;</span><span class="n">producer</span><span class="p">();</span> <span class="p">});</span>
+    <span class="n">std</span><span class="o">::</span><span class="kr">thread</span> <span class="n">consumer</span><span class="p">([</span><span class="k">this</span><span class="p">]</span> <span class="p">{</span> <span class="k">this</span><span class="o">-&gt;</span><span class="n">consumer</span><span class="p">();</span> <span class="p">});</span>
+
+    <span class="n">producer</span><span class="p">.</span><span class="n">join</span><span class="p">();</span>
+    <span class="n">done_</span> <span class="o">=</span> <span class="kc">true</span><span class="p">;</span>
+    <span class="n">consumer</span><span class="p">.</span><span class="n">join</span><span class="p">();</span>
+
+    <span class="k">auto</span> <span class="n">duration</span> <span class="o">=</span> <span class="n">duration_cast</span><span class="o">&lt;</span><span class="n">milliseconds</span><span class="o">&gt;</span><span class="p">(</span>
+      <span class="n">system_clock</span><span class="o">::</span><span class="n">now</span><span class="p">()</span> <span class="o">-</span> <span class="n">startTime</span><span class="p">);</span>
+    <span class="n">LOG</span><span class="p">(</span><span class="n">INFO</span><span class="p">)</span> <span class="o">&lt;&lt;</span> <span class="s">&quot;     done: &quot;</span> <span class="o">&lt;&lt;</span> <span class="n">duration</span><span class="p">.</span><span class="n">count</span><span class="p">()</span> <span class="o">&lt;&lt;</span> <span class="s">&quot;ms&quot;</span><span class="p">;</span>
+  <span class="p">}</span>
+
+  <span class="kt">void</span> <span class="n">producer</span><span class="p">()</span> <span class="p">{</span>
+    <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">traits_</span><span class="p">.</span><span class="n">limit</span><span class="p">();</span> <span class="o">++</span><span class="n">i</span><span class="p">)</span> <span class="p">{</span>
+      <span class="k">while</span> <span class="p">(</span><span class="o">!</span><span class="n">queue_</span><span class="p">.</span><span class="n">write</span><span class="p">(</span><span class="n">traits_</span><span class="p">.</span><span class="n">generate</span><span class="p">()))</span> <span class="p">{</span>
+      <span class="p">}</span>
+    <span class="p">}</span>
+  <span class="p">}</span>
+
+  <span class="kt">void</span> <span class="n">consumer</span><span class="p">()</span> <span class="p">{</span>
+    <span class="cm">/*static*/</span> <span class="k">if</span> <span class="p">(</span><span class="n">Pop</span><span class="p">)</span> <span class="p">{</span>
+      <span class="k">while</span> <span class="p">(</span><span class="o">!</span><span class="n">done_</span><span class="p">)</span> <span class="p">{</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">queue_</span><span class="p">.</span><span class="n">frontPtr</span><span class="p">())</span> <span class="p">{</span>
+          <span class="n">queue_</span><span class="p">.</span><span class="n">popFront</span><span class="p">();</span>
+        <span class="p">}</span>
+      <span class="p">}</span>
+    <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+      <span class="k">while</span> <span class="p">(</span><span class="o">!</span><span class="n">done_</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">T</span> <span class="n">data</span><span class="p">;</span>
+        <span class="n">queue_</span><span class="p">.</span><span class="n">read</span><span class="p">(</span><span class="n">data</span><span class="p">);</span>
+      <span class="p">}</span>
+    <span class="p">}</span>
+  <span class="p">}</span>
+
+  <span class="n">QueueType</span> <span class="n">queue_</span><span class="p">;</span>
+  <span class="n">std</span><span class="o">::</span><span class="n">atomic</span><span class="o">&lt;</span><span class="kt">bool</span><span class="o">&gt;</span> <span class="n">done_</span><span class="p">;</span>
+  <span class="n">TestTraits</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;</span> <span class="n">traits_</span><span class="p">;</span>
+<span class="p">};</span>
+
+<span class="k">template</span><span class="o">&lt;</span><span class="k">class</span> <span class="nc">TestType</span><span class="o">&gt;</span> <span class="kt">void</span> <span class="n">doTest</span><span class="p">(</span><span class="k">const</span> <span class="kt">char</span><span class="o">*</span> <span class="n">name</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">LOG</span><span class="p">(</span><span class="n">INFO</span><span class="p">)</span> <span class="o">&lt;&lt;</span> <span class="s">&quot;  testing: &quot;</span> <span class="o">&lt;&lt;</span> <span class="n">name</span><span class="p">;</span>
+  <span class="n">std</span><span class="o">::</span><span class="n">unique_ptr</span><span class="o">&lt;</span><span class="n">TestType</span><span class="o">&gt;</span> <span class="k">const</span> <span class="n">t</span><span class="p">(</span><span class="k">new</span> <span class="n">TestType</span><span class="p">());</span>
+  <span class="p">(</span><span class="o">*</span><span class="n">t</span><span class="p">)();</span>
+<span class="p">}</span>
+
+<span class="k">template</span><span class="o">&lt;</span><span class="k">class</span> <span class="nc">T</span><span class="p">,</span> <span class="kt">bool</span> <span class="n">Pop</span> <span class="o">=</span> <span class="kc">false</span><span class="o">&gt;</span>
+<span class="kt">void</span> <span class="n">perfTestType</span><span class="p">(</span><span class="k">const</span> <span class="kt">char</span><span class="o">*</span> <span class="n">type</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">const</span> <span class="n">size_t</span> <span class="n">size</span> <span class="o">=</span> <span class="mh">0xfffe</span><span class="p">;</span>
+
+  <span class="n">LOG</span><span class="p">(</span><span class="n">INFO</span><span class="p">)</span> <span class="o">&lt;&lt;</span> <span class="s">&quot;Type: &quot;</span> <span class="o">&lt;&lt;</span> <span class="n">type</span><span class="p">;</span>
+  <span class="n">doTest</span><span class="o">&lt;</span><span class="n">PerfTest</span><span class="o">&lt;</span><span class="n">folly</span><span class="o">::</span><span class="n">ProducerConsumerQueue</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;</span><span class="p">,</span><span class="n">size</span><span class="p">,</span><span class="n">Pop</span><span class="o">&gt;</span> <span class="o">&gt;</span><span class="p">(</span>
+    <span class="s">&quot;ProducerConsumerQueue&quot;</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="k">template</span><span class="o">&lt;</span><span class="k">class</span> <span class="nc">QueueType</span><span class="p">,</span> <span class="n">size_t</span> <span class="n">Size</span><span class="p">,</span> <span class="kt">bool</span> <span class="n">Pop</span><span class="o">&gt;</span>
+<span class="k">struct</span> <span class="n">CorrectnessTest</span> <span class="p">{</span>
+  <span class="k">typedef</span> <span class="k">typename</span> <span class="n">QueueType</span><span class="o">::</span><span class="n">value_type</span> <span class="n">T</span><span class="p">;</span>
+
+  <span class="k">explicit</span> <span class="n">CorrectnessTest</span><span class="p">()</span>
+    <span class="o">:</span> <span class="n">queue_</span><span class="p">(</span><span class="n">Size</span><span class="p">)</span>
+    <span class="p">,</span> <span class="n">done_</span><span class="p">(</span><span class="kc">false</span><span class="p">)</span>
+  <span class="p">{</span>
+    <span class="k">const</span> <span class="n">size_t</span> <span class="n">testSize</span> <span class="o">=</span> <span class="n">traits_</span><span class="p">.</span><span class="n">limit</span><span class="p">();</span>
+    <span class="n">testData_</span><span class="p">.</span><span class="n">reserve</span><span class="p">(</span><span class="n">testSize</span><span class="p">);</span>
+    <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">testSize</span><span class="p">;</span> <span class="o">++</span><span class="n">i</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">testData_</span><span class="p">.</span><span class="n">push_back</span><span class="p">(</span><span class="n">traits_</span><span class="p">.</span><span class="n">generate</span><span class="p">());</span>
+    <span class="p">}</span>
+  <span class="p">}</span>
+
+  <span class="kt">void</span> <span class="k">operator</span><span class="p">()()</span> <span class="p">{</span>
+    <span class="n">std</span><span class="o">::</span><span class="kr">thread</span> <span class="n">producer</span><span class="p">([</span><span class="k">this</span><span class="p">]</span> <span class="p">{</span> <span class="k">this</span><span class="o">-&gt;</span><span class="n">producer</span><span class="p">();</span> <span class="p">});</span>
+    <span class="n">std</span><span class="o">::</span><span class="kr">thread</span> <span class="n">consumer</span><span class="p">([</span><span class="k">this</span><span class="p">]</span> <span class="p">{</span> <span class="k">this</span><span class="o">-&gt;</span><span class="n">consumer</span><span class="p">();</span> <span class="p">});</span>
+
+    <span class="n">producer</span><span class="p">.</span><span class="n">join</span><span class="p">();</span>
+    <span class="n">done_</span> <span class="o">=</span> <span class="kc">true</span><span class="p">;</span>
+    <span class="n">consumer</span><span class="p">.</span><span class="n">join</span><span class="p">();</span>
+  <span class="p">}</span>
+
+  <span class="kt">void</span> <span class="n">producer</span><span class="p">()</span> <span class="p">{</span>
+    <span class="k">for</span> <span class="p">(</span><span class="k">auto</span><span class="o">&amp;</span> <span class="n">data</span> <span class="o">:</span> <span class="n">testData_</span><span class="p">)</span> <span class="p">{</span>
+      <span class="k">while</span> <span class="p">(</span><span class="o">!</span><span class="n">queue_</span><span class="p">.</span><span class="n">write</span><span class="p">(</span><span class="n">data</span><span class="p">))</span> <span class="p">{</span>
+      <span class="p">}</span>
+    <span class="p">}</span>
+  <span class="p">}</span>
+
+  <span class="kt">void</span> <span class="n">consumer</span><span class="p">()</span> <span class="p">{</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">Pop</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">consumerPop</span><span class="p">();</span>
+    <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+      <span class="n">consumerRead</span><span class="p">();</span>
+    <span class="p">}</span>
+  <span class="p">}</span>
+
+  <span class="kt">void</span> <span class="n">consumerPop</span><span class="p">()</span> <span class="p">{</span>
+    <span class="k">for</span> <span class="p">(</span><span class="k">auto</span> <span class="n">expect</span> <span class="o">:</span> <span class="n">testData_</span><span class="p">)</span> <span class="p">{</span>
+    <span class="nl">again:</span>
+      <span class="n">T</span><span class="o">*</span> <span class="n">data</span><span class="p">;</span>
+      <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="p">(</span><span class="n">data</span> <span class="o">=</span> <span class="n">queue_</span><span class="p">.</span><span class="n">frontPtr</span><span class="p">()))</span> <span class="p">{</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">done_</span><span class="p">)</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-3"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-3">&#182;</a></div><p>Try one more read; unless there's a bug in the queue class
+there should still be more data sitting in the queue even
+though the producer thread exited.</p></td><td class="code"><div class="highlight"><pre>          <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="p">(</span><span class="n">data</span> <span class="o">=</span> <span class="n">queue_</span><span class="p">.</span><span class="n">frontPtr</span><span class="p">()))</span> <span class="p">{</span>
+            <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="mi">0</span> <span class="o">&amp;&amp;</span> <span class="s">&quot;Finished too early ...&quot;</span><span class="p">);</span>
+            <span class="k">return</span><span class="p">;</span>
+          <span class="p">}</span>
+        <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+          <span class="k">goto</span> <span class="n">again</span><span class="p">;</span>
+        <span class="p">}</span>
+      <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+        <span class="n">queue_</span><span class="p">.</span><span class="n">popFront</span><span class="p">();</span>
+      <span class="p">}</span>
+
+      <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="o">*</span><span class="n">data</span><span class="p">,</span> <span class="n">expect</span><span class="p">);</span>
+    <span class="p">}</span>
+  <span class="p">}</span>
+
+  <span class="kt">void</span> <span class="n">consumerRead</span><span class="p">()</span> <span class="p">{</span>
+    <span class="k">for</span> <span class="p">(</span><span class="k">auto</span> <span class="n">expect</span> <span class="o">:</span> <span class="n">testData_</span><span class="p">)</span> <span class="p">{</span>
+    <span class="nl">again:</span>
+      <span class="n">T</span> <span class="n">data</span><span class="p">;</span>
+      <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">queue_</span><span class="p">.</span><span class="n">read</span><span class="p">(</span><span class="n">data</span><span class="p">))</span> <span class="p">{</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">done_</span><span class="p">)</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-4"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-4">&#182;</a></div><p>Try one more read; unless there's a bug in the queue class
+there should still be more data sitting in the queue even
+though the producer thread exited.</p></td><td class="code"><div class="highlight"><pre>          <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">queue_</span><span class="p">.</span><span class="n">read</span><span class="p">(</span><span class="n">data</span><span class="p">))</span> <span class="p">{</span>
+            <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="mi">0</span> <span class="o">&amp;&amp;</span> <span class="s">&quot;Finished too early ...&quot;</span><span class="p">);</span>
+            <span class="k">return</span><span class="p">;</span>
+          <span class="p">}</span>
+        <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+          <span class="k">goto</span> <span class="n">again</span><span class="p">;</span>
+        <span class="p">}</span>
+      <span class="p">}</span>
+      <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">expect</span><span class="p">);</span>
+    <span class="p">}</span>
+  <span class="p">}</span>
+
+  <span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;</span> <span class="n">testData_</span><span class="p">;</span>
+  <span class="n">QueueType</span> <span class="n">queue_</span><span class="p">;</span>
+  <span class="n">TestTraits</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;</span> <span class="n">traits_</span><span class="p">;</span>
+  <span class="n">std</span><span class="o">::</span><span class="n">atomic</span><span class="o">&lt;</span><span class="kt">bool</span><span class="o">&gt;</span> <span class="n">done_</span><span class="p">;</span>
+<span class="p">};</span>
+
+<span class="k">template</span><span class="o">&lt;</span><span class="k">class</span> <span class="nc">T</span><span class="p">,</span> <span class="kt">bool</span> <span class="n">Pop</span> <span class="o">=</span> <span class="kc">false</span><span class="o">&gt;</span>
+<span class="kt">void</span> <span class="n">correctnessTestType</span><span class="p">(</span><span class="k">const</span> <span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="o">&amp;</span> <span class="n">type</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">LOG</span><span class="p">(</span><span class="n">INFO</span><span class="p">)</span> <span class="o">&lt;&lt;</span> <span class="s">&quot;Type: &quot;</span> <span class="o">&lt;&lt;</span> <span class="n">type</span><span class="p">;</span>
+  <span class="n">doTest</span><span class="o">&lt;</span><span class="n">CorrectnessTest</span><span class="o">&lt;</span><span class="n">folly</span><span class="o">::</span><span class="n">ProducerConsumerQueue</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;</span><span class="p">,</span><span class="mh">0xfffe</span><span class="p">,</span><span class="n">Pop</span><span class="o">&gt;</span> <span class="o">&gt;</span><span class="p">(</span>
+    <span class="s">&quot;ProducerConsumerQueue&quot;</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="k">struct</span> <span class="n">DtorChecker</span> <span class="p">{</span>
+  <span class="k">static</span> <span class="kt">int</span> <span class="n">numInstances</span><span class="p">;</span>
+  <span class="n">DtorChecker</span><span class="p">()</span> <span class="p">{</span> <span class="o">++</span><span class="n">numInstances</span><span class="p">;</span> <span class="p">}</span>
+  <span class="n">DtorChecker</span><span class="p">(</span><span class="k">const</span> <span class="n">DtorChecker</span><span class="o">&amp;</span> <span class="n">o</span><span class="p">)</span> <span class="p">{</span> <span class="o">++</span><span class="n">numInstances</span><span class="p">;</span> <span class="p">}</span>
+  <span class="o">~</span><span class="n">DtorChecker</span><span class="p">()</span> <span class="p">{</span> <span class="o">--</span><span class="n">numInstances</span><span class="p">;</span> <span class="p">}</span>
+<span class="p">};</span>
+
+<span class="kt">int</span> <span class="n">DtorChecker</span><span class="o">::</span><span class="n">numInstances</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+
+<span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-5"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-5">&#182;</a></div><p>////////////////////////////////////////////////////////////////////</p></td><td class="code"><div class="highlight"><pre><span class="n">TEST</span><span class="p">(</span><span class="n">PCQ</span><span class="p">,</span> <span class="n">QueueCorrectness</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">correctnessTestType</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="p">,</span><span class="kc">true</span><span class="o">&gt;</span><span class="p">(</span><span class="s">&quot;string (front+pop)&quot;</span><span class="p">);</span>
+  <span class="n">correctnessTestType</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="o">&gt;</span><span class="p">(</span><span class="s">&quot;string&quot;</span><span class="p">);</span>
+  <span class="n">correctnessTestType</span><span class="o">&lt;</span><span class="kt">int</span><span class="o">&gt;</span><span class="p">(</span><span class="s">&quot;int&quot;</span><span class="p">);</span>
+  <span class="n">correctnessTestType</span><span class="o">&lt;</span><span class="kt">unsigned</span> <span class="kt">long</span> <span class="kt">long</span><span class="o">&gt;</span><span class="p">(</span><span class="s">&quot;unsigned long long&quot;</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">PCQ</span><span class="p">,</span> <span class="n">PerfTest</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">perfTestType</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="p">,</span><span class="kc">true</span><span class="o">&gt;</span><span class="p">(</span><span class="s">&quot;string (front+pop)&quot;</span><span class="p">);</span>
+  <span class="n">perfTestType</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="o">&gt;</span><span class="p">(</span><span class="s">&quot;string&quot;</span><span class="p">);</span>
+  <span class="n">perfTestType</span><span class="o">&lt;</span><span class="kt">int</span><span class="o">&gt;</span><span class="p">(</span><span class="s">&quot;int&quot;</span><span class="p">);</span>
+  <span class="n">perfTestType</span><span class="o">&lt;</span><span class="kt">unsigned</span> <span class="kt">long</span> <span class="kt">long</span><span class="o">&gt;</span><span class="p">(</span><span class="s">&quot;unsigned long long&quot;</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">PCQ</span><span class="p">,</span> <span class="n">Destructor</span><span class="p">)</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-6"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-6">&#182;</a></div><p>Test that orphaned elements in a ProducerConsumerQueue are
+destroyed.</p></td><td class="code"><div class="highlight"><pre>  <span class="p">{</span>
+    <span class="n">folly</span><span class="o">::</span><span class="n">ProducerConsumerQueue</span><span class="o">&lt;</span><span class="n">DtorChecker</span><span class="o">&gt;</span> <span class="n">queue</span><span class="p">(</span><span class="mi">1024</span><span class="p">);</span>
+    <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="mi">10</span><span class="p">;</span> <span class="o">++</span><span class="n">i</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">queue</span><span class="p">.</span><span class="n">write</span><span class="p">(</span><span class="n">DtorChecker</span><span class="p">()));</span>
+    <span class="p">}</span>
+
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">DtorChecker</span><span class="o">::</span><span class="n">numInstances</span><span class="p">,</span> <span class="mi">10</span><span class="p">);</span>
+
+    <span class="p">{</span>
+      <span class="n">DtorChecker</span> <span class="n">ignore</span><span class="p">;</span>
+      <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">queue</span><span class="p">.</span><span class="n">read</span><span class="p">(</span><span class="n">ignore</span><span class="p">));</span>
+      <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">queue</span><span class="p">.</span><span class="n">read</span><span class="p">(</span><span class="n">ignore</span><span class="p">));</span>
+    <span class="p">}</span>
+
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">DtorChecker</span><span class="o">::</span><span class="n">numInstances</span><span class="p">,</span> <span class="mi">8</span><span class="p">);</span>
+  <span class="p">}</span>
+
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">DtorChecker</span><span class="o">::</span><span class="n">numInstances</span><span class="p">,</span> <span class="mi">0</span><span class="p">);</span></pre></div></td></tr>
+
+
+<tr id="section-7"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-7">&#182;</a></div><p>Test the same thing in the case that the queue write pointer has
+wrapped, but the read one hasn't.</p></td><td class="code"><div class="highlight"><pre>  <span class="p">{</span>
+    <span class="n">folly</span><span class="o">::</span><span class="n">ProducerConsumerQueue</span><span class="o">&lt;</span><span class="n">DtorChecker</span><span class="o">&gt;</span> <span class="n">queue</span><span class="p">(</span><span class="mi">4</span><span class="p">);</span>
+    <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="mi">3</span><span class="p">;</span> <span class="o">++</span><span class="n">i</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">queue</span><span class="p">.</span><span class="n">write</span><span class="p">(</span><span class="n">DtorChecker</span><span class="p">()));</span>
+    <span class="p">}</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">DtorChecker</span><span class="o">::</span><span class="n">numInstances</span><span class="p">,</span> <span class="mi">3</span><span class="p">);</span>
+    <span class="p">{</span>
+      <span class="n">DtorChecker</span> <span class="n">ignore</span><span class="p">;</span>
+      <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">queue</span><span class="p">.</span><span class="n">read</span><span class="p">(</span><span class="n">ignore</span><span class="p">));</span>
+    <span class="p">}</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">DtorChecker</span><span class="o">::</span><span class="n">numInstances</span><span class="p">,</span> <span class="mi">2</span><span class="p">);</span>
+    <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">queue</span><span class="p">.</span><span class="n">write</span><span class="p">(</span><span class="n">DtorChecker</span><span class="p">()));</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">DtorChecker</span><span class="o">::</span><span class="n">numInstances</span><span class="p">,</span> <span class="mi">3</span><span class="p">);</span>
+  <span class="p">}</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">DtorChecker</span><span class="o">::</span><span class="n">numInstances</span><span class="p">,</span> <span class="mi">0</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">PCQ</span><span class="p">,</span> <span class="n">EmptyFull</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">folly</span><span class="o">::</span><span class="n">ProducerConsumerQueue</span><span class="o">&lt;</span><span class="kt">int</span><span class="o">&gt;</span> <span class="n">queue</span><span class="p">(</span><span class="mi">3</span><span class="p">);</span>
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">queue</span><span class="p">.</span><span class="n">isEmpty</span><span class="p">());</span>
+  <span class="n">EXPECT_FALSE</span><span class="p">(</span><span class="n">queue</span><span class="p">.</span><span class="n">isFull</span><span class="p">());</span>
+
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">queue</span><span class="p">.</span><span class="n">write</span><span class="p">(</span><span class="mi">1</span><span class="p">));</span>
+  <span class="n">EXPECT_FALSE</span><span class="p">(</span><span class="n">queue</span><span class="p">.</span><span class="n">isEmpty</span><span class="p">());</span>
+  <span class="n">EXPECT_FALSE</span><span class="p">(</span><span class="n">queue</span><span class="p">.</span><span class="n">isFull</span><span class="p">());</span>
+
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">queue</span><span class="p">.</span><span class="n">write</span><span class="p">(</span><span class="mi">2</span><span class="p">));</span>
+  <span class="n">EXPECT_FALSE</span><span class="p">(</span><span class="n">queue</span><span class="p">.</span><span class="n">isEmpty</span><span class="p">());</span>
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">queue</span><span class="p">.</span><span class="n">isFull</span><span class="p">());</span>  <span class="c1">// Tricky: full after 2 writes, not 3.</span>
+
+  <span class="n">EXPECT_FALSE</span><span class="p">(</span><span class="n">queue</span><span class="p">.</span><span class="n">write</span><span class="p">(</span><span class="mi">3</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">queue</span><span class="p">.</span><span class="n">sizeGuess</span><span class="p">(),</span> <span class="mi">2</span><span class="p">);</span>
+<span class="p">}</span>
+
+</pre></div></td></tr>
+
+</tbody>
+</table>
+</div>
+
+</body>
+<script>docas={repo:"joekychen/folly",depth:2}</script>
+<script>document.write('<script src=' + ('__proto__' in {} ? 'http://cdnjs.cloudflare.com/ajax/libs/zepto/1.0rc1/zepto.min.js' : 'https://ajax.googleapis.com/ajax/libs/jquery/1.7.2/jquery.min.js')+'><\\/script>')</script>
+<script src="http://baoshan.github.com/moment/min/moment.min.js"></script>
+<script src="../../javascript/docco.min.js"></script>
+</html>

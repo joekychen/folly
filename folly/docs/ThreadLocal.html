@@ -1,0 +1,106 @@
+<h2><code>folly/ThreadLocal.h</code></h2>
+
+<p>Improved thread local storage for non-trivial types.</p>
+
+<ul>
+<li>~4x faster than <code>boost::thread_specific_ptr</code>.</li>
+<li>Similar speed as using <code>pthread_getspecific</code> directly, but only consumes a
+single <code>pthread_key_t</code> per <code>Tag</code> template param.</li>
+<li>Expands on the <code>thread_specific_ptr</code> API with <code>accessAllThreads</code> and extended
+custom deleter support.</li>
+</ul>
+
+<h3>Usage</h3>
+
+<hr />
+
+<p>The API of <code>ThreadLocalPtr</code> is very close to <code>boost::thread_specific_ptr</code> with
+the notable addition of the <code>accessAllThreads</code> method.  There is also a
+<code>ThreadLocal</code> class which is a thin wrapper around <code>ThreadLocalPtr</code> that manages
+allocation automatically (creates a new object the first time it is dereferenced
+from each thread).</p>
+
+<p><code>ThreadLocalPtr</code> simply gives you a place to put and access a pointer local to
+each thread such that it will be destroyed appropriately.</p>
+
+<p><code>Cpp
+{
+  folly::ThreadLocalPtr&lt;Widget&gt; w;
+  w.reset(new Widget(0), Widget::customDeleterA);
+  std::thread([&amp;w]() {
+    w.reset(new Widget(1), Widget::customDeleterB);
+    w.get()-&gt;mangleWidget();
+  } // Widget(1) is destroyed with customDeleterB
+} // Widget(0) is destroyed with customDeleterA
+</code></p>
+
+<p>Note that <code>customDeleterB</code> will get called with
+<code>TLPDestructionMode::THIS_THREAD</code> and <code>customerDeleterA</code> will get called with
+<code>TLPDestructionMode::ALL_THREADS</code>.  This is to distinguish between thread exit
+vs. the entire <code>ThreadLocalPtr</code> getting destroyed, in which case there is
+cleanup work that may be avoided.</p>
+
+<p>The <code>accessAllThreads</code> interface is provided to walk all the thread local child
+objects of a parent.  <code>accessAllThreads</code> initializes an accessor
+which holds a global lock that blocks all creation and destruction of
+<code>ThreadLocal</code> objects with the same <code>Tag</code> and can be used as an iterable
+container. Typical use is for frequent write, infrequent read data access
+patterns such as counters.  Note that you must specify a unique Tag type so you
+don't block other ThreadLocal object usage, and you should try to minimize the
+lifetime of the accessor so the lock is held for as short as possible).</p>
+
+<p>The following example is a simplification of <code>folly/ThreadCachedInt.h</code>.  It
+keeps track of a counter value and allows multiple threads to add to the count
+without synchronization.  In order to get the total count, <code>read()</code> iterates
+through all the thread local values via <code>accessAllThreads()</code> and sums them up.
+<code>class NewTag</code> is used to break the global mutex so that this class won't block
+other <code>ThreadLocal</code> usage when <code>read()</code> is called.</p>
+
+<p>Note that <code>read()</code> holds the global mutex which blocks construction,
+destruction, and <code>read()</code> for other <code>SimpleThreadCachedInt</code>'s, but does not
+block <code>add()</code>.  Also, since it uses the unique <code>NewTag</code>, <code>SimpleThreadCachedInt</code>
+does not affect other <code>ThreadLocal</code> usage.</p>
+
+<p>```Cpp
+class SimpleThreadCachedInt {</p>
+
+<p>class NewTag;  // Segments the global mutex
+  ThreadLocal<int,NewTag> val_;</p>
+
+<p>public:
+  void add(int val) {
+    <em>val_ += val;  // operator</em>() gives a reference to the thread local instance
+  }</p>
+
+<p>int read() {
+    int ret = 0;
+    // accessAllThreads acquires the global lock
+    for (const auto&amp; i : val_.accessAllThreads()) {
+      ret += i;
+    }  // Global lock is released on scope exit
+    return ret;
+  }
+};
+```</p>
+
+<h3>Implementation</h3>
+
+<hr />
+
+<p>We keep a <code>__thread</code> array of pointers to objects (<code>ThreadEntry::elements</code>)
+where each array has an index for each unique instance of the <code>ThreadLocalPtr</code>
+object.  Each <code>ThreadLocalPtr</code> object has a unique id that is an index into
+these arrays so we can fetch the correct object from thread local storage
+very efficiently.</p>
+
+<p>In order to prevent unbounded growth of the id space and thus huge
+<code>ThreadEntry::elements</code> arrays, for example due to continuous creation and
+destruction of <code>ThreadLocalPtr</code> objects, we keep track of all active instances
+by linking them together into a list.  When an instance is destroyed we remove
+it from the chain and insert the id into <code>freeIds_</code> for reuse.  These operations
+require a global mutex, but only happen at construction and destruction time.
+<code>accessAllThreads</code> also acquires this global mutex.</p>
+
+<p>We use a single global <code>pthread_key_t</code> per <code>Tag</code> to manage object destruction
+and memory cleanup upon thread exit because there is a finite number of
+<code>pthread_key_t</code>'s available per machine.</p>

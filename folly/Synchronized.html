@@ -1,0 +1,686 @@
+<!DOCTYPE html>
+<html><head><title>joekychen/folly » folly › Synchronized.h
+
+</title>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+<meta name="generator" content="Docco">
+<link rel="stylesheet" media="all" href="../stylesheets/docco.min.css" />
+
+
+</head>
+<body>
+<div id="container">
+<div id="background"></div>
+<table cellpadding="0" cellspacing="0">
+<thead><tr><th class="docs"><a id="home" href="../index.html"></a><h1>Synchronized.h</h1></th><th class="code"></th></tr></thead>
+<tbody>
+
+
+<tr id="section-1"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-1">&#182;</a></div></td><td class="code"><div class="highlight"><pre><span class="cm">/*</span>
+<span class="cm"> * Copyright 2012 Facebook, Inc.</span>
+<span class="cm"> *</span>
+<span class="cm"> * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span class="cm"> * you may not use this file except in compliance with the License.</span>
+<span class="cm"> * You may obtain a copy of the License at</span>
+<span class="cm"> *</span>
+<span class="cm"> *   http://www.apache.org/licenses/LICENSE-2.0</span>
+<span class="cm"> *</span>
+<span class="cm"> * Unless required by applicable law or agreed to in writing, software</span>
+<span class="cm"> * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span class="cm"> * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span class="cm"> * See the License for the specific language governing permissions and</span>
+<span class="cm"> * limitations under the License.</span>
+<span class="cm"> */</span>
+
+<span class="cm">/**</span>
+<span class="cm"> * This module implements a Synchronized abstraction useful in</span>
+<span class="cm"> * mutex-based concurrency.</span>
+<span class="cm"> *</span>
+<span class="cm"> * @author: Andrei Alexandrescu (andrei.alexandrescu@fb.com)</span>
+<span class="cm"> */</span>
+
+<span class="cp">#ifndef SYNCHRONIZED_H_</span>
+<span class="cp">#define SYNCHRONIZED_H_</span>
+
+<span class="cp">#include &lt;type_traits&gt;</span>
+<span class="cp">#include &lt;mutex&gt;</span>
+<span class="cp">#include &lt;boost/thread.hpp&gt;</span>
+<span class="cp">#include &quot;folly/Preprocessor.h&quot;</span>
+<span class="cp">#include &quot;folly/Traits.h&quot;</span>
+
+<span class="n">namespace</span> <span class="n">folly</span> <span class="p">{</span>
+
+<span class="n">namespace</span> <span class="n">detail</span> <span class="p">{</span>
+<span class="k">enum</span> <span class="n">InternalDoNotUse</span> <span class="p">{};</span>
+
+<span class="cm">/**</span>
+<span class="cm"> * Free function adaptors for std:: and boost::</span>
+<span class="cm"> */</span>
+
+<span class="cm">/**</span>
+<span class="cm"> * Yields true iff T has .lock() and .unlock() member functions. This</span>
+<span class="cm"> * is done by simply enumerating the mutexes with this interface in</span>
+<span class="cm"> * std and boost.</span>
+<span class="cm"> */</span>
+<span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">T</span><span class="o">&gt;</span>
+<span class="k">struct</span> <span class="n">HasLockUnlock</span> <span class="p">{</span>
+  <span class="k">enum</span> <span class="p">{</span> <span class="n">value</span> <span class="o">=</span> <span class="n">IsOneOf</span><span class="o">&lt;</span><span class="n">T</span><span class="p">,</span>
+         <span class="n">std</span><span class="o">::</span><span class="n">mutex</span><span class="p">,</span> <span class="n">std</span><span class="o">::</span><span class="n">recursive_mutex</span><span class="p">,</span>
+         <span class="n">std</span><span class="o">::</span><span class="n">timed_mutex</span><span class="p">,</span> <span class="n">std</span><span class="o">::</span><span class="n">recursive_timed_mutex</span><span class="p">,</span>
+         <span class="n">boost</span><span class="o">::</span><span class="n">mutex</span><span class="p">,</span> <span class="n">boost</span><span class="o">::</span><span class="n">recursive_mutex</span><span class="p">,</span> <span class="n">boost</span><span class="o">::</span><span class="n">shared_mutex</span><span class="p">,</span>
+         <span class="n">boost</span><span class="o">::</span><span class="n">timed_mutex</span><span class="p">,</span> <span class="n">boost</span><span class="o">::</span><span class="n">recursive_timed_mutex</span>
+         <span class="o">&gt;::</span><span class="n">value</span> <span class="p">};</span>
+<span class="p">};</span>
+
+<span class="cm">/**</span>
+<span class="cm"> * Acquires a mutex for reading by calling .lock(). The exception is</span>
+<span class="cm"> * boost::shared_mutex, which has a special read-lock primitive called</span>
+<span class="cm"> * .lock_shared().</span>
+<span class="cm"> */</span>
+<span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">T</span><span class="o">&gt;</span>
+<span class="kr">typename</span> <span class="n">std</span><span class="o">::</span><span class="n">enable_if</span><span class="o">&lt;</span>
+  <span class="n">HasLockUnlock</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;::</span><span class="n">value</span> <span class="o">&amp;&amp;</span> <span class="o">!</span><span class="n">std</span><span class="o">::</span><span class="n">is_same</span><span class="o">&lt;</span><span class="n">T</span><span class="p">,</span> <span class="n">boost</span><span class="o">::</span><span class="n">shared_mutex</span><span class="o">&gt;::</span><span class="n">value</span><span class="o">&gt;::</span><span class="n">type</span>
+<span class="n">acquireRead</span><span class="p">(</span><span class="n">T</span><span class="o">&amp;</span> <span class="n">mutex</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">mutex</span><span class="p">.</span><span class="n">lock</span><span class="p">();</span>
+<span class="p">}</span>
+
+<span class="cm">/**</span>
+<span class="cm"> * Special case for boost::shared_mutex.</span>
+<span class="cm"> */</span>
+<span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">T</span><span class="o">&gt;</span>
+<span class="kr">typename</span> <span class="n">std</span><span class="o">::</span><span class="n">enable_if</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">is_same</span><span class="o">&lt;</span><span class="n">T</span><span class="p">,</span> <span class="n">boost</span><span class="o">::</span><span class="n">shared_mutex</span><span class="o">&gt;::</span><span class="n">value</span><span class="o">&gt;::</span><span class="n">type</span>
+<span class="n">acquireRead</span><span class="p">(</span><span class="n">T</span><span class="o">&amp;</span> <span class="n">mutex</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">mutex</span><span class="p">.</span><span class="n">lock_shared</span><span class="p">();</span>
+<span class="p">}</span>
+
+<span class="cm">/**</span>
+<span class="cm"> * Acquires a mutex for reading with timeout by calling .timed_lock(). This</span>
+<span class="cm"> * applies to three of the boost mutex classes as enumerated below.</span>
+<span class="cm"> */</span>
+<span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">T</span><span class="o">&gt;</span>
+<span class="kr">typename</span> <span class="n">std</span><span class="o">::</span><span class="n">enable_if</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">is_same</span><span class="o">&lt;</span><span class="n">T</span><span class="p">,</span> <span class="n">boost</span><span class="o">::</span><span class="n">shared_mutex</span><span class="o">&gt;::</span><span class="n">value</span><span class="p">,</span> <span class="n">bool</span><span class="o">&gt;::</span><span class="n">type</span>
+<span class="n">acquireRead</span><span class="p">(</span><span class="n">T</span><span class="o">&amp;</span> <span class="n">mutex</span><span class="p">,</span>
+            <span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">milliseconds</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">return</span> <span class="n">mutex</span><span class="p">.</span><span class="n">timed_lock_shared</span><span class="p">(</span><span class="n">boost</span><span class="o">::</span><span class="n">posix_time</span><span class="o">::</span><span class="n">milliseconds</span><span class="p">(</span><span class="n">milliseconds</span><span class="p">));</span>
+<span class="p">}</span>
+
+<span class="cm">/**</span>
+<span class="cm"> * Acquires a mutex for reading and writing by calling .lock().</span>
+<span class="cm"> */</span>
+<span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">T</span><span class="o">&gt;</span>
+<span class="kr">typename</span> <span class="n">std</span><span class="o">::</span><span class="n">enable_if</span><span class="o">&lt;</span><span class="n">HasLockUnlock</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;::</span><span class="n">value</span><span class="o">&gt;::</span><span class="n">type</span>
+<span class="n">acquireReadWrite</span><span class="p">(</span><span class="n">T</span><span class="o">&amp;</span> <span class="n">mutex</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">mutex</span><span class="p">.</span><span class="n">lock</span><span class="p">();</span>
+<span class="p">}</span>
+
+<span class="cm">/**</span>
+<span class="cm"> * Acquires a mutex for reading and writing with timeout by calling</span>
+<span class="cm"> * .try_lock_for(). This applies to two of the std mutex classes as</span>
+<span class="cm"> * enumerated below.</span>
+<span class="cm"> */</span>
+<span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">T</span><span class="o">&gt;</span>
+<span class="kr">typename</span> <span class="n">std</span><span class="o">::</span><span class="n">enable_if</span><span class="o">&lt;</span>
+  <span class="n">IsOneOf</span><span class="o">&lt;</span><span class="n">T</span><span class="p">,</span> <span class="n">std</span><span class="o">::</span><span class="n">timed_mutex</span><span class="p">,</span> <span class="n">std</span><span class="o">::</span><span class="n">recursive_timed_mutex</span><span class="o">&gt;::</span><span class="n">value</span><span class="p">,</span> <span class="n">bool</span><span class="o">&gt;::</span><span class="n">type</span>
+<span class="n">acquireReadWrite</span><span class="p">(</span><span class="n">T</span><span class="o">&amp;</span> <span class="n">mutex</span><span class="p">,</span>
+                 <span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">milliseconds</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">return</span> <span class="n">mutex</span><span class="p">.</span><span class="n">try_lock_for</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">chrono</span><span class="o">::</span><span class="n">milliseconds</span><span class="p">(</span><span class="n">milliseconds</span><span class="p">));</span>
+<span class="p">}</span>
+
+<span class="cm">/**</span>
+<span class="cm"> * Acquires a mutex for reading and writing with timeout by calling</span>
+<span class="cm"> * .timed_lock(). This applies to three of the boost mutex classes as</span>
+<span class="cm"> * enumerated below.</span>
+<span class="cm"> */</span>
+<span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">T</span><span class="o">&gt;</span>
+<span class="kr">typename</span> <span class="n">std</span><span class="o">::</span><span class="n">enable_if</span><span class="o">&lt;</span>
+  <span class="n">IsOneOf</span><span class="o">&lt;</span><span class="n">T</span><span class="p">,</span> <span class="n">boost</span><span class="o">::</span><span class="n">shared_mutex</span><span class="p">,</span> <span class="n">boost</span><span class="o">::</span><span class="n">timed_mutex</span><span class="p">,</span>
+          <span class="n">boost</span><span class="o">::</span><span class="n">recursive_timed_mutex</span><span class="o">&gt;::</span><span class="n">value</span><span class="p">,</span> <span class="n">bool</span><span class="o">&gt;::</span><span class="n">type</span>
+<span class="n">acquireReadWrite</span><span class="p">(</span><span class="n">T</span><span class="o">&amp;</span> <span class="n">mutex</span><span class="p">,</span>
+                 <span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">milliseconds</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">return</span> <span class="n">mutex</span><span class="p">.</span><span class="n">timed_lock</span><span class="p">(</span><span class="n">boost</span><span class="o">::</span><span class="n">posix_time</span><span class="o">::</span><span class="n">milliseconds</span><span class="p">(</span><span class="n">milliseconds</span><span class="p">));</span>
+<span class="p">}</span>
+
+<span class="cm">/**</span>
+<span class="cm"> * Releases a mutex previously acquired for reading by calling</span>
+<span class="cm"> * .unlock(). The exception is boost::shared_mutex, which has a</span>
+<span class="cm"> * special primitive called .unlock_shared().</span>
+<span class="cm"> */</span>
+<span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">T</span><span class="o">&gt;</span>
+<span class="kr">typename</span> <span class="n">std</span><span class="o">::</span><span class="n">enable_if</span><span class="o">&lt;</span>
+  <span class="n">HasLockUnlock</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;::</span><span class="n">value</span> <span class="o">&amp;&amp;</span> <span class="o">!</span><span class="n">std</span><span class="o">::</span><span class="n">is_same</span><span class="o">&lt;</span><span class="n">T</span><span class="p">,</span> <span class="n">boost</span><span class="o">::</span><span class="n">shared_mutex</span><span class="o">&gt;::</span><span class="n">value</span><span class="o">&gt;::</span><span class="n">type</span>
+<span class="n">releaseRead</span><span class="p">(</span><span class="n">T</span><span class="o">&amp;</span> <span class="n">mutex</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">mutex</span><span class="p">.</span><span class="n">unlock</span><span class="p">();</span>
+<span class="p">}</span>
+
+<span class="cm">/**</span>
+<span class="cm"> * Special case for boost::shared_mutex.</span>
+<span class="cm"> */</span>
+<span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">T</span><span class="o">&gt;</span>
+<span class="kr">typename</span> <span class="n">std</span><span class="o">::</span><span class="n">enable_if</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">is_same</span><span class="o">&lt;</span><span class="n">T</span><span class="p">,</span> <span class="n">boost</span><span class="o">::</span><span class="n">shared_mutex</span><span class="o">&gt;::</span><span class="n">value</span><span class="o">&gt;::</span><span class="n">type</span>
+<span class="n">releaseRead</span><span class="p">(</span><span class="n">T</span><span class="o">&amp;</span> <span class="n">mutex</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">mutex</span><span class="p">.</span><span class="n">unlock_shared</span><span class="p">();</span>
+<span class="p">}</span>
+
+<span class="cm">/**</span>
+<span class="cm"> * Releases a mutex previously acquired for reading-writing by calling</span>
+<span class="cm"> * .unlock().</span>
+<span class="cm"> */</span>
+<span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">T</span><span class="o">&gt;</span>
+<span class="kr">typename</span> <span class="n">std</span><span class="o">::</span><span class="n">enable_if</span><span class="o">&lt;</span><span class="n">HasLockUnlock</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;::</span><span class="n">value</span><span class="o">&gt;::</span><span class="n">type</span>
+<span class="n">releaseReadWrite</span><span class="p">(</span><span class="n">T</span><span class="o">&amp;</span> <span class="n">mutex</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">mutex</span><span class="p">.</span><span class="n">unlock</span><span class="p">();</span>
+<span class="p">}</span>
+
+<span class="p">}</span> <span class="c1">// namespace detail</span>
+
+<span class="cm">/**</span>
+<span class="cm"> * Synchronized&lt;T&gt; encapsulates an object of type T (a &quot;datum&quot;) paired</span>
+<span class="cm"> * with a mutex. The only way to access the datum is while the mutex</span>
+<span class="cm"> * is locked, and Synchronized makes it virtually impossible to do</span>
+<span class="cm"> * otherwise. The code that would access the datum in unsafe ways</span>
+<span class="cm"> * would look odd and convoluted, thus readily alerting the human</span>
+<span class="cm"> * reviewer. In contrast, the code that uses Synchronized&lt;T&gt; correctly</span>
+<span class="cm"> * looks simple and intuitive.</span>
+<span class="cm"> *</span>
+<span class="cm"> * The second parameter must be a mutex type. Supported mutexes are</span>
+<span class="cm"> * std::mutex, std::recursive_mutex, std::timed_mutex,</span>
+<span class="cm"> * std::recursive_timed_mutex, boost::mutex, boost::recursive_mutex,</span>
+<span class="cm"> * boost::shared_mutex, boost::timed_mutex,</span>
+<span class="cm"> * boost::recursive_timed_mutex, and the folly/RWSpinLock.h</span>
+<span class="cm"> * classes.</span>
+<span class="cm"> *</span>
+<span class="cm"> * You may define Synchronized support by defining 4-6 primitives in</span>
+<span class="cm"> * the same namespace as the mutex class (found via ADL).  The</span>
+<span class="cm"> * primitives are: acquireRead, acquireReadWrite, releaseRead, and</span>
+<span class="cm"> * releaseReadWrite. Two optional primitives for timout operations are</span>
+<span class="cm"> * overloads of acquireRead and acquireReadWrite. For signatures,</span>
+<span class="cm"> * refer to the namespace detail below, which implements the</span>
+<span class="cm"> * primitives for mutexes in std and boost.</span>
+<span class="cm"> */</span>
+<span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">T</span><span class="p">,</span> <span class="n">class</span> <span class="n">Mutex</span> <span class="o">=</span> <span class="n">boost</span><span class="o">::</span><span class="n">shared_mutex</span><span class="o">&gt;</span>
+<span class="k">struct</span> <span class="n">Synchronized</span> <span class="p">{</span>
+  <span class="cm">/**</span>
+<span class="cm">   * Default constructor leaves both members call their own default</span>
+<span class="cm">   * constructor.</span>
+<span class="cm">   */</span>
+  <span class="n">Synchronized</span><span class="p">()</span> <span class="o">=</span> <span class="k">default</span><span class="p">;</span>
+
+  <span class="cm">/**</span>
+<span class="cm">   * Copy constructor copies the data (with locking the source and</span>
+<span class="cm">   * all) but does NOT copy the mutex. Doing so would result in</span>
+<span class="cm">   * deadlocks.</span>
+<span class="cm">   */</span>
+  <span class="n">Synchronized</span><span class="p">(</span><span class="k">const</span> <span class="n">Synchronized</span><span class="o">&amp;</span> <span class="n">rhs</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">auto</span> <span class="n">guard</span> <span class="o">=</span> <span class="n">rhs</span><span class="p">.</span><span class="n">operator</span><span class="o">-&gt;</span><span class="p">();</span>
+    <span class="n">datum_</span> <span class="o">=</span> <span class="n">rhs</span><span class="p">.</span><span class="n">datum_</span><span class="p">;</span>
+  <span class="p">}</span>
+
+  <span class="cm">/**</span>
+<span class="cm">   * Move constructor moves the data (with locking the source and all)</span>
+<span class="cm">   * but does not move the mutex.</span>
+<span class="cm">   */</span>
+  <span class="n">Synchronized</span><span class="p">(</span><span class="n">Synchronized</span><span class="o">&amp;&amp;</span> <span class="n">rhs</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">auto</span> <span class="n">guard</span> <span class="o">=</span> <span class="n">rhs</span><span class="p">.</span><span class="n">operator</span><span class="o">-&gt;</span><span class="p">();</span>
+    <span class="n">datum_</span> <span class="o">=</span> <span class="n">std</span><span class="o">::</span><span class="n">move</span><span class="p">(</span><span class="n">rhs</span><span class="p">.</span><span class="n">datum_</span><span class="p">);</span>
+  <span class="p">}</span>
+
+  <span class="cm">/**</span>
+<span class="cm">   * Constructor taking a datum as argument copies it. There is no</span>
+<span class="cm">   * need to lock the constructing object.</span>
+<span class="cm">   */</span>
+  <span class="n">explicit</span> <span class="n">Synchronized</span><span class="p">(</span><span class="k">const</span> <span class="n">T</span><span class="o">&amp;</span> <span class="n">rhs</span><span class="p">)</span> <span class="o">:</span> <span class="n">datum_</span><span class="p">(</span><span class="n">rhs</span><span class="p">)</span> <span class="p">{}</span>
+
+  <span class="cm">/**</span>
+<span class="cm">   * Constructor taking a datum rvalue as argument moves it. Again,</span>
+<span class="cm">   * there is no need to lock the constructing object.</span>
+<span class="cm">   */</span>
+  <span class="n">explicit</span> <span class="n">Synchronized</span><span class="p">(</span><span class="n">T</span> <span class="o">&amp;&amp;</span> <span class="n">rhs</span><span class="p">)</span> <span class="o">:</span> <span class="n">datum_</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">move</span><span class="p">(</span><span class="n">rhs</span><span class="p">))</span> <span class="p">{}</span>
+
+  <span class="cm">/**</span>
+<span class="cm">   * The canonical assignment operator only assigns the data, NOT the</span>
+<span class="cm">   * mutex. It locks the two objects in ascending order of their</span>
+<span class="cm">   * addresses.</span>
+<span class="cm">   */</span>
+  <span class="n">Synchronized</span><span class="o">&amp;</span> <span class="n">operator</span><span class="o">=</span><span class="p">(</span><span class="k">const</span> <span class="n">Synchronized</span><span class="o">&amp;</span> <span class="n">rhs</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">this</span> <span class="o">&lt;</span> <span class="o">*</span><span class="n">rhs</span><span class="p">)</span> <span class="p">{</span>
+      <span class="k">auto</span> <span class="n">guard1</span> <span class="o">=</span> <span class="n">operator</span><span class="o">-&gt;</span><span class="p">();</span>
+      <span class="k">auto</span> <span class="n">guard2</span> <span class="o">=</span> <span class="n">rhs</span><span class="p">.</span><span class="n">operator</span><span class="o">-&gt;</span><span class="p">();</span>
+      <span class="n">datum_</span> <span class="o">=</span> <span class="n">rhs</span><span class="p">.</span><span class="n">datum_</span><span class="p">;</span>
+    <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+      <span class="k">auto</span> <span class="n">guard1</span> <span class="o">=</span> <span class="n">rhs</span><span class="p">.</span><span class="n">operator</span><span class="o">-&gt;</span><span class="p">();</span>
+      <span class="k">auto</span> <span class="n">guard2</span> <span class="o">=</span> <span class="n">operator</span><span class="o">-&gt;</span><span class="p">();</span>
+      <span class="n">datum_</span> <span class="o">=</span> <span class="n">rhs</span><span class="p">.</span><span class="n">datum_</span><span class="p">;</span>
+    <span class="p">}</span>
+    <span class="k">return</span> <span class="o">*</span><span class="n">this</span><span class="p">;</span>
+  <span class="p">}</span>
+
+  <span class="cm">/**</span>
+<span class="cm">   * Lock object, assign datum.</span>
+<span class="cm">   */</span>
+  <span class="n">Synchronized</span><span class="o">&amp;</span> <span class="n">operator</span><span class="o">=</span><span class="p">(</span><span class="k">const</span> <span class="n">T</span><span class="o">&amp;</span> <span class="n">rhs</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">auto</span> <span class="n">guard</span> <span class="o">=</span> <span class="n">operator</span><span class="o">-&gt;</span><span class="p">();</span>
+    <span class="n">datum_</span> <span class="o">=</span> <span class="n">rhs</span><span class="p">;</span>
+    <span class="k">return</span> <span class="o">*</span><span class="n">this</span><span class="p">;</span>
+  <span class="p">}</span>
+
+  <span class="cm">/**</span>
+<span class="cm">   * A LockedPtr lp keeps a modifiable (i.e. non-const)</span>
+<span class="cm">   * Synchronized&lt;T&gt; object locked for the duration of lp&#39;s</span>
+<span class="cm">   * existence. Because of this, you get to access the datum&#39;s methods</span>
+<span class="cm">   * directly by using lp-&gt;fun().</span>
+<span class="cm">   */</span>
+  <span class="k">struct</span> <span class="n">LockedPtr</span> <span class="p">{</span>
+    <span class="cm">/**</span>
+<span class="cm">     * Found no reason to leave this hanging.</span>
+<span class="cm">     */</span>
+    <span class="n">LockedPtr</span><span class="p">()</span> <span class="o">=</span> <span class="n">delete</span><span class="p">;</span>
+
+    <span class="cm">/**</span>
+<span class="cm">     * Takes a Synchronized and locks it.</span>
+<span class="cm">     */</span>
+    <span class="n">explicit</span> <span class="nf">LockedPtr</span><span class="p">(</span><span class="n">Synchronized</span><span class="o">*</span> <span class="n">parent</span><span class="p">)</span> <span class="o">:</span> <span class="n">parent_</span><span class="p">(</span><span class="n">parent</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">acquire</span><span class="p">();</span>
+    <span class="p">}</span>
+
+    <span class="cm">/**</span>
+<span class="cm">     * Takes a Synchronized and attempts to lock it for some</span>
+<span class="cm">     * milliseconds. If not, the LockedPtr will be subsequently null.</span>
+<span class="cm">     */</span>
+    <span class="n">LockedPtr</span><span class="p">(</span><span class="n">Synchronized</span><span class="o">*</span> <span class="n">parent</span><span class="p">,</span> <span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">milliseconds</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">using</span> <span class="n">namespace</span> <span class="n">detail</span><span class="p">;</span>
+      <span class="k">if</span> <span class="p">(</span><span class="n">acquireReadWrite</span><span class="p">(</span><span class="n">parent</span><span class="o">-&gt;</span><span class="n">mutex_</span><span class="p">,</span> <span class="n">milliseconds</span><span class="p">))</span> <span class="p">{</span>
+        <span class="n">parent_</span> <span class="o">=</span> <span class="n">parent</span><span class="p">;</span>
+        <span class="k">return</span><span class="p">;</span>
+      <span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-2"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-2">&#182;</a></div><p>Could not acquire the resource, pointer is null</p></td><td class="code"><div class="highlight"><pre>      <span class="n">parent_</span> <span class="o">=</span> <span class="nb">NULL</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="cm">/**</span>
+<span class="cm">     * This is used ONLY inside SYNCHRONIZED_DUAL. It initializes</span>
+<span class="cm">     * everything properly, but does not lock the parent because it</span>
+<span class="cm">     * &quot;knows&quot; someone else will lock it. Please do not use.</span>
+<span class="cm">     */</span>
+    <span class="n">LockedPtr</span><span class="p">(</span><span class="n">Synchronized</span><span class="o">*</span> <span class="n">parent</span><span class="p">,</span> <span class="n">detail</span><span class="o">::</span><span class="n">InternalDoNotUse</span><span class="p">)</span>
+        <span class="o">:</span> <span class="n">parent_</span><span class="p">(</span><span class="n">parent</span><span class="p">)</span> <span class="p">{</span>
+    <span class="p">}</span>
+
+    <span class="cm">/**</span>
+<span class="cm">     * Copy ctor adds one lock.</span>
+<span class="cm">     */</span>
+    <span class="n">LockedPtr</span><span class="p">(</span><span class="k">const</span> <span class="n">LockedPtr</span><span class="o">&amp;</span> <span class="n">rhs</span><span class="p">)</span> <span class="o">:</span> <span class="n">parent_</span><span class="p">(</span><span class="n">rhs</span><span class="p">.</span><span class="n">parent_</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">acquire</span><span class="p">();</span>
+    <span class="p">}</span>
+
+    <span class="cm">/**</span>
+<span class="cm">     * Assigning from another LockedPtr results in freeing the former</span>
+<span class="cm">     * lock and acquiring the new one. The method works with</span>
+<span class="cm">     * self-assignment (does nothing).</span>
+<span class="cm">     */</span>
+    <span class="n">LockedPtr</span><span class="o">&amp;</span> <span class="n">operator</span><span class="o">=</span><span class="p">(</span><span class="k">const</span> <span class="n">LockedPtr</span><span class="o">&amp;</span> <span class="n">rhs</span><span class="p">)</span> <span class="p">{</span>
+      <span class="k">if</span> <span class="p">(</span><span class="n">parent_</span> <span class="o">!=</span> <span class="n">rhs</span><span class="p">.</span><span class="n">parent_</span><span class="p">)</span> <span class="p">{</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">parent_</span><span class="p">)</span> <span class="n">parent_</span><span class="o">-&gt;</span><span class="n">mutex_</span><span class="p">.</span><span class="n">unlock</span><span class="p">();</span>
+        <span class="n">parent_</span> <span class="o">=</span> <span class="n">rhs</span><span class="p">.</span><span class="n">parent_</span><span class="p">;</span>
+        <span class="n">acquire</span><span class="p">();</span>
+      <span class="p">}</span>
+      <span class="k">return</span> <span class="o">*</span><span class="n">this</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="cm">/**</span>
+<span class="cm">     * Destructor releases.</span>
+<span class="cm">     */</span>
+    <span class="o">~</span><span class="n">LockedPtr</span><span class="p">()</span> <span class="p">{</span>
+      <span class="n">using</span> <span class="n">namespace</span> <span class="n">detail</span><span class="p">;</span>
+      <span class="k">if</span> <span class="p">(</span><span class="n">parent_</span><span class="p">)</span> <span class="n">releaseReadWrite</span><span class="p">(</span><span class="n">parent_</span><span class="o">-&gt;</span><span class="n">mutex_</span><span class="p">);</span>
+    <span class="p">}</span>
+
+    <span class="cm">/**</span>
+<span class="cm">     * Safe to access the data. Don&#39;t save the obtained pointer by</span>
+<span class="cm">     * invoking lp.operator-&gt;() by hand. Also, if the method returns a</span>
+<span class="cm">     * handle stored inside the datum, don&#39;t use this idiom - use</span>
+<span class="cm">     * SYNCHRONIZED below.</span>
+<span class="cm">     */</span>
+    <span class="n">T</span><span class="o">*</span> <span class="n">operator</span><span class="o">-&gt;</span><span class="p">()</span> <span class="p">{</span>
+      <span class="k">return</span> <span class="n">parent_</span> <span class="o">?</span> <span class="o">&amp;</span><span class="n">parent_</span><span class="o">-&gt;</span><span class="n">datum_</span> <span class="o">:</span> <span class="nb">NULL</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="cm">/**</span>
+<span class="cm">     * This class temporarily unlocks a LockedPtr in a scoped</span>
+<span class="cm">     * manner. It is used inside of the UNSYNCHRONIZED macro.</span>
+<span class="cm">     */</span>
+    <span class="k">struct</span> <span class="n">Unsynchronizer</span> <span class="p">{</span>
+      <span class="n">explicit</span> <span class="n">Unsynchronizer</span><span class="p">(</span><span class="n">LockedPtr</span><span class="o">*</span> <span class="n">p</span><span class="p">)</span> <span class="o">:</span> <span class="n">parent_</span><span class="p">(</span><span class="n">p</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">using</span> <span class="n">namespace</span> <span class="n">detail</span><span class="p">;</span>
+        <span class="n">releaseReadWrite</span><span class="p">(</span><span class="n">parent_</span><span class="o">-&gt;</span><span class="n">parent_</span><span class="o">-&gt;</span><span class="n">mutex_</span><span class="p">);</span>
+      <span class="p">}</span>
+      <span class="n">Unsynchronizer</span><span class="p">(</span><span class="k">const</span> <span class="n">Unsynchronizer</span><span class="o">&amp;</span><span class="p">)</span> <span class="o">=</span> <span class="n">delete</span><span class="p">;</span>
+      <span class="n">Unsynchronizer</span><span class="o">&amp;</span> <span class="n">operator</span><span class="o">=</span><span class="p">(</span><span class="k">const</span> <span class="n">Unsynchronizer</span><span class="o">&amp;</span><span class="p">)</span> <span class="o">=</span> <span class="n">delete</span><span class="p">;</span>
+      <span class="o">~</span><span class="n">Unsynchronizer</span><span class="p">()</span> <span class="p">{</span>
+        <span class="n">parent_</span><span class="o">-&gt;</span><span class="n">acquire</span><span class="p">();</span>
+      <span class="p">}</span>
+      <span class="n">LockedPtr</span><span class="o">*</span> <span class="n">operator</span><span class="o">-&gt;</span><span class="p">()</span> <span class="k">const</span> <span class="p">{</span>
+        <span class="k">return</span> <span class="n">parent_</span><span class="p">;</span>
+      <span class="p">}</span>
+    <span class="nl">private:</span>
+      <span class="n">LockedPtr</span><span class="o">*</span> <span class="n">parent_</span><span class="p">;</span>
+    <span class="p">};</span>
+    <span class="n">friend</span> <span class="k">struct</span> <span class="n">Unsynchronizer</span><span class="p">;</span>
+    <span class="n">Unsynchronizer</span> <span class="n">typeHackDoNotUse</span><span class="p">();</span>
+
+    <span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">P1</span><span class="p">,</span> <span class="n">class</span> <span class="n">P2</span><span class="o">&gt;</span>
+    <span class="n">friend</span> <span class="kt">void</span> <span class="n">lockInOrder</span><span class="p">(</span><span class="n">P1</span><span class="o">&amp;</span> <span class="n">p1</span><span class="p">,</span> <span class="n">P2</span><span class="o">&amp;</span> <span class="n">p2</span><span class="p">);</span>
+
+  <span class="nl">private:</span>
+    <span class="kt">void</span> <span class="nf">acquire</span><span class="p">()</span> <span class="p">{</span>
+      <span class="n">using</span> <span class="n">namespace</span> <span class="n">detail</span><span class="p">;</span>
+      <span class="k">if</span> <span class="p">(</span><span class="n">parent_</span><span class="p">)</span> <span class="n">acquireReadWrite</span><span class="p">(</span><span class="n">parent_</span><span class="o">-&gt;</span><span class="n">mutex_</span><span class="p">);</span>
+    <span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-3"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-3">&#182;</a></div><p>This is the entire state of LockedPtr.</p></td><td class="code"><div class="highlight"><pre>    <span class="n">Synchronized</span><span class="o">*</span> <span class="n">parent_</span><span class="p">;</span>
+  <span class="p">};</span>
+
+  <span class="cm">/**</span>
+<span class="cm">   * ConstLockedPtr does exactly what LockedPtr does, but for const</span>
+<span class="cm">   * Synchronized objects. Of interest is that ConstLockedPtr only</span>
+<span class="cm">   * uses a read lock, which is faster but more restrictive - you only</span>
+<span class="cm">   * get to call const methods of the datum.</span>
+<span class="cm">   *</span>
+<span class="cm">   * Much of the code between LockedPtr and</span>
+<span class="cm">   * ConstLockedPtr is identical and could be factor out, but there</span>
+<span class="cm">   * are enough nagging little differences to not justify the trouble.</span>
+<span class="cm">   */</span>
+  <span class="k">struct</span> <span class="n">ConstLockedPtr</span> <span class="p">{</span>
+    <span class="n">ConstLockedPtr</span><span class="p">()</span> <span class="o">=</span> <span class="n">delete</span><span class="p">;</span>
+    <span class="n">explicit</span> <span class="nf">ConstLockedPtr</span><span class="p">(</span><span class="k">const</span> <span class="n">Synchronized</span><span class="o">*</span> <span class="n">parent</span><span class="p">)</span> <span class="o">:</span> <span class="n">parent_</span><span class="p">(</span><span class="n">parent</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">acquire</span><span class="p">();</span>
+    <span class="p">}</span>
+    <span class="n">ConstLockedPtr</span><span class="p">(</span><span class="k">const</span> <span class="n">Synchronized</span><span class="o">*</span> <span class="n">parent</span><span class="p">,</span> <span class="n">detail</span><span class="o">::</span><span class="n">InternalDoNotUse</span><span class="p">)</span>
+        <span class="o">:</span> <span class="n">parent_</span><span class="p">(</span><span class="n">parent</span><span class="p">)</span> <span class="p">{</span>
+    <span class="p">}</span>
+    <span class="n">ConstLockedPtr</span><span class="p">(</span><span class="k">const</span> <span class="n">ConstLockedPtr</span><span class="o">&amp;</span> <span class="n">rhs</span><span class="p">)</span> <span class="o">:</span> <span class="n">parent_</span><span class="p">(</span><span class="n">rhs</span><span class="p">.</span><span class="n">parent_</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">acquire</span><span class="p">();</span>
+    <span class="p">}</span>
+    <span class="n">explicit</span> <span class="n">ConstLockedPtr</span><span class="p">(</span><span class="k">const</span> <span class="n">LockedPtr</span><span class="o">&amp;</span> <span class="n">rhs</span><span class="p">)</span> <span class="o">:</span> <span class="n">parent_</span><span class="p">(</span><span class="n">rhs</span><span class="p">.</span><span class="n">parent_</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">acquire</span><span class="p">();</span>
+    <span class="p">}</span>
+    <span class="n">ConstLockedPtr</span><span class="p">(</span><span class="k">const</span> <span class="n">Synchronized</span><span class="o">*</span> <span class="n">parent</span><span class="p">,</span> <span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">milliseconds</span><span class="p">)</span> <span class="p">{</span>
+      <span class="k">if</span> <span class="p">(</span><span class="n">parent</span><span class="o">-&gt;</span><span class="n">mutex_</span><span class="p">.</span><span class="n">timed_lock</span><span class="p">(</span>
+            <span class="n">boost</span><span class="o">::</span><span class="n">posix_time</span><span class="o">::</span><span class="n">milliseconds</span><span class="p">(</span><span class="n">milliseconds</span><span class="p">)))</span> <span class="p">{</span>
+        <span class="n">parent_</span> <span class="o">=</span> <span class="n">parent</span><span class="p">;</span>
+        <span class="k">return</span><span class="p">;</span>
+      <span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-4"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-4">&#182;</a></div><p>Could not acquire the resource, pointer is null</p></td><td class="code"><div class="highlight"><pre>      <span class="n">parent_</span> <span class="o">=</span> <span class="nb">NULL</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="n">ConstLockedPtr</span><span class="o">&amp;</span> <span class="n">operator</span><span class="o">=</span><span class="p">(</span><span class="k">const</span> <span class="n">ConstLockedPtr</span><span class="o">&amp;</span> <span class="n">rhs</span><span class="p">)</span> <span class="p">{</span>
+      <span class="k">if</span> <span class="p">(</span><span class="n">parent_</span> <span class="o">!=</span> <span class="n">rhs</span><span class="p">.</span><span class="n">parent_</span><span class="p">)</span> <span class="p">{</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">parent_</span><span class="p">)</span> <span class="n">parent_</span><span class="o">-&gt;</span><span class="n">mutex_</span><span class="p">.</span><span class="n">unlock_shared</span><span class="p">();</span>
+        <span class="n">parent_</span> <span class="o">=</span> <span class="n">rhs</span><span class="p">.</span><span class="n">parent_</span><span class="p">;</span>
+        <span class="n">acquire</span><span class="p">();</span>
+      <span class="p">}</span>
+    <span class="p">}</span>
+    <span class="o">~</span><span class="n">ConstLockedPtr</span><span class="p">()</span> <span class="p">{</span>
+      <span class="n">using</span> <span class="n">namespace</span> <span class="n">detail</span><span class="p">;</span>
+      <span class="k">if</span> <span class="p">(</span><span class="n">parent_</span><span class="p">)</span> <span class="n">releaseRead</span><span class="p">(</span><span class="n">parent_</span><span class="o">-&gt;</span><span class="n">mutex_</span><span class="p">);</span>
+    <span class="p">}</span>
+
+    <span class="k">const</span> <span class="n">T</span><span class="o">*</span> <span class="n">operator</span><span class="o">-&gt;</span><span class="p">()</span> <span class="k">const</span> <span class="p">{</span>
+      <span class="k">return</span> <span class="n">parent_</span> <span class="o">?</span> <span class="o">&amp;</span><span class="n">parent_</span><span class="o">-&gt;</span><span class="n">datum_</span> <span class="o">:</span> <span class="nb">NULL</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="k">struct</span> <span class="n">Unsynchronizer</span> <span class="p">{</span>
+      <span class="n">explicit</span> <span class="n">Unsynchronizer</span><span class="p">(</span><span class="n">ConstLockedPtr</span><span class="o">*</span> <span class="n">p</span><span class="p">)</span> <span class="o">:</span> <span class="n">parent_</span><span class="p">(</span><span class="n">p</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">using</span> <span class="n">namespace</span> <span class="n">detail</span><span class="p">;</span>
+        <span class="n">releaseRead</span><span class="p">(</span><span class="n">parent_</span><span class="o">-&gt;</span><span class="n">parent_</span><span class="o">-&gt;</span><span class="n">mutex_</span><span class="p">);</span>
+      <span class="p">}</span>
+      <span class="n">Unsynchronizer</span><span class="p">(</span><span class="k">const</span> <span class="n">Unsynchronizer</span><span class="o">&amp;</span><span class="p">)</span> <span class="o">=</span> <span class="n">delete</span><span class="p">;</span>
+      <span class="n">Unsynchronizer</span><span class="o">&amp;</span> <span class="n">operator</span><span class="o">=</span><span class="p">(</span><span class="k">const</span> <span class="n">Unsynchronizer</span><span class="o">&amp;</span><span class="p">)</span> <span class="o">=</span> <span class="n">delete</span><span class="p">;</span>
+      <span class="o">~</span><span class="n">Unsynchronizer</span><span class="p">()</span> <span class="p">{</span>
+        <span class="n">using</span> <span class="n">namespace</span> <span class="n">detail</span><span class="p">;</span>
+        <span class="n">acquireRead</span><span class="p">(</span><span class="n">parent_</span><span class="o">-&gt;</span><span class="n">parent_</span><span class="o">-&gt;</span><span class="n">mutex_</span><span class="p">);</span>
+      <span class="p">}</span>
+      <span class="n">ConstLockedPtr</span><span class="o">*</span> <span class="n">operator</span><span class="o">-&gt;</span><span class="p">()</span> <span class="k">const</span> <span class="p">{</span>
+        <span class="k">return</span> <span class="n">parent_</span><span class="p">;</span>
+      <span class="p">}</span>
+    <span class="nl">private:</span>
+      <span class="n">ConstLockedPtr</span><span class="o">*</span> <span class="n">parent_</span><span class="p">;</span>
+    <span class="p">};</span>
+    <span class="n">friend</span> <span class="k">struct</span> <span class="n">Unsynchronizer</span><span class="p">;</span>
+    <span class="n">Unsynchronizer</span> <span class="n">typeHackDoNotUse</span><span class="p">();</span>
+
+    <span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">P1</span><span class="p">,</span> <span class="n">class</span> <span class="n">P2</span><span class="o">&gt;</span>
+    <span class="n">friend</span> <span class="kt">void</span> <span class="n">lockInOrder</span><span class="p">(</span><span class="n">P1</span><span class="o">&amp;</span> <span class="n">p1</span><span class="p">,</span> <span class="n">P2</span><span class="o">&amp;</span> <span class="n">p2</span><span class="p">);</span>
+
+  <span class="nl">private:</span>
+    <span class="kt">void</span> <span class="nf">acquire</span><span class="p">()</span> <span class="p">{</span>
+      <span class="n">using</span> <span class="n">namespace</span> <span class="n">detail</span><span class="p">;</span>
+      <span class="k">if</span> <span class="p">(</span><span class="n">parent_</span><span class="p">)</span> <span class="n">acquireRead</span><span class="p">(</span><span class="n">parent_</span><span class="o">-&gt;</span><span class="n">mutex_</span><span class="p">);</span>
+    <span class="p">}</span>
+
+    <span class="k">const</span> <span class="n">Synchronized</span><span class="o">*</span> <span class="n">parent_</span><span class="p">;</span>
+  <span class="p">};</span>
+
+  <span class="cm">/**</span>
+<span class="cm">   * This accessor offers a LockedPtr. In turn. LockedPtr offers</span>
+<span class="cm">   * operator-&gt; returning a pointer to T. The operator-&gt; keeps</span>
+<span class="cm">   * expanding until it reaches a pointer, so syncobj-&gt;foo() will lock</span>
+<span class="cm">   * the object and call foo() against it.</span>
+<span class="cm">  */</span>
+  <span class="n">LockedPtr</span> <span class="n">operator</span><span class="o">-&gt;</span><span class="p">()</span> <span class="p">{</span>
+    <span class="k">return</span> <span class="n">LockedPtr</span><span class="p">(</span><span class="n">this</span><span class="p">);</span>
+  <span class="p">}</span>
+
+  <span class="cm">/**</span>
+<span class="cm">   * Same, for constant objects. You will be able to invoke only const</span>
+<span class="cm">   * methods.</span>
+<span class="cm">   */</span>
+  <span class="n">ConstLockedPtr</span> <span class="n">operator</span><span class="o">-&gt;</span><span class="p">()</span> <span class="k">const</span> <span class="p">{</span>
+    <span class="k">return</span> <span class="n">ConstLockedPtr</span><span class="p">(</span><span class="n">this</span><span class="p">);</span>
+  <span class="p">}</span>
+
+  <span class="cm">/**</span>
+<span class="cm">   * Attempts to acquire for a given number of milliseconds. If</span>
+<span class="cm">   * acquisition is unsuccessful, the returned LockedPtr is NULL.</span>
+<span class="cm">   */</span>
+  <span class="n">LockedPtr</span> <span class="n">timedAcquire</span><span class="p">(</span><span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">milliseconds</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">return</span> <span class="n">LockedPtr</span><span class="p">(</span><span class="n">this</span><span class="p">,</span> <span class="n">milliseconds</span><span class="p">);</span>
+  <span class="p">}</span>
+
+  <span class="cm">/**</span>
+<span class="cm">   * As above, for a constant object.</span>
+<span class="cm">   */</span>
+  <span class="n">ConstLockedPtr</span> <span class="n">timedAcquire</span><span class="p">(</span><span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">milliseconds</span><span class="p">)</span> <span class="k">const</span> <span class="p">{</span>
+    <span class="k">return</span> <span class="n">ConstLockedPtr</span><span class="p">(</span><span class="n">this</span><span class="p">,</span> <span class="n">milliseconds</span><span class="p">);</span>
+  <span class="p">}</span>
+
+  <span class="cm">/**</span>
+<span class="cm">   * Used by SYNCHRONIZED_DUAL.</span>
+<span class="cm">   */</span>
+  <span class="n">LockedPtr</span> <span class="n">internalDoNotUse</span><span class="p">()</span> <span class="p">{</span>
+    <span class="k">return</span> <span class="n">LockedPtr</span><span class="p">(</span><span class="n">this</span><span class="p">,</span> <span class="n">detail</span><span class="o">::</span><span class="n">InternalDoNotUse</span><span class="p">());</span>
+  <span class="p">}</span>
+
+  <span class="cm">/**</span>
+<span class="cm">   * ditto</span>
+<span class="cm">   */</span>
+  <span class="n">ConstLockedPtr</span> <span class="n">internalDoNotUse</span><span class="p">()</span> <span class="k">const</span> <span class="p">{</span>
+    <span class="k">return</span> <span class="n">ConstLockedPtr</span><span class="p">(</span><span class="n">this</span><span class="p">,</span> <span class="n">detail</span><span class="o">::</span><span class="n">InternalDoNotUse</span><span class="p">());</span>
+  <span class="p">}</span>
+
+  <span class="cm">/**</span>
+<span class="cm">   * Sometimes, although you have a mutable object, you only want to</span>
+<span class="cm">   * call a const method against it. The most efficient way to achieve</span>
+<span class="cm">   * that is by using a read lock. You get to do so by using</span>
+<span class="cm">   * obj.asConst()-&gt;method() instead of obj-&gt;method().</span>
+<span class="cm">   */</span>
+  <span class="k">const</span> <span class="n">Synchronized</span><span class="o">&amp;</span> <span class="n">asConst</span><span class="p">()</span> <span class="k">const</span> <span class="p">{</span>
+    <span class="k">return</span> <span class="o">*</span><span class="n">this</span><span class="p">;</span>
+  <span class="p">}</span>
+
+  <span class="cm">/**</span>
+<span class="cm">   * Swaps with another Synchronized. Protected against</span>
+<span class="cm">   * self-swap. Only data is swapped. Locks are acquired in increasing</span>
+<span class="cm">   * address order.</span>
+<span class="cm">   */</span>
+  <span class="kt">void</span> <span class="n">swap</span><span class="p">(</span><span class="n">Synchronized</span><span class="o">&amp;</span> <span class="n">rhs</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">this</span> <span class="o">==</span> <span class="o">&amp;</span><span class="n">rhs</span><span class="p">)</span> <span class="p">{</span>
+      <span class="k">return</span><span class="p">;</span>
+    <span class="p">}</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">this</span> <span class="o">&gt;</span> <span class="o">&amp;</span><span class="n">rhs</span><span class="p">)</span> <span class="p">{</span>
+      <span class="k">return</span> <span class="n">rhs</span><span class="p">.</span><span class="n">swap</span><span class="p">(</span><span class="o">*</span><span class="n">this</span><span class="p">);</span>
+    <span class="p">}</span>
+    <span class="k">auto</span> <span class="n">guard1</span> <span class="o">=</span> <span class="n">operator</span><span class="o">-&gt;</span><span class="p">();</span>
+    <span class="k">auto</span> <span class="n">guard2</span> <span class="o">=</span> <span class="n">rhs</span><span class="p">.</span><span class="n">operator</span><span class="o">-&gt;</span><span class="p">();</span>
+    <span class="n">datum_</span><span class="p">.</span><span class="n">swap</span><span class="p">(</span><span class="n">rhs</span><span class="p">.</span><span class="n">datum_</span><span class="p">);</span>
+  <span class="p">}</span>
+
+  <span class="cm">/**</span>
+<span class="cm">   * Swap with another datum. Recommended because it keeps the mutex</span>
+<span class="cm">   * held only briefly.</span>
+<span class="cm">   */</span>
+  <span class="kt">void</span> <span class="n">swap</span><span class="p">(</span><span class="n">T</span><span class="o">&amp;</span> <span class="n">rhs</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">LockedPtr</span> <span class="n">guard</span> <span class="o">=</span> <span class="n">operator</span><span class="o">-&gt;</span><span class="p">();</span>
+    <span class="n">datum_</span><span class="p">.</span><span class="n">swap</span><span class="p">(</span><span class="n">rhs</span><span class="p">);</span>
+  <span class="p">}</span>
+
+  <span class="cm">/**</span>
+<span class="cm">   * Copies datum to a given target.</span>
+<span class="cm">   */</span>
+  <span class="kt">void</span> <span class="n">copy</span><span class="p">(</span><span class="n">T</span><span class="o">*</span> <span class="n">target</span><span class="p">)</span> <span class="k">const</span> <span class="p">{</span>
+    <span class="n">ConstLockedPtr</span> <span class="n">guard</span> <span class="o">=</span> <span class="n">operator</span><span class="o">-&gt;</span><span class="p">();</span>
+    <span class="o">*</span><span class="n">target</span> <span class="o">=</span> <span class="n">datum_</span><span class="p">;</span>
+  <span class="p">}</span>
+
+  <span class="cm">/**</span>
+<span class="cm">   * Returns a fresh copy of the datum.</span>
+<span class="cm">   */</span>
+  <span class="n">T</span> <span class="n">copy</span><span class="p">()</span> <span class="k">const</span> <span class="p">{</span>
+    <span class="n">ConstLockedPtr</span> <span class="n">guard</span> <span class="o">=</span> <span class="n">operator</span><span class="o">-&gt;</span><span class="p">();</span>
+    <span class="k">return</span> <span class="n">datum_</span><span class="p">;</span>
+  <span class="p">}</span>
+
+<span class="nl">private:</span>
+  <span class="n">T</span> <span class="n">datum_</span><span class="p">;</span>
+  <span class="n">mutable</span> <span class="n">Mutex</span> <span class="n">mutex_</span><span class="p">;</span>
+<span class="p">};</span></pre></div></td></tr>
+
+
+<tr id="section-5"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-5">&#182;</a></div><p>Non-member swap primitive</p></td><td class="code"><div class="highlight"><pre><span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">T</span><span class="p">,</span> <span class="n">class</span> <span class="n">M</span><span class="o">&gt;</span>
+<span class="kt">void</span> <span class="n">swap</span><span class="p">(</span><span class="n">Synchronized</span><span class="o">&lt;</span><span class="n">T</span><span class="p">,</span> <span class="n">M</span><span class="o">&gt;&amp;</span> <span class="n">lhs</span><span class="p">,</span> <span class="n">Synchronized</span><span class="o">&lt;</span><span class="n">T</span><span class="p">,</span> <span class="n">M</span><span class="o">&gt;&amp;</span> <span class="n">rhs</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">lhs</span><span class="p">.</span><span class="n">swap</span><span class="p">(</span><span class="n">rhs</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="cm">/**</span>
+<span class="cm"> * SYNCHRONIZED is the main facility that makes Synchronized&lt;T&gt;</span>
+<span class="cm"> * helpful. It is a pseudo-statement that introduces a scope where the</span>
+<span class="cm"> * object is locked. Inside that scope you get to access the unadorned</span>
+<span class="cm"> * datum.</span>
+<span class="cm"> *</span>
+<span class="cm"> * Example:</span>
+<span class="cm"> *</span>
+<span class="cm"> * Synchronized&lt;vector&lt;int&gt;&gt; svector;</span>
+<span class="cm"> * ...</span>
+<span class="cm"> * SYNCHRONIZED (svector) { ... use svector as a vector&lt;int&gt; ... }</span>
+<span class="cm"> * or</span>
+<span class="cm"> * SYNCHRONIZED (v, svector) { ... use v as a vector&lt;int&gt; ... }</span>
+<span class="cm"> *</span>
+<span class="cm"> * Refer to folly/docs/Synchronized.md for a detailed explanation and more</span>
+<span class="cm"> * examples.</span>
+<span class="cm"> */</span>
+<span class="cp">#define SYNCHRONIZED(...)                                       \</span>
+<span class="cp">  if (bool SYNCHRONIZED_state = false) {} else                  \</span>
+<span class="cp">    for (auto SYNCHRONIZED_lockedPtr =                          \</span>
+<span class="cp">           (FB_ARG_2_OR_1(__VA_ARGS__)).operator-&gt;();           \</span>
+<span class="cp">         !SYNCHRONIZED_state; SYNCHRONIZED_state = true)        \</span>
+<span class="cp">      for (auto&amp; FB_ARG_1(__VA_ARGS__) =                        \</span>
+<span class="cp">             *SYNCHRONIZED_lockedPtr.operator-&gt;();              \</span>
+<span class="cp">           !SYNCHRONIZED_state; SYNCHRONIZED_state = true)</span>
+
+<span class="cp">#define TIMED_SYNCHRONIZED(timeout, ...)                           \</span>
+<span class="cp">  if (bool SYNCHRONIZED_state = false) {} else                     \</span>
+<span class="cp">    for (auto SYNCHRONIZED_lockedPtr =                             \</span>
+<span class="cp">           (FB_ARG_2_OR_1(__VA_ARGS__)).timedAcquire(timeout);     \</span>
+<span class="cp">         !SYNCHRONIZED_state; SYNCHRONIZED_state = true)           \</span>
+<span class="cp">      for (auto FB_ARG_1(__VA_ARGS__) =                            \</span>
+<span class="cp">             SYNCHRONIZED_lockedPtr.operator-&gt;();                  \</span>
+<span class="cp">           !SYNCHRONIZED_state; SYNCHRONIZED_state = true)</span>
+
+<span class="cm">/**</span>
+<span class="cm"> * Similar to SYNCHRONIZED, but only uses a read lock.</span>
+<span class="cm"> */</span>
+<span class="cp">#define SYNCHRONIZED_CONST(...)                         \</span>
+<span class="cp">  SYNCHRONIZED(FB_ARG_1(__VA_ARGS__),                   \</span>
+<span class="cp">               (FB_ARG_2_OR_1(__VA_ARGS__)).asConst())</span>
+
+<span class="cm">/**</span>
+<span class="cm"> * Similar to TIMED_SYNCHRONIZED, but only uses a read lock.</span>
+<span class="cm"> */</span>
+<span class="cp">#define TIMED_SYNCHRONIZED_CONST(timeout, ...)                  \</span>
+<span class="cp">  TIMED_SYNCHRONIZED(timeout, FB_ARG_1(__VA_ARGS__),            \</span>
+<span class="cp">                     (FB_ARG_2_OR_1(__VA_ARGS__)).asConst())</span>
+
+<span class="cm">/**</span>
+<span class="cm"> * Temporarily disables synchronization inside a SYNCHRONIZED block.</span>
+<span class="cm"> */</span>
+<span class="cp">#define UNSYNCHRONIZED(name)                                    \</span>
+<span class="cp">  for (decltype(SYNCHRONIZED_lockedPtr.typeHackDoNotUse())      \</span>
+<span class="cp">         SYNCHRONIZED_state3(&amp;SYNCHRONIZED_lockedPtr);          \</span>
+<span class="cp">       !SYNCHRONIZED_state; SYNCHRONIZED_state = true)          \</span>
+<span class="cp">    for (auto name = *SYNCHRONIZED_state3.operator-&gt;();         \</span>
+<span class="cp">         !SYNCHRONIZED_state; SYNCHRONIZED_state = true)</span>
+
+<span class="cm">/**</span>
+<span class="cm"> * Locks two objects in increasing order of their addresses.</span>
+<span class="cm"> */</span>
+<span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">P1</span><span class="p">,</span> <span class="n">class</span> <span class="n">P2</span><span class="o">&gt;</span>
+<span class="kt">void</span> <span class="n">lockInOrder</span><span class="p">(</span><span class="n">P1</span><span class="o">&amp;</span> <span class="n">p1</span><span class="p">,</span> <span class="n">P2</span><span class="o">&amp;</span> <span class="n">p2</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">if</span> <span class="p">(</span><span class="n">static_cast</span><span class="o">&lt;</span><span class="k">const</span> <span class="kt">void</span><span class="o">*&gt;</span><span class="p">(</span><span class="n">p1</span><span class="p">.</span><span class="n">operator</span><span class="o">-&gt;</span><span class="p">())</span> <span class="o">&gt;</span>
+      <span class="n">static_cast</span><span class="o">&lt;</span><span class="k">const</span> <span class="kt">void</span><span class="o">*&gt;</span><span class="p">(</span><span class="n">p2</span><span class="p">.</span><span class="n">operator</span><span class="o">-&gt;</span><span class="p">()))</span> <span class="p">{</span>
+    <span class="n">p2</span><span class="p">.</span><span class="n">acquire</span><span class="p">();</span>
+    <span class="n">p1</span><span class="p">.</span><span class="n">acquire</span><span class="p">();</span>
+  <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+    <span class="n">p1</span><span class="p">.</span><span class="n">acquire</span><span class="p">();</span>
+    <span class="n">p2</span><span class="p">.</span><span class="n">acquire</span><span class="p">();</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="cm">/**</span>
+<span class="cm"> * Synchronizes two Synchronized objects (they may encapsulate</span>
+<span class="cm"> * different data). Synchronization is done in increasing address of</span>
+<span class="cm"> * object order, so there is no deadlock risk.</span>
+<span class="cm"> */</span>
+<span class="cp">#define SYNCHRONIZED_DUAL(n1, e1, n2, e2)                       \</span>
+<span class="cp">  if (bool SYNCHRONIZED_state = false) {} else                  \</span>
+<span class="cp">    for (auto SYNCHRONIZED_lp1 = (e1).internalDoNotUse();       \</span>
+<span class="cp">         !SYNCHRONIZED_state; SYNCHRONIZED_state = true)        \</span>
+<span class="cp">      for (auto&amp; n1 = *SYNCHRONIZED_lp1.operator-&gt;();           \</span>
+<span class="cp">           !SYNCHRONIZED_state;  SYNCHRONIZED_state = true)     \</span>
+<span class="cp">        for (auto SYNCHRONIZED_lp2 = (e2).internalDoNotUse();   \</span>
+<span class="cp">             !SYNCHRONIZED_state;  SYNCHRONIZED_state = true)   \</span>
+<span class="cp">          for (auto&amp; n2 = *SYNCHRONIZED_lp2.operator-&gt;();       \</span>
+<span class="cp">               !SYNCHRONIZED_state; SYNCHRONIZED_state = true)  \</span>
+<span class="cp">            if ((::folly::lockInOrder(                          \</span>
+<span class="cp">                   SYNCHRONIZED_lp1, SYNCHRONIZED_lp2),         \</span>
+<span class="cp">                 false)) {}                                     \</span>
+<span class="cp">            else</span>
+
+<span class="p">}</span> <span class="cm">/* namespace folly */</span>
+
+<span class="cp">#endif </span><span class="c1">// SYNCHRONIZED_H_</span>
+
+</pre></div></td></tr>
+
+</tbody>
+</table>
+</div>
+
+</body>
+<script>docas={repo:"joekychen/folly",depth:1}</script>
+<script>document.write('<script src=' + ('__proto__' in {} ? 'http://cdnjs.cloudflare.com/ajax/libs/zepto/1.0rc1/zepto.min.js' : 'https://ajax.googleapis.com/ajax/libs/jquery/1.7.2/jquery.min.js')+'><\\/script>')</script>
+<script src="http://baoshan.github.com/moment/min/moment.min.js"></script>
+<script src="../javascript/docco.min.js"></script>
+</html>

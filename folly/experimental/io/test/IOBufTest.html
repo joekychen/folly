@@ -1,0 +1,675 @@
+<!DOCTYPE html>
+<html><head><title>joekychen/folly » folly › experimental › io › test › IOBufTest.cpp
+
+</title>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+<meta name="generator" content="Docco">
+<link rel="stylesheet" media="all" href="../../../../stylesheets/docco.min.css" />
+
+
+</head>
+<body>
+<div id="container">
+<div id="background"></div>
+<table cellpadding="0" cellspacing="0">
+<thead><tr><th class="docs"><a id="home" href="../../../../index.html"></a><h1>IOBufTest.cpp</h1></th><th class="code"></th></tr></thead>
+<tbody>
+
+
+<tr id="section-1"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-1">&#182;</a></div></td><td class="code"><div class="highlight"><pre><span class="cm">/*</span>
+<span class="cm"> * Copyright 2012 Facebook, Inc.</span>
+<span class="cm"> *</span>
+<span class="cm"> * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span class="cm"> * you may not use this file except in compliance with the License.</span>
+<span class="cm"> * You may obtain a copy of the License at</span>
+<span class="cm"> *</span>
+<span class="cm"> *   http://www.apache.org/licenses/LICENSE-2.0</span>
+<span class="cm"> *</span>
+<span class="cm"> * Unless required by applicable law or agreed to in writing, software</span>
+<span class="cm"> * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span class="cm"> * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span class="cm"> * See the License for the specific language governing permissions and</span>
+<span class="cm"> * limitations under the License.</span>
+<span class="cm"> */</span>
+
+<span class="cp">#include &quot;folly/experimental/io/IOBuf.h&quot;</span>
+<span class="cp">#include &quot;folly/experimental/io/TypedIOBuf.h&quot;</span>
+
+<span class="cp">#include &lt;gflags/gflags.h&gt;</span>
+<span class="cp">#include &lt;boost/random.hpp&gt;</span>
+<span class="cp">#include &lt;gtest/gtest.h&gt;</span>
+
+<span class="cp">#include &quot;folly/Malloc.h&quot;</span>
+<span class="cp">#include &quot;folly/Range.h&quot;</span>
+
+<span class="k">using</span> <span class="n">folly</span><span class="o">::</span><span class="n">IOBuf</span><span class="p">;</span>
+<span class="k">using</span> <span class="n">folly</span><span class="o">::</span><span class="n">TypedIOBuf</span><span class="p">;</span>
+<span class="k">using</span> <span class="n">folly</span><span class="o">::</span><span class="n">StringPiece</span><span class="p">;</span>
+<span class="k">using</span> <span class="n">std</span><span class="o">::</span><span class="n">unique_ptr</span><span class="p">;</span>
+
+<span class="kt">void</span> <span class="n">append</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">unique_ptr</span><span class="o">&lt;</span><span class="n">IOBuf</span><span class="o">&gt;&amp;</span> <span class="n">buf</span><span class="p">,</span> <span class="n">StringPiece</span> <span class="n">str</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">EXPECT_LE</span><span class="p">(</span><span class="n">str</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="n">buf</span><span class="o">-&gt;</span><span class="n">tailroom</span><span class="p">());</span>
+  <span class="n">memcpy</span><span class="p">(</span><span class="n">buf</span><span class="o">-&gt;</span><span class="n">writableData</span><span class="p">(),</span> <span class="n">str</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span> <span class="n">str</span><span class="p">.</span><span class="n">size</span><span class="p">());</span>
+  <span class="n">buf</span><span class="o">-&gt;</span><span class="n">append</span><span class="p">(</span><span class="n">str</span><span class="p">.</span><span class="n">size</span><span class="p">());</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">IOBuf</span><span class="p">,</span> <span class="n">Simple</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">unique_ptr</span><span class="o">&lt;</span><span class="n">IOBuf</span><span class="o">&gt;</span> <span class="n">buf</span><span class="p">(</span><span class="n">IOBuf</span><span class="o">::</span><span class="n">create</span><span class="p">(</span><span class="mi">100</span><span class="p">));</span>
+  <span class="n">uint32_t</span> <span class="n">cap</span> <span class="o">=</span> <span class="n">buf</span><span class="o">-&gt;</span><span class="n">capacity</span><span class="p">();</span>
+  <span class="n">EXPECT_LE</span><span class="p">(</span><span class="mi">100</span><span class="p">,</span> <span class="n">cap</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">buf</span><span class="o">-&gt;</span><span class="n">headroom</span><span class="p">());</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">buf</span><span class="o">-&gt;</span><span class="n">length</span><span class="p">());</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">cap</span><span class="p">,</span> <span class="n">buf</span><span class="o">-&gt;</span><span class="n">tailroom</span><span class="p">());</span>
+
+  <span class="n">append</span><span class="p">(</span><span class="n">buf</span><span class="p">,</span> <span class="s">&quot;hello&quot;</span><span class="p">);</span>
+  <span class="n">buf</span><span class="o">-&gt;</span><span class="n">advance</span><span class="p">(</span><span class="mi">10</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="n">buf</span><span class="o">-&gt;</span><span class="n">headroom</span><span class="p">());</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="n">buf</span><span class="o">-&gt;</span><span class="n">length</span><span class="p">());</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">cap</span> <span class="o">-</span> <span class="mi">15</span><span class="p">,</span> <span class="n">buf</span><span class="o">-&gt;</span><span class="n">tailroom</span><span class="p">());</span>
+  <span class="k">const</span> <span class="kt">char</span><span class="o">*</span> <span class="n">p</span> <span class="o">=</span> <span class="k">reinterpret_cast</span><span class="o">&lt;</span><span class="k">const</span> <span class="kt">char</span><span class="o">*&gt;</span><span class="p">(</span><span class="n">buf</span><span class="o">-&gt;</span><span class="n">data</span><span class="p">());</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;hello&quot;</span><span class="p">,</span> <span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="n">buf</span><span class="o">-&gt;</span><span class="n">length</span><span class="p">()));</span>
+
+  <span class="n">buf</span><span class="o">-&gt;</span><span class="n">clear</span><span class="p">();</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">buf</span><span class="o">-&gt;</span><span class="n">headroom</span><span class="p">());</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">buf</span><span class="o">-&gt;</span><span class="n">length</span><span class="p">());</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">cap</span><span class="p">,</span> <span class="n">buf</span><span class="o">-&gt;</span><span class="n">tailroom</span><span class="p">());</span>
+<span class="p">}</span>
+
+
+<span class="kt">void</span> <span class="n">testAllocSize</span><span class="p">(</span><span class="n">uint32_t</span> <span class="n">requestedCapacity</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">unique_ptr</span><span class="o">&lt;</span><span class="n">IOBuf</span><span class="o">&gt;</span> <span class="n">iobuf</span><span class="p">(</span><span class="n">IOBuf</span><span class="o">::</span><span class="n">create</span><span class="p">(</span><span class="n">requestedCapacity</span><span class="p">));</span>
+  <span class="n">EXPECT_GE</span><span class="p">(</span><span class="n">iobuf</span><span class="o">-&gt;</span><span class="n">capacity</span><span class="p">(),</span> <span class="n">requestedCapacity</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">IOBuf</span><span class="p">,</span> <span class="n">AllocSizes</span><span class="p">)</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-2"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-2">&#182;</a></div><p>Try with a small allocation size that should fit in the internal buffer</p></td><td class="code"><div class="highlight"><pre>  <span class="n">testAllocSize</span><span class="p">(</span><span class="mi">28</span><span class="p">);</span></pre></div></td></tr>
+
+
+<tr id="section-3"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-3">&#182;</a></div><p>Try with a large allocation size that will require an external buffer.</p></td><td class="code"><div class="highlight"><pre>  <span class="n">testAllocSize</span><span class="p">(</span><span class="mi">9000</span><span class="p">);</span></pre></div></td></tr>
+
+
+<tr id="section-4"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-4">&#182;</a></div><p>220 bytes is currently the cutoff
+(It would be nice to use the IOBuf::kMaxInternalDataSize constant,
+but it's private and it doesn't seem worth making it public just for this
+test code.)</p></td><td class="code"><div class="highlight"><pre>  <span class="n">testAllocSize</span><span class="p">(</span><span class="mi">220</span><span class="p">);</span>
+  <span class="n">testAllocSize</span><span class="p">(</span><span class="mi">219</span><span class="p">);</span>
+  <span class="n">testAllocSize</span><span class="p">(</span><span class="mi">221</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="kt">void</span> <span class="n">deleteArrayBuffer</span><span class="p">(</span><span class="kt">void</span> <span class="o">*</span><span class="n">buf</span><span class="p">,</span> <span class="kt">void</span><span class="o">*</span> <span class="n">arg</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">uint32_t</span><span class="o">*</span> <span class="n">deleteCount</span> <span class="o">=</span> <span class="k">static_cast</span><span class="o">&lt;</span><span class="n">uint32_t</span><span class="o">*&gt;</span><span class="p">(</span><span class="n">arg</span><span class="p">);</span>
+  <span class="o">++</span><span class="p">(</span><span class="o">*</span><span class="n">deleteCount</span><span class="p">);</span>
+  <span class="n">uint8_t</span><span class="o">*</span> <span class="n">bufPtr</span> <span class="o">=</span> <span class="k">static_cast</span><span class="o">&lt;</span><span class="n">uint8_t</span><span class="o">*&gt;</span><span class="p">(</span><span class="n">buf</span><span class="p">);</span>
+  <span class="k">delete</span><span class="p">[]</span> <span class="n">bufPtr</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">IOBuf</span><span class="p">,</span> <span class="n">TakeOwnership</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">uint32_t</span> <span class="n">size1</span> <span class="o">=</span> <span class="mi">99</span><span class="p">;</span>
+  <span class="n">uint8_t</span> <span class="o">*</span><span class="n">buf1</span> <span class="o">=</span> <span class="k">static_cast</span><span class="o">&lt;</span><span class="n">uint8_t</span><span class="o">*&gt;</span><span class="p">(</span><span class="n">malloc</span><span class="p">(</span><span class="n">size1</span><span class="p">));</span>
+  <span class="n">unique_ptr</span><span class="o">&lt;</span><span class="n">IOBuf</span><span class="o">&gt;</span> <span class="n">iobuf1</span><span class="p">(</span><span class="n">IOBuf</span><span class="o">::</span><span class="n">takeOwnership</span><span class="p">(</span><span class="n">buf1</span><span class="p">,</span> <span class="n">size1</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">buf1</span><span class="p">,</span> <span class="n">iobuf1</span><span class="o">-&gt;</span><span class="n">data</span><span class="p">());</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">size1</span><span class="p">,</span> <span class="n">iobuf1</span><span class="o">-&gt;</span><span class="n">length</span><span class="p">());</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">buf1</span><span class="p">,</span> <span class="n">iobuf1</span><span class="o">-&gt;</span><span class="n">buffer</span><span class="p">());</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">size1</span><span class="p">,</span> <span class="n">iobuf1</span><span class="o">-&gt;</span><span class="n">capacity</span><span class="p">());</span>
+
+  <span class="n">uint32_t</span> <span class="n">deleteCount</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+  <span class="n">uint32_t</span> <span class="n">size2</span> <span class="o">=</span> <span class="mi">4321</span><span class="p">;</span>
+  <span class="n">uint8_t</span> <span class="o">*</span><span class="n">buf2</span> <span class="o">=</span> <span class="k">new</span> <span class="n">uint8_t</span><span class="p">[</span><span class="n">size2</span><span class="p">];</span>
+  <span class="n">unique_ptr</span><span class="o">&lt;</span><span class="n">IOBuf</span><span class="o">&gt;</span> <span class="n">iobuf2</span><span class="p">(</span><span class="n">IOBuf</span><span class="o">::</span><span class="n">takeOwnership</span><span class="p">(</span><span class="n">buf2</span><span class="p">,</span> <span class="n">size2</span><span class="p">,</span>
+                                                <span class="n">deleteArrayBuffer</span><span class="p">,</span>
+                                                <span class="o">&amp;</span><span class="n">deleteCount</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">buf2</span><span class="p">,</span> <span class="n">iobuf2</span><span class="o">-&gt;</span><span class="n">data</span><span class="p">());</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">size2</span><span class="p">,</span> <span class="n">iobuf2</span><span class="o">-&gt;</span><span class="n">length</span><span class="p">());</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">buf2</span><span class="p">,</span> <span class="n">iobuf2</span><span class="o">-&gt;</span><span class="n">buffer</span><span class="p">());</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">size2</span><span class="p">,</span> <span class="n">iobuf2</span><span class="o">-&gt;</span><span class="n">capacity</span><span class="p">());</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">deleteCount</span><span class="p">);</span>
+  <span class="n">iobuf2</span><span class="p">.</span><span class="n">reset</span><span class="p">();</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">deleteCount</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">IOBuf</span><span class="p">,</span> <span class="n">WrapBuffer</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">const</span> <span class="n">uint32_t</span> <span class="n">size1</span> <span class="o">=</span> <span class="mi">1234</span><span class="p">;</span>
+  <span class="n">uint8_t</span> <span class="n">buf1</span><span class="p">[</span><span class="n">size1</span><span class="p">];</span>
+  <span class="n">unique_ptr</span><span class="o">&lt;</span><span class="n">IOBuf</span><span class="o">&gt;</span> <span class="n">iobuf1</span><span class="p">(</span><span class="n">IOBuf</span><span class="o">::</span><span class="n">wrapBuffer</span><span class="p">(</span><span class="n">buf1</span><span class="p">,</span> <span class="n">size1</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">buf1</span><span class="p">,</span> <span class="n">iobuf1</span><span class="o">-&gt;</span><span class="n">data</span><span class="p">());</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">size1</span><span class="p">,</span> <span class="n">iobuf1</span><span class="o">-&gt;</span><span class="n">length</span><span class="p">());</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">buf1</span><span class="p">,</span> <span class="n">iobuf1</span><span class="o">-&gt;</span><span class="n">buffer</span><span class="p">());</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">size1</span><span class="p">,</span> <span class="n">iobuf1</span><span class="o">-&gt;</span><span class="n">capacity</span><span class="p">());</span>
+
+  <span class="n">uint32_t</span> <span class="n">size2</span> <span class="o">=</span> <span class="mh">0x1234</span><span class="p">;</span>
+  <span class="n">unique_ptr</span><span class="o">&lt;</span><span class="n">uint8_t</span><span class="p">[]</span><span class="o">&gt;</span> <span class="n">buf2</span><span class="p">(</span><span class="k">new</span> <span class="n">uint8_t</span><span class="p">[</span><span class="n">size2</span><span class="p">]);</span>
+  <span class="n">unique_ptr</span><span class="o">&lt;</span><span class="n">IOBuf</span><span class="o">&gt;</span> <span class="n">iobuf2</span><span class="p">(</span><span class="n">IOBuf</span><span class="o">::</span><span class="n">wrapBuffer</span><span class="p">(</span><span class="n">buf2</span><span class="p">.</span><span class="n">get</span><span class="p">(),</span> <span class="n">size2</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">buf2</span><span class="p">.</span><span class="n">get</span><span class="p">(),</span> <span class="n">iobuf2</span><span class="o">-&gt;</span><span class="n">data</span><span class="p">());</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">size2</span><span class="p">,</span> <span class="n">iobuf2</span><span class="o">-&gt;</span><span class="n">length</span><span class="p">());</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">buf2</span><span class="p">.</span><span class="n">get</span><span class="p">(),</span> <span class="n">iobuf2</span><span class="o">-&gt;</span><span class="n">buffer</span><span class="p">());</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">size2</span><span class="p">,</span> <span class="n">iobuf2</span><span class="o">-&gt;</span><span class="n">capacity</span><span class="p">());</span>
+<span class="p">}</span>
+
+<span class="kt">void</span> <span class="n">fillBuf</span><span class="p">(</span><span class="n">uint8_t</span><span class="o">*</span> <span class="n">buf</span><span class="p">,</span> <span class="n">uint32_t</span> <span class="n">length</span><span class="p">,</span> <span class="n">boost</span><span class="o">::</span><span class="n">mt19937</span><span class="o">&amp;</span> <span class="n">gen</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">for</span> <span class="p">(</span><span class="n">uint32_t</span> <span class="n">n</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">n</span> <span class="o">&lt;</span> <span class="n">length</span><span class="p">;</span> <span class="o">++</span><span class="n">n</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">buf</span><span class="p">[</span><span class="n">n</span><span class="p">]</span> <span class="o">=</span> <span class="k">static_cast</span><span class="o">&lt;</span><span class="n">uint8_t</span><span class="o">&gt;</span><span class="p">(</span><span class="n">gen</span><span class="p">()</span> <span class="o">&amp;</span> <span class="mh">0xff</span><span class="p">);</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="kt">void</span> <span class="n">fillBuf</span><span class="p">(</span><span class="n">IOBuf</span><span class="o">*</span> <span class="n">buf</span><span class="p">,</span> <span class="n">boost</span><span class="o">::</span><span class="n">mt19937</span><span class="o">&amp;</span> <span class="n">gen</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">buf</span><span class="o">-&gt;</span><span class="n">unshare</span><span class="p">();</span>
+  <span class="n">fillBuf</span><span class="p">(</span><span class="n">buf</span><span class="o">-&gt;</span><span class="n">writableData</span><span class="p">(),</span> <span class="n">buf</span><span class="o">-&gt;</span><span class="n">length</span><span class="p">(),</span> <span class="n">gen</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="kt">void</span> <span class="n">checkBuf</span><span class="p">(</span><span class="k">const</span> <span class="n">uint8_t</span><span class="o">*</span> <span class="n">buf</span><span class="p">,</span> <span class="n">uint32_t</span> <span class="n">length</span><span class="p">,</span> <span class="n">boost</span><span class="o">::</span><span class="n">mt19937</span><span class="o">&amp;</span> <span class="n">gen</span><span class="p">)</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-5"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-5">&#182;</a></div><p>Rather than using EXPECT_EQ() to check each character,
+count the number of differences and the first character that differs.
+This way on error we'll report just that information, rather than tons of
+failed checks for each byte in the buffer.</p></td><td class="code"><div class="highlight"><pre>  <span class="n">uint32_t</span> <span class="n">numDifferences</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+  <span class="n">uint32_t</span> <span class="n">firstDiffIndex</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+  <span class="n">uint8_t</span> <span class="n">firstDiffExpected</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+  <span class="k">for</span> <span class="p">(</span><span class="n">uint32_t</span> <span class="n">n</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">n</span> <span class="o">&lt;</span> <span class="n">length</span><span class="p">;</span> <span class="o">++</span><span class="n">n</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">uint8_t</span> <span class="n">expected</span> <span class="o">=</span> <span class="k">static_cast</span><span class="o">&lt;</span><span class="n">uint8_t</span><span class="o">&gt;</span><span class="p">(</span><span class="n">gen</span><span class="p">()</span> <span class="o">&amp;</span> <span class="mh">0xff</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">buf</span><span class="p">[</span><span class="n">n</span><span class="p">]</span> <span class="o">==</span> <span class="n">expected</span><span class="p">)</span> <span class="p">{</span>
+      <span class="k">continue</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="k">if</span> <span class="p">(</span><span class="n">numDifferences</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">firstDiffIndex</span> <span class="o">=</span> <span class="n">n</span><span class="p">;</span>
+      <span class="n">firstDiffExpected</span> <span class="o">=</span> <span class="n">expected</span><span class="p">;</span>
+    <span class="p">}</span>
+    <span class="o">++</span><span class="n">numDifferences</span><span class="p">;</span>
+  <span class="p">}</span>
+
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">numDifferences</span><span class="p">);</span>
+  <span class="k">if</span> <span class="p">(</span><span class="n">numDifferences</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-6"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-6">&#182;</a></div><p>Cast to int so it will be printed numerically
+rather than as a char if the check fails</p></td><td class="code"><div class="highlight"><pre>    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="k">static_cast</span><span class="o">&lt;</span><span class="kt">int</span><span class="o">&gt;</span><span class="p">(</span><span class="n">buf</span><span class="p">[</span><span class="n">firstDiffIndex</span><span class="p">]),</span>
+              <span class="k">static_cast</span><span class="o">&lt;</span><span class="kt">int</span><span class="o">&gt;</span><span class="p">(</span><span class="n">firstDiffExpected</span><span class="p">));</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="kt">void</span> <span class="n">checkBuf</span><span class="p">(</span><span class="n">IOBuf</span><span class="o">*</span> <span class="n">buf</span><span class="p">,</span> <span class="n">boost</span><span class="o">::</span><span class="n">mt19937</span><span class="o">&amp;</span> <span class="n">gen</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">checkBuf</span><span class="p">(</span><span class="n">buf</span><span class="o">-&gt;</span><span class="n">data</span><span class="p">(),</span> <span class="n">buf</span><span class="o">-&gt;</span><span class="n">length</span><span class="p">(),</span> <span class="n">gen</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="kt">void</span> <span class="n">checkChain</span><span class="p">(</span><span class="n">IOBuf</span><span class="o">*</span> <span class="n">buf</span><span class="p">,</span> <span class="n">boost</span><span class="o">::</span><span class="n">mt19937</span><span class="o">&amp;</span> <span class="n">gen</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">IOBuf</span> <span class="o">*</span><span class="n">current</span> <span class="o">=</span> <span class="n">buf</span><span class="p">;</span>
+  <span class="k">do</span> <span class="p">{</span>
+    <span class="n">checkBuf</span><span class="p">(</span><span class="n">current</span><span class="o">-&gt;</span><span class="n">data</span><span class="p">(),</span> <span class="n">current</span><span class="o">-&gt;</span><span class="n">length</span><span class="p">(),</span> <span class="n">gen</span><span class="p">);</span>
+    <span class="n">current</span> <span class="o">=</span> <span class="n">current</span><span class="o">-&gt;</span><span class="n">next</span><span class="p">();</span>
+  <span class="p">}</span> <span class="k">while</span> <span class="p">(</span><span class="n">current</span> <span class="o">!=</span> <span class="n">buf</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">IOBuf</span><span class="p">,</span> <span class="n">Chaining</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">uint32_t</span> <span class="n">fillSeed</span> <span class="o">=</span> <span class="mh">0x12345678</span><span class="p">;</span>
+  <span class="n">boost</span><span class="o">::</span><span class="n">mt19937</span> <span class="n">gen</span><span class="p">(</span><span class="n">fillSeed</span><span class="p">);</span></pre></div></td></tr>
+
+
+<tr id="section-7"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-7">&#182;</a></div><p>An IOBuf with external storage</p></td><td class="code"><div class="highlight"><pre>  <span class="n">uint32_t</span> <span class="n">headroom</span> <span class="o">=</span> <span class="mi">123</span><span class="p">;</span>
+  <span class="n">unique_ptr</span><span class="o">&lt;</span><span class="n">IOBuf</span><span class="o">&gt;</span> <span class="n">iob1</span><span class="p">(</span><span class="n">IOBuf</span><span class="o">::</span><span class="n">create</span><span class="p">(</span><span class="mi">2048</span><span class="p">));</span>
+  <span class="n">iob1</span><span class="o">-&gt;</span><span class="n">advance</span><span class="p">(</span><span class="n">headroom</span><span class="p">);</span>
+  <span class="n">iob1</span><span class="o">-&gt;</span><span class="n">append</span><span class="p">(</span><span class="mi">1500</span><span class="p">);</span>
+  <span class="n">fillBuf</span><span class="p">(</span><span class="n">iob1</span><span class="p">.</span><span class="n">get</span><span class="p">(),</span> <span class="n">gen</span><span class="p">);</span></pre></div></td></tr>
+
+
+<tr id="section-8"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-8">&#182;</a></div><p>An IOBuf with internal storage</p></td><td class="code"><div class="highlight"><pre>  <span class="n">unique_ptr</span><span class="o">&lt;</span><span class="n">IOBuf</span><span class="o">&gt;</span> <span class="n">iob2</span><span class="p">(</span><span class="n">IOBuf</span><span class="o">::</span><span class="n">create</span><span class="p">(</span><span class="mi">20</span><span class="p">));</span>
+  <span class="n">iob2</span><span class="o">-&gt;</span><span class="n">append</span><span class="p">(</span><span class="mi">20</span><span class="p">);</span>
+  <span class="n">fillBuf</span><span class="p">(</span><span class="n">iob2</span><span class="p">.</span><span class="n">get</span><span class="p">(),</span> <span class="n">gen</span><span class="p">);</span></pre></div></td></tr>
+
+
+<tr id="section-9"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-9">&#182;</a></div><p>An IOBuf around a buffer it doesn't own</p></td><td class="code"><div class="highlight"><pre>  <span class="n">uint8_t</span> <span class="n">localbuf</span><span class="p">[</span><span class="mi">1234</span><span class="p">];</span>
+  <span class="n">fillBuf</span><span class="p">(</span><span class="n">localbuf</span><span class="p">,</span> <span class="mi">1234</span><span class="p">,</span> <span class="n">gen</span><span class="p">);</span>
+  <span class="n">unique_ptr</span><span class="o">&lt;</span><span class="n">IOBuf</span><span class="o">&gt;</span> <span class="n">iob3</span><span class="p">(</span><span class="n">IOBuf</span><span class="o">::</span><span class="n">wrapBuffer</span><span class="p">(</span><span class="n">localbuf</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">localbuf</span><span class="p">)));</span></pre></div></td></tr>
+
+
+<tr id="section-10"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-10">&#182;</a></div><p>An IOBuf taking ownership of a user-supplied buffer</p></td><td class="code"><div class="highlight"><pre>  <span class="n">uint32_t</span> <span class="n">heapBufSize</span> <span class="o">=</span> <span class="mi">900</span><span class="p">;</span>
+  <span class="n">uint8_t</span><span class="o">*</span> <span class="n">heapBuf</span> <span class="o">=</span> <span class="k">static_cast</span><span class="o">&lt;</span><span class="n">uint8_t</span><span class="o">*&gt;</span><span class="p">(</span><span class="n">malloc</span><span class="p">(</span><span class="n">heapBufSize</span><span class="p">));</span>
+  <span class="n">fillBuf</span><span class="p">(</span><span class="n">heapBuf</span><span class="p">,</span> <span class="n">heapBufSize</span><span class="p">,</span> <span class="n">gen</span><span class="p">);</span>
+  <span class="n">unique_ptr</span><span class="o">&lt;</span><span class="n">IOBuf</span><span class="o">&gt;</span> <span class="n">iob4</span><span class="p">(</span><span class="n">IOBuf</span><span class="o">::</span><span class="n">takeOwnership</span><span class="p">(</span><span class="n">heapBuf</span><span class="p">,</span> <span class="n">heapBufSize</span><span class="p">));</span></pre></div></td></tr>
+
+
+<tr id="section-11"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-11">&#182;</a></div><p>An IOBuf taking ownership of a user-supplied buffer with
+a custom free function</p></td><td class="code"><div class="highlight"><pre>  <span class="n">uint32_t</span> <span class="n">arrayBufSize</span> <span class="o">=</span> <span class="mi">321</span><span class="p">;</span>
+  <span class="n">uint8_t</span><span class="o">*</span> <span class="n">arrayBuf</span> <span class="o">=</span> <span class="k">new</span> <span class="n">uint8_t</span><span class="p">[</span><span class="n">arrayBufSize</span><span class="p">];</span>
+  <span class="n">fillBuf</span><span class="p">(</span><span class="n">arrayBuf</span><span class="p">,</span> <span class="n">arrayBufSize</span><span class="p">,</span> <span class="n">gen</span><span class="p">);</span>
+  <span class="n">uint32_t</span> <span class="n">arrayBufFreeCount</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+  <span class="n">unique_ptr</span><span class="o">&lt;</span><span class="n">IOBuf</span><span class="o">&gt;</span> <span class="n">iob5</span><span class="p">(</span><span class="n">IOBuf</span><span class="o">::</span><span class="n">takeOwnership</span><span class="p">(</span><span class="n">arrayBuf</span><span class="p">,</span> <span class="n">arrayBufSize</span><span class="p">,</span>
+                                              <span class="n">deleteArrayBuffer</span><span class="p">,</span>
+                                              <span class="o">&amp;</span><span class="n">arrayBufFreeCount</span><span class="p">));</span>
+
+  <span class="n">EXPECT_FALSE</span><span class="p">(</span><span class="n">iob1</span><span class="o">-&gt;</span><span class="n">isChained</span><span class="p">());</span>
+  <span class="n">EXPECT_FALSE</span><span class="p">(</span><span class="n">iob2</span><span class="o">-&gt;</span><span class="n">isChained</span><span class="p">());</span>
+  <span class="n">EXPECT_FALSE</span><span class="p">(</span><span class="n">iob3</span><span class="o">-&gt;</span><span class="n">isChained</span><span class="p">());</span>
+  <span class="n">EXPECT_FALSE</span><span class="p">(</span><span class="n">iob4</span><span class="o">-&gt;</span><span class="n">isChained</span><span class="p">());</span>
+  <span class="n">EXPECT_FALSE</span><span class="p">(</span><span class="n">iob5</span><span class="o">-&gt;</span><span class="n">isChained</span><span class="p">());</span>
+
+  <span class="n">EXPECT_FALSE</span><span class="p">(</span><span class="n">iob1</span><span class="o">-&gt;</span><span class="n">isSharedOne</span><span class="p">());</span>
+  <span class="n">EXPECT_FALSE</span><span class="p">(</span><span class="n">iob2</span><span class="o">-&gt;</span><span class="n">isSharedOne</span><span class="p">());</span>
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">iob3</span><span class="o">-&gt;</span><span class="n">isSharedOne</span><span class="p">());</span> <span class="c1">// since we own the buffer</span>
+  <span class="n">EXPECT_FALSE</span><span class="p">(</span><span class="n">iob4</span><span class="o">-&gt;</span><span class="n">isSharedOne</span><span class="p">());</span>
+  <span class="n">EXPECT_FALSE</span><span class="p">(</span><span class="n">iob5</span><span class="o">-&gt;</span><span class="n">isSharedOne</span><span class="p">());</span></pre></div></td></tr>
+
+
+<tr id="section-12"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-12">&#182;</a></div><p>Chain the buffers all together
+Since we are going to relinquish ownership of iob2-5 to the chain,
+store raw pointers to them so we can reference them later.</p></td><td class="code"><div class="highlight"><pre>  <span class="n">IOBuf</span><span class="o">*</span> <span class="n">iob2ptr</span> <span class="o">=</span> <span class="n">iob2</span><span class="p">.</span><span class="n">get</span><span class="p">();</span>
+  <span class="n">IOBuf</span><span class="o">*</span> <span class="n">iob3ptr</span> <span class="o">=</span> <span class="n">iob3</span><span class="p">.</span><span class="n">get</span><span class="p">();</span>
+  <span class="n">IOBuf</span><span class="o">*</span> <span class="n">iob4ptr</span> <span class="o">=</span> <span class="n">iob4</span><span class="p">.</span><span class="n">get</span><span class="p">();</span>
+  <span class="n">IOBuf</span><span class="o">*</span> <span class="n">iob5ptr</span> <span class="o">=</span> <span class="n">iob5</span><span class="p">.</span><span class="n">get</span><span class="p">();</span>
+
+  <span class="n">iob1</span><span class="o">-&gt;</span><span class="n">prependChain</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">move</span><span class="p">(</span><span class="n">iob2</span><span class="p">));</span>
+  <span class="n">iob1</span><span class="o">-&gt;</span><span class="n">prependChain</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">move</span><span class="p">(</span><span class="n">iob4</span><span class="p">));</span>
+  <span class="n">iob2ptr</span><span class="o">-&gt;</span><span class="n">appendChain</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">move</span><span class="p">(</span><span class="n">iob3</span><span class="p">));</span>
+  <span class="n">iob1</span><span class="o">-&gt;</span><span class="n">prependChain</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">move</span><span class="p">(</span><span class="n">iob5</span><span class="p">));</span>
+
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">iob2ptr</span><span class="p">,</span> <span class="n">iob1</span><span class="o">-&gt;</span><span class="n">next</span><span class="p">());</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">iob3ptr</span><span class="p">,</span> <span class="n">iob2ptr</span><span class="o">-&gt;</span><span class="n">next</span><span class="p">());</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">iob4ptr</span><span class="p">,</span> <span class="n">iob3ptr</span><span class="o">-&gt;</span><span class="n">next</span><span class="p">());</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">iob5ptr</span><span class="p">,</span> <span class="n">iob4ptr</span><span class="o">-&gt;</span><span class="n">next</span><span class="p">());</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">iob1</span><span class="p">.</span><span class="n">get</span><span class="p">(),</span> <span class="n">iob5ptr</span><span class="o">-&gt;</span><span class="n">next</span><span class="p">());</span>
+
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">iob5ptr</span><span class="p">,</span> <span class="n">iob1</span><span class="o">-&gt;</span><span class="n">prev</span><span class="p">());</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">iob1</span><span class="p">.</span><span class="n">get</span><span class="p">(),</span> <span class="n">iob2ptr</span><span class="o">-&gt;</span><span class="n">prev</span><span class="p">());</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">iob2ptr</span><span class="p">,</span> <span class="n">iob3ptr</span><span class="o">-&gt;</span><span class="n">prev</span><span class="p">());</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">iob3ptr</span><span class="p">,</span> <span class="n">iob4ptr</span><span class="o">-&gt;</span><span class="n">prev</span><span class="p">());</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">iob4ptr</span><span class="p">,</span> <span class="n">iob5ptr</span><span class="o">-&gt;</span><span class="n">prev</span><span class="p">());</span>
+
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">iob1</span><span class="o">-&gt;</span><span class="n">isChained</span><span class="p">());</span>
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">iob2ptr</span><span class="o">-&gt;</span><span class="n">isChained</span><span class="p">());</span>
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">iob3ptr</span><span class="o">-&gt;</span><span class="n">isChained</span><span class="p">());</span>
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">iob4ptr</span><span class="o">-&gt;</span><span class="n">isChained</span><span class="p">());</span>
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">iob5ptr</span><span class="o">-&gt;</span><span class="n">isChained</span><span class="p">());</span>
+
+  <span class="n">uint64_t</span> <span class="n">fullLength</span> <span class="o">=</span> <span class="p">(</span><span class="n">iob1</span><span class="o">-&gt;</span><span class="n">length</span><span class="p">()</span> <span class="o">+</span> <span class="n">iob2ptr</span><span class="o">-&gt;</span><span class="n">length</span><span class="p">()</span> <span class="o">+</span>
+                         <span class="n">iob3ptr</span><span class="o">-&gt;</span><span class="n">length</span><span class="p">()</span> <span class="o">+</span> <span class="n">iob4ptr</span><span class="o">-&gt;</span><span class="n">length</span><span class="p">()</span> <span class="o">+</span>
+                         <span class="n">iob5ptr</span><span class="o">-&gt;</span><span class="n">length</span><span class="p">());</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="n">iob1</span><span class="o">-&gt;</span><span class="n">countChainElements</span><span class="p">());</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">fullLength</span><span class="p">,</span> <span class="n">iob1</span><span class="o">-&gt;</span><span class="n">computeChainDataLength</span><span class="p">());</span></pre></div></td></tr>
+
+
+<tr id="section-13"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-13">&#182;</a></div><p>Since iob3 is shared, the entire buffer should report itself as shared</p></td><td class="code"><div class="highlight"><pre>  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">iob1</span><span class="o">-&gt;</span><span class="n">isShared</span><span class="p">());</span></pre></div></td></tr>
+
+
+<tr id="section-14"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-14">&#182;</a></div><p>Unshare just iob3</p></td><td class="code"><div class="highlight"><pre>  <span class="n">iob3ptr</span><span class="o">-&gt;</span><span class="n">unshareOne</span><span class="p">();</span>
+  <span class="n">EXPECT_FALSE</span><span class="p">(</span><span class="n">iob3ptr</span><span class="o">-&gt;</span><span class="n">isSharedOne</span><span class="p">());</span></pre></div></td></tr>
+
+
+<tr id="section-15"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-15">&#182;</a></div><p>Now everything in the chain should be unshared.
+Check on all members of the chain just for good measure</p></td><td class="code"><div class="highlight"><pre>  <span class="n">EXPECT_FALSE</span><span class="p">(</span><span class="n">iob1</span><span class="o">-&gt;</span><span class="n">isShared</span><span class="p">());</span>
+  <span class="n">EXPECT_FALSE</span><span class="p">(</span><span class="n">iob2ptr</span><span class="o">-&gt;</span><span class="n">isShared</span><span class="p">());</span>
+  <span class="n">EXPECT_FALSE</span><span class="p">(</span><span class="n">iob3ptr</span><span class="o">-&gt;</span><span class="n">isShared</span><span class="p">());</span>
+  <span class="n">EXPECT_FALSE</span><span class="p">(</span><span class="n">iob4ptr</span><span class="o">-&gt;</span><span class="n">isShared</span><span class="p">());</span>
+  <span class="n">EXPECT_FALSE</span><span class="p">(</span><span class="n">iob5ptr</span><span class="o">-&gt;</span><span class="n">isShared</span><span class="p">());</span></pre></div></td></tr>
+
+
+<tr id="section-16"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-16">&#182;</a></div><p>Clone one of the IOBufs in the chain</p></td><td class="code"><div class="highlight"><pre>  <span class="n">unique_ptr</span><span class="o">&lt;</span><span class="n">IOBuf</span><span class="o">&gt;</span> <span class="n">iob4clone</span> <span class="o">=</span> <span class="n">iob4ptr</span><span class="o">-&gt;</span><span class="n">cloneOne</span><span class="p">();</span>
+  <span class="n">gen</span><span class="p">.</span><span class="n">seed</span><span class="p">(</span><span class="n">fillSeed</span><span class="p">);</span>
+  <span class="n">checkBuf</span><span class="p">(</span><span class="n">iob1</span><span class="p">.</span><span class="n">get</span><span class="p">(),</span> <span class="n">gen</span><span class="p">);</span>
+  <span class="n">checkBuf</span><span class="p">(</span><span class="n">iob2ptr</span><span class="p">,</span> <span class="n">gen</span><span class="p">);</span>
+  <span class="n">checkBuf</span><span class="p">(</span><span class="n">iob3ptr</span><span class="p">,</span> <span class="n">gen</span><span class="p">);</span>
+  <span class="n">checkBuf</span><span class="p">(</span><span class="n">iob4clone</span><span class="p">.</span><span class="n">get</span><span class="p">(),</span> <span class="n">gen</span><span class="p">);</span>
+  <span class="n">checkBuf</span><span class="p">(</span><span class="n">iob5ptr</span><span class="p">,</span> <span class="n">gen</span><span class="p">);</span>
+
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">iob1</span><span class="o">-&gt;</span><span class="n">isShared</span><span class="p">());</span>
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">iob2ptr</span><span class="o">-&gt;</span><span class="n">isShared</span><span class="p">());</span>
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">iob3ptr</span><span class="o">-&gt;</span><span class="n">isShared</span><span class="p">());</span>
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">iob4ptr</span><span class="o">-&gt;</span><span class="n">isShared</span><span class="p">());</span>
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">iob5ptr</span><span class="o">-&gt;</span><span class="n">isShared</span><span class="p">());</span>
+
+  <span class="n">EXPECT_FALSE</span><span class="p">(</span><span class="n">iob1</span><span class="o">-&gt;</span><span class="n">isSharedOne</span><span class="p">());</span>
+  <span class="n">EXPECT_FALSE</span><span class="p">(</span><span class="n">iob2ptr</span><span class="o">-&gt;</span><span class="n">isSharedOne</span><span class="p">());</span>
+  <span class="n">EXPECT_FALSE</span><span class="p">(</span><span class="n">iob3ptr</span><span class="o">-&gt;</span><span class="n">isSharedOne</span><span class="p">());</span>
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">iob4ptr</span><span class="o">-&gt;</span><span class="n">isSharedOne</span><span class="p">());</span>
+  <span class="n">EXPECT_FALSE</span><span class="p">(</span><span class="n">iob5ptr</span><span class="o">-&gt;</span><span class="n">isSharedOne</span><span class="p">());</span></pre></div></td></tr>
+
+
+<tr id="section-17"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-17">&#182;</a></div><p>Unshare that clone</p></td><td class="code"><div class="highlight"><pre>  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">iob4clone</span><span class="o">-&gt;</span><span class="n">isSharedOne</span><span class="p">());</span>
+  <span class="n">iob4clone</span><span class="o">-&gt;</span><span class="n">unshare</span><span class="p">();</span>
+  <span class="n">EXPECT_FALSE</span><span class="p">(</span><span class="n">iob4clone</span><span class="o">-&gt;</span><span class="n">isSharedOne</span><span class="p">());</span>
+  <span class="n">EXPECT_FALSE</span><span class="p">(</span><span class="n">iob4ptr</span><span class="o">-&gt;</span><span class="n">isSharedOne</span><span class="p">());</span>
+  <span class="n">EXPECT_FALSE</span><span class="p">(</span><span class="n">iob1</span><span class="o">-&gt;</span><span class="n">isShared</span><span class="p">());</span>
+  <span class="n">iob4clone</span><span class="p">.</span><span class="n">reset</span><span class="p">();</span></pre></div></td></tr>
+
+
+<tr id="section-18"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-18">&#182;</a></div><p>Create a clone of a different IOBuf</p></td><td class="code"><div class="highlight"><pre>  <span class="n">EXPECT_FALSE</span><span class="p">(</span><span class="n">iob1</span><span class="o">-&gt;</span><span class="n">isShared</span><span class="p">());</span>
+  <span class="n">EXPECT_FALSE</span><span class="p">(</span><span class="n">iob3ptr</span><span class="o">-&gt;</span><span class="n">isSharedOne</span><span class="p">());</span>
+
+  <span class="n">unique_ptr</span><span class="o">&lt;</span><span class="n">IOBuf</span><span class="o">&gt;</span> <span class="n">iob3clone</span> <span class="o">=</span> <span class="n">iob3ptr</span><span class="o">-&gt;</span><span class="n">cloneOne</span><span class="p">();</span>
+  <span class="n">gen</span><span class="p">.</span><span class="n">seed</span><span class="p">(</span><span class="n">fillSeed</span><span class="p">);</span>
+  <span class="n">checkBuf</span><span class="p">(</span><span class="n">iob1</span><span class="p">.</span><span class="n">get</span><span class="p">(),</span> <span class="n">gen</span><span class="p">);</span>
+  <span class="n">checkBuf</span><span class="p">(</span><span class="n">iob2ptr</span><span class="p">,</span> <span class="n">gen</span><span class="p">);</span>
+  <span class="n">checkBuf</span><span class="p">(</span><span class="n">iob3clone</span><span class="p">.</span><span class="n">get</span><span class="p">(),</span> <span class="n">gen</span><span class="p">);</span>
+  <span class="n">checkBuf</span><span class="p">(</span><span class="n">iob4ptr</span><span class="p">,</span> <span class="n">gen</span><span class="p">);</span>
+  <span class="n">checkBuf</span><span class="p">(</span><span class="n">iob5ptr</span><span class="p">,</span> <span class="n">gen</span><span class="p">);</span>
+
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">iob1</span><span class="o">-&gt;</span><span class="n">isShared</span><span class="p">());</span>
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">iob3ptr</span><span class="o">-&gt;</span><span class="n">isSharedOne</span><span class="p">());</span>
+  <span class="n">EXPECT_FALSE</span><span class="p">(</span><span class="n">iob1</span><span class="o">-&gt;</span><span class="n">isSharedOne</span><span class="p">());</span></pre></div></td></tr>
+
+
+<tr id="section-19"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-19">&#182;</a></div><p>Delete the clone and make sure the original is unshared</p></td><td class="code"><div class="highlight"><pre>  <span class="n">iob3clone</span><span class="p">.</span><span class="n">reset</span><span class="p">();</span>
+  <span class="n">EXPECT_FALSE</span><span class="p">(</span><span class="n">iob1</span><span class="o">-&gt;</span><span class="n">isShared</span><span class="p">());</span>
+  <span class="n">EXPECT_FALSE</span><span class="p">(</span><span class="n">iob3ptr</span><span class="o">-&gt;</span><span class="n">isSharedOne</span><span class="p">());</span></pre></div></td></tr>
+
+
+<tr id="section-20"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-20">&#182;</a></div><p>Clone the entire chain</p></td><td class="code"><div class="highlight"><pre>  <span class="n">unique_ptr</span><span class="o">&lt;</span><span class="n">IOBuf</span><span class="o">&gt;</span> <span class="n">chainClone</span> <span class="o">=</span> <span class="n">iob1</span><span class="o">-&gt;</span><span class="n">clone</span><span class="p">();</span></pre></div></td></tr>
+
+
+<tr id="section-21"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-21">&#182;</a></div><p>Verify that the data is correct.</p></td><td class="code"><div class="highlight"><pre>  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">fullLength</span><span class="p">,</span> <span class="n">chainClone</span><span class="o">-&gt;</span><span class="n">computeChainDataLength</span><span class="p">());</span>
+  <span class="n">gen</span><span class="p">.</span><span class="n">seed</span><span class="p">(</span><span class="n">fillSeed</span><span class="p">);</span>
+  <span class="n">checkChain</span><span class="p">(</span><span class="n">chainClone</span><span class="p">.</span><span class="n">get</span><span class="p">(),</span> <span class="n">gen</span><span class="p">);</span></pre></div></td></tr>
+
+
+<tr id="section-22"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-22">&#182;</a></div><p>Check that the buffers report sharing correctly</p></td><td class="code"><div class="highlight"><pre>  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">chainClone</span><span class="o">-&gt;</span><span class="n">isShared</span><span class="p">());</span>
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">iob1</span><span class="o">-&gt;</span><span class="n">isShared</span><span class="p">());</span>
+
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">iob1</span><span class="o">-&gt;</span><span class="n">isSharedOne</span><span class="p">());</span></pre></div></td></tr>
+
+
+<tr id="section-23"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-23">&#182;</a></div><p>since iob2 has a small internal buffer, it will never be shared</p></td><td class="code"><div class="highlight"><pre>  <span class="n">EXPECT_FALSE</span><span class="p">(</span><span class="n">iob2ptr</span><span class="o">-&gt;</span><span class="n">isSharedOne</span><span class="p">());</span>
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">iob3ptr</span><span class="o">-&gt;</span><span class="n">isSharedOne</span><span class="p">());</span>
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">iob4ptr</span><span class="o">-&gt;</span><span class="n">isSharedOne</span><span class="p">());</span>
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">iob5ptr</span><span class="o">-&gt;</span><span class="n">isSharedOne</span><span class="p">());</span></pre></div></td></tr>
+
+
+<tr id="section-24"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-24">&#182;</a></div><p>Unshare the cloned chain</p></td><td class="code"><div class="highlight"><pre>  <span class="n">chainClone</span><span class="o">-&gt;</span><span class="n">unshare</span><span class="p">();</span>
+  <span class="n">EXPECT_FALSE</span><span class="p">(</span><span class="n">chainClone</span><span class="o">-&gt;</span><span class="n">isShared</span><span class="p">());</span>
+  <span class="n">EXPECT_FALSE</span><span class="p">(</span><span class="n">iob1</span><span class="o">-&gt;</span><span class="n">isShared</span><span class="p">());</span></pre></div></td></tr>
+
+
+<tr id="section-25"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-25">&#182;</a></div><p>Make sure the unshared result still has the same data</p></td><td class="code"><div class="highlight"><pre>  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">fullLength</span><span class="p">,</span> <span class="n">chainClone</span><span class="o">-&gt;</span><span class="n">computeChainDataLength</span><span class="p">());</span>
+  <span class="n">gen</span><span class="p">.</span><span class="n">seed</span><span class="p">(</span><span class="n">fillSeed</span><span class="p">);</span>
+  <span class="n">checkChain</span><span class="p">(</span><span class="n">chainClone</span><span class="p">.</span><span class="n">get</span><span class="p">(),</span> <span class="n">gen</span><span class="p">);</span></pre></div></td></tr>
+
+
+<tr id="section-26"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-26">&#182;</a></div><p>Destroy this chain</p></td><td class="code"><div class="highlight"><pre>  <span class="n">chainClone</span><span class="p">.</span><span class="n">reset</span><span class="p">();</span></pre></div></td></tr>
+
+
+<tr id="section-27"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-27">&#182;</a></div><p>Clone a new chain</p></td><td class="code"><div class="highlight"><pre>  <span class="n">EXPECT_FALSE</span><span class="p">(</span><span class="n">iob1</span><span class="o">-&gt;</span><span class="n">isShared</span><span class="p">());</span>
+  <span class="n">chainClone</span> <span class="o">=</span> <span class="n">iob1</span><span class="o">-&gt;</span><span class="n">clone</span><span class="p">();</span>
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">iob1</span><span class="o">-&gt;</span><span class="n">isShared</span><span class="p">());</span>
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">chainClone</span><span class="o">-&gt;</span><span class="n">isShared</span><span class="p">());</span></pre></div></td></tr>
+
+
+<tr id="section-28"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-28">&#182;</a></div><p>Delete the original chain</p></td><td class="code"><div class="highlight"><pre>  <span class="n">iob1</span><span class="p">.</span><span class="n">reset</span><span class="p">();</span>
+  <span class="n">EXPECT_FALSE</span><span class="p">(</span><span class="n">chainClone</span><span class="o">-&gt;</span><span class="n">isShared</span><span class="p">());</span></pre></div></td></tr>
+
+
+<tr id="section-29"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-29">&#182;</a></div><p>Coalesce the chain</p>
+
+<p>Coalescing this chain will create a new buffer and release the last
+refcount on the original buffers we created.  Also make sure
+that arrayBufFreeCount increases to one to indicate that arrayBuf was
+freed.</p></td><td class="code"><div class="highlight"><pre>  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="n">chainClone</span><span class="o">-&gt;</span><span class="n">countChainElements</span><span class="p">());</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">arrayBufFreeCount</span><span class="p">);</span></pre></div></td></tr>
+
+
+<tr id="section-30"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-30">&#182;</a></div><p>Buffer lengths: 1500 20 1234 900 321
+Coalesce the first 3 buffers</p></td><td class="code"><div class="highlight"><pre>  <span class="n">chainClone</span><span class="o">-&gt;</span><span class="n">gather</span><span class="p">(</span><span class="mi">1521</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="n">chainClone</span><span class="o">-&gt;</span><span class="n">countChainElements</span><span class="p">());</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">arrayBufFreeCount</span><span class="p">);</span></pre></div></td></tr>
+
+
+<tr id="section-31"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-31">&#182;</a></div><p>Make sure the data is still the same after coalescing</p></td><td class="code"><div class="highlight"><pre>  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">fullLength</span><span class="p">,</span> <span class="n">chainClone</span><span class="o">-&gt;</span><span class="n">computeChainDataLength</span><span class="p">());</span>
+  <span class="n">gen</span><span class="p">.</span><span class="n">seed</span><span class="p">(</span><span class="n">fillSeed</span><span class="p">);</span>
+  <span class="n">checkChain</span><span class="p">(</span><span class="n">chainClone</span><span class="p">.</span><span class="n">get</span><span class="p">(),</span> <span class="n">gen</span><span class="p">);</span></pre></div></td></tr>
+
+
+<tr id="section-32"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-32">&#182;</a></div><p>Coalesce the entire chain</p></td><td class="code"><div class="highlight"><pre>  <span class="n">chainClone</span><span class="o">-&gt;</span><span class="n">coalesce</span><span class="p">();</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">chainClone</span><span class="o">-&gt;</span><span class="n">countChainElements</span><span class="p">());</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">arrayBufFreeCount</span><span class="p">);</span></pre></div></td></tr>
+
+
+<tr id="section-33"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-33">&#182;</a></div><p>Make sure the data is still the same after coalescing</p></td><td class="code"><div class="highlight"><pre>  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">fullLength</span><span class="p">,</span> <span class="n">chainClone</span><span class="o">-&gt;</span><span class="n">computeChainDataLength</span><span class="p">());</span>
+  <span class="n">gen</span><span class="p">.</span><span class="n">seed</span><span class="p">(</span><span class="n">fillSeed</span><span class="p">);</span>
+  <span class="n">checkChain</span><span class="p">(</span><span class="n">chainClone</span><span class="p">.</span><span class="n">get</span><span class="p">(),</span> <span class="n">gen</span><span class="p">);</span></pre></div></td></tr>
+
+
+<tr id="section-34"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-34">&#182;</a></div><p>Make a new chain to test the unlink and pop operations</p></td><td class="code"><div class="highlight"><pre>  <span class="n">iob1</span> <span class="o">=</span> <span class="n">IOBuf</span><span class="o">::</span><span class="n">create</span><span class="p">(</span><span class="mi">1</span><span class="p">);</span>
+  <span class="n">iob1</span><span class="o">-&gt;</span><span class="n">append</span><span class="p">(</span><span class="mi">1</span><span class="p">);</span>
+  <span class="n">IOBuf</span> <span class="o">*</span><span class="n">iob1ptr</span> <span class="o">=</span> <span class="n">iob1</span><span class="p">.</span><span class="n">get</span><span class="p">();</span>
+  <span class="n">iob2</span> <span class="o">=</span> <span class="n">IOBuf</span><span class="o">::</span><span class="n">create</span><span class="p">(</span><span class="mi">3</span><span class="p">);</span>
+  <span class="n">iob2</span><span class="o">-&gt;</span><span class="n">append</span><span class="p">(</span><span class="mi">3</span><span class="p">);</span>
+  <span class="n">iob2ptr</span> <span class="o">=</span> <span class="n">iob2</span><span class="p">.</span><span class="n">get</span><span class="p">();</span>
+  <span class="n">iob3</span> <span class="o">=</span> <span class="n">IOBuf</span><span class="o">::</span><span class="n">create</span><span class="p">(</span><span class="mi">5</span><span class="p">);</span>
+  <span class="n">iob3</span><span class="o">-&gt;</span><span class="n">append</span><span class="p">(</span><span class="mi">5</span><span class="p">);</span>
+  <span class="n">iob3ptr</span> <span class="o">=</span> <span class="n">iob3</span><span class="p">.</span><span class="n">get</span><span class="p">();</span>
+  <span class="n">iob4</span> <span class="o">=</span> <span class="n">IOBuf</span><span class="o">::</span><span class="n">create</span><span class="p">(</span><span class="mi">7</span><span class="p">);</span>
+  <span class="n">iob4</span><span class="o">-&gt;</span><span class="n">append</span><span class="p">(</span><span class="mi">7</span><span class="p">);</span>
+  <span class="n">iob4ptr</span> <span class="o">=</span> <span class="n">iob4</span><span class="p">.</span><span class="n">get</span><span class="p">();</span>
+  <span class="n">iob1</span><span class="o">-&gt;</span><span class="n">appendChain</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">move</span><span class="p">(</span><span class="n">iob2</span><span class="p">));</span>
+  <span class="n">iob1</span><span class="o">-&gt;</span><span class="n">prev</span><span class="p">()</span><span class="o">-&gt;</span><span class="n">appendChain</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">move</span><span class="p">(</span><span class="n">iob3</span><span class="p">));</span>
+  <span class="n">iob1</span><span class="o">-&gt;</span><span class="n">prev</span><span class="p">()</span><span class="o">-&gt;</span><span class="n">appendChain</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">move</span><span class="p">(</span><span class="n">iob4</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="n">iob1</span><span class="o">-&gt;</span><span class="n">countChainElements</span><span class="p">());</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">16</span><span class="p">,</span> <span class="n">iob1</span><span class="o">-&gt;</span><span class="n">computeChainDataLength</span><span class="p">());</span></pre></div></td></tr>
+
+
+<tr id="section-35"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-35">&#182;</a></div><p>Unlink from the middle of the chain</p></td><td class="code"><div class="highlight"><pre>  <span class="n">iob3</span> <span class="o">=</span> <span class="n">iob3ptr</span><span class="o">-&gt;</span><span class="n">unlink</span><span class="p">();</span>
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">iob3</span><span class="p">.</span><span class="n">get</span><span class="p">()</span> <span class="o">==</span> <span class="n">iob3ptr</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="n">iob1</span><span class="o">-&gt;</span><span class="n">countChainElements</span><span class="p">());</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">11</span><span class="p">,</span> <span class="n">iob1</span><span class="o">-&gt;</span><span class="n">computeChainDataLength</span><span class="p">());</span></pre></div></td></tr>
+
+
+<tr id="section-36"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-36">&#182;</a></div><p>Unlink from the end of the chain</p></td><td class="code"><div class="highlight"><pre>  <span class="n">iob4</span> <span class="o">=</span> <span class="n">iob1</span><span class="o">-&gt;</span><span class="n">prev</span><span class="p">()</span><span class="o">-&gt;</span><span class="n">unlink</span><span class="p">();</span>
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">iob4</span><span class="p">.</span><span class="n">get</span><span class="p">()</span> <span class="o">==</span> <span class="n">iob4ptr</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="n">iob1</span><span class="o">-&gt;</span><span class="n">countChainElements</span><span class="p">());</span>
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">iob1</span><span class="o">-&gt;</span><span class="n">next</span><span class="p">()</span> <span class="o">==</span> <span class="n">iob2ptr</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="n">iob1</span><span class="o">-&gt;</span><span class="n">computeChainDataLength</span><span class="p">());</span></pre></div></td></tr>
+
+
+<tr id="section-37"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-37">&#182;</a></div><p>Pop from the front of the chain</p></td><td class="code"><div class="highlight"><pre>  <span class="n">iob2</span> <span class="o">=</span> <span class="n">iob1</span><span class="o">-&gt;</span><span class="n">pop</span><span class="p">();</span>
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">iob1</span><span class="p">.</span><span class="n">get</span><span class="p">()</span> <span class="o">==</span> <span class="n">iob1ptr</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">iob1</span><span class="o">-&gt;</span><span class="n">countChainElements</span><span class="p">());</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">iob1</span><span class="o">-&gt;</span><span class="n">computeChainDataLength</span><span class="p">());</span>
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">iob2</span><span class="p">.</span><span class="n">get</span><span class="p">()</span> <span class="o">==</span> <span class="n">iob2ptr</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">iob2</span><span class="o">-&gt;</span><span class="n">countChainElements</span><span class="p">());</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="n">iob2</span><span class="o">-&gt;</span><span class="n">computeChainDataLength</span><span class="p">());</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">IOBuf</span><span class="p">,</span> <span class="n">Reserve</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">uint32_t</span> <span class="n">fillSeed</span> <span class="o">=</span> <span class="mh">0x23456789</span><span class="p">;</span>
+  <span class="n">boost</span><span class="o">::</span><span class="n">mt19937</span> <span class="n">gen</span><span class="p">(</span><span class="n">fillSeed</span><span class="p">);</span></pre></div></td></tr>
+
+
+<tr id="section-38"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-38">&#182;</a></div><p>Reserve does nothing if empty and doesn't have to grow the buffer</p></td><td class="code"><div class="highlight"><pre>  <span class="p">{</span>
+    <span class="n">gen</span><span class="p">.</span><span class="n">seed</span><span class="p">(</span><span class="n">fillSeed</span><span class="p">);</span>
+    <span class="n">unique_ptr</span><span class="o">&lt;</span><span class="n">IOBuf</span><span class="o">&gt;</span> <span class="n">iob</span><span class="p">(</span><span class="n">IOBuf</span><span class="o">::</span><span class="n">create</span><span class="p">(</span><span class="mi">2000</span><span class="p">));</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">iob</span><span class="o">-&gt;</span><span class="n">headroom</span><span class="p">());</span>
+    <span class="k">const</span> <span class="kt">void</span><span class="o">*</span> <span class="n">p1</span> <span class="o">=</span> <span class="n">iob</span><span class="o">-&gt;</span><span class="n">buffer</span><span class="p">();</span>
+    <span class="n">iob</span><span class="o">-&gt;</span><span class="n">reserve</span><span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="mi">15</span><span class="p">);</span>
+    <span class="n">EXPECT_LE</span><span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="n">iob</span><span class="o">-&gt;</span><span class="n">headroom</span><span class="p">());</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">p1</span><span class="p">,</span> <span class="n">iob</span><span class="o">-&gt;</span><span class="n">buffer</span><span class="p">());</span>
+  <span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-39"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-39">&#182;</a></div><p>Reserve doesn't reallocate if we have enough total room</p></td><td class="code"><div class="highlight"><pre>  <span class="p">{</span>
+    <span class="n">gen</span><span class="p">.</span><span class="n">seed</span><span class="p">(</span><span class="n">fillSeed</span><span class="p">);</span>
+    <span class="n">unique_ptr</span><span class="o">&lt;</span><span class="n">IOBuf</span><span class="o">&gt;</span> <span class="n">iob</span><span class="p">(</span><span class="n">IOBuf</span><span class="o">::</span><span class="n">create</span><span class="p">(</span><span class="mi">2000</span><span class="p">));</span>
+    <span class="n">iob</span><span class="o">-&gt;</span><span class="n">append</span><span class="p">(</span><span class="mi">100</span><span class="p">);</span>
+    <span class="n">fillBuf</span><span class="p">(</span><span class="n">iob</span><span class="p">.</span><span class="n">get</span><span class="p">(),</span> <span class="n">gen</span><span class="p">);</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">iob</span><span class="o">-&gt;</span><span class="n">headroom</span><span class="p">());</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">100</span><span class="p">,</span> <span class="n">iob</span><span class="o">-&gt;</span><span class="n">length</span><span class="p">());</span>
+    <span class="k">const</span> <span class="kt">void</span><span class="o">*</span> <span class="n">p1</span> <span class="o">=</span> <span class="n">iob</span><span class="o">-&gt;</span><span class="n">buffer</span><span class="p">();</span>
+    <span class="k">const</span> <span class="n">uint8_t</span><span class="o">*</span> <span class="n">d1</span> <span class="o">=</span> <span class="n">iob</span><span class="o">-&gt;</span><span class="n">data</span><span class="p">();</span>
+    <span class="n">iob</span><span class="o">-&gt;</span><span class="n">reserve</span><span class="p">(</span><span class="mi">100</span><span class="p">,</span> <span class="mi">1800</span><span class="p">);</span>
+    <span class="n">EXPECT_LE</span><span class="p">(</span><span class="mi">100</span><span class="p">,</span> <span class="n">iob</span><span class="o">-&gt;</span><span class="n">headroom</span><span class="p">());</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">p1</span><span class="p">,</span> <span class="n">iob</span><span class="o">-&gt;</span><span class="n">buffer</span><span class="p">());</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">d1</span> <span class="o">+</span> <span class="mi">100</span><span class="p">,</span> <span class="n">iob</span><span class="o">-&gt;</span><span class="n">data</span><span class="p">());</span>
+    <span class="n">gen</span><span class="p">.</span><span class="n">seed</span><span class="p">(</span><span class="n">fillSeed</span><span class="p">);</span>
+    <span class="n">checkBuf</span><span class="p">(</span><span class="n">iob</span><span class="p">.</span><span class="n">get</span><span class="p">(),</span> <span class="n">gen</span><span class="p">);</span>
+  <span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-40"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-40">&#182;</a></div><p>Reserve reallocates if we don't have enough total room.
+NOTE that, with jemalloc, we know that this won't reallocate in place
+as the size is less than jemallocMinInPlaceExpanadable</p></td><td class="code"><div class="highlight"><pre>  <span class="p">{</span>
+    <span class="n">gen</span><span class="p">.</span><span class="n">seed</span><span class="p">(</span><span class="n">fillSeed</span><span class="p">);</span>
+    <span class="n">unique_ptr</span><span class="o">&lt;</span><span class="n">IOBuf</span><span class="o">&gt;</span> <span class="n">iob</span><span class="p">(</span><span class="n">IOBuf</span><span class="o">::</span><span class="n">create</span><span class="p">(</span><span class="mi">2000</span><span class="p">));</span>
+    <span class="n">iob</span><span class="o">-&gt;</span><span class="n">append</span><span class="p">(</span><span class="mi">100</span><span class="p">);</span>
+    <span class="n">fillBuf</span><span class="p">(</span><span class="n">iob</span><span class="p">.</span><span class="n">get</span><span class="p">(),</span> <span class="n">gen</span><span class="p">);</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">iob</span><span class="o">-&gt;</span><span class="n">headroom</span><span class="p">());</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">100</span><span class="p">,</span> <span class="n">iob</span><span class="o">-&gt;</span><span class="n">length</span><span class="p">());</span>
+    <span class="k">const</span> <span class="kt">void</span><span class="o">*</span> <span class="n">p1</span> <span class="o">=</span> <span class="n">iob</span><span class="o">-&gt;</span><span class="n">buffer</span><span class="p">();</span>
+    <span class="k">const</span> <span class="n">uint8_t</span><span class="o">*</span> <span class="n">d1</span> <span class="o">=</span> <span class="n">iob</span><span class="o">-&gt;</span><span class="n">data</span><span class="p">();</span>
+    <span class="n">iob</span><span class="o">-&gt;</span><span class="n">reserve</span><span class="p">(</span><span class="mi">100</span><span class="p">,</span> <span class="mi">2512</span><span class="p">);</span>  <span class="c1">// allocation sizes are multiples of 256</span>
+    <span class="n">EXPECT_LE</span><span class="p">(</span><span class="mi">100</span><span class="p">,</span> <span class="n">iob</span><span class="o">-&gt;</span><span class="n">headroom</span><span class="p">());</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">folly</span><span class="o">::</span><span class="n">usingJEMalloc</span><span class="p">())</span> <span class="p">{</span>
+      <span class="n">EXPECT_NE</span><span class="p">(</span><span class="n">p1</span><span class="p">,</span> <span class="n">iob</span><span class="o">-&gt;</span><span class="n">buffer</span><span class="p">());</span>
+    <span class="p">}</span>
+    <span class="n">gen</span><span class="p">.</span><span class="n">seed</span><span class="p">(</span><span class="n">fillSeed</span><span class="p">);</span>
+    <span class="n">checkBuf</span><span class="p">(</span><span class="n">iob</span><span class="p">.</span><span class="n">get</span><span class="p">(),</span> <span class="n">gen</span><span class="p">);</span>
+  <span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-41"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-41">&#182;</a></div><p>Test reserve from internal buffer, this used to segfault</p></td><td class="code"><div class="highlight"><pre>  <span class="p">{</span>
+    <span class="n">unique_ptr</span><span class="o">&lt;</span><span class="n">IOBuf</span><span class="o">&gt;</span> <span class="n">iob</span><span class="p">(</span><span class="n">IOBuf</span><span class="o">::</span><span class="n">create</span><span class="p">(</span><span class="mi">0</span><span class="p">));</span>
+    <span class="n">iob</span><span class="o">-&gt;</span><span class="n">reserve</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2000</span><span class="p">);</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">iob</span><span class="o">-&gt;</span><span class="n">headroom</span><span class="p">());</span>
+    <span class="n">EXPECT_LE</span><span class="p">(</span><span class="mi">2000</span><span class="p">,</span> <span class="n">iob</span><span class="o">-&gt;</span><span class="n">tailroom</span><span class="p">());</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">IOBuf</span><span class="p">,</span> <span class="n">copyBuffer</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">std</span><span class="o">::</span><span class="n">string</span> <span class="n">s</span><span class="p">(</span><span class="s">&quot;hello&quot;</span><span class="p">);</span>
+  <span class="k">auto</span> <span class="n">buf</span> <span class="o">=</span> <span class="n">IOBuf</span><span class="o">::</span><span class="n">copyBuffer</span><span class="p">(</span><span class="n">s</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span> <span class="n">s</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">buf</span><span class="o">-&gt;</span><span class="n">headroom</span><span class="p">());</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">s</span><span class="p">,</span> <span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="p">(</span><span class="k">reinterpret_cast</span><span class="o">&lt;</span><span class="k">const</span> <span class="kt">char</span><span class="o">*&gt;</span><span class="p">(</span><span class="n">buf</span><span class="o">-&gt;</span><span class="n">data</span><span class="p">()),</span>
+                           <span class="n">buf</span><span class="o">-&gt;</span><span class="n">length</span><span class="p">()));</span>
+  <span class="n">EXPECT_LE</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="n">buf</span><span class="o">-&gt;</span><span class="n">tailroom</span><span class="p">());</span>
+<span class="p">}</span>
+
+<span class="k">namespace</span> <span class="p">{</span>
+
+<span class="kt">int</span> <span class="n">customDeleterCount</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+<span class="kt">int</span> <span class="n">destructorCount</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+<span class="k">struct</span> <span class="n">OwnershipTestClass</span> <span class="p">{</span>
+  <span class="k">explicit</span> <span class="n">OwnershipTestClass</span><span class="p">(</span><span class="kt">int</span> <span class="n">v</span> <span class="o">=</span> <span class="mi">0</span><span class="p">)</span> <span class="o">:</span> <span class="n">val</span><span class="p">(</span><span class="n">v</span><span class="p">)</span> <span class="p">{</span> <span class="p">}</span>
+  <span class="o">~</span><span class="n">OwnershipTestClass</span><span class="p">()</span> <span class="p">{</span>
+    <span class="o">++</span><span class="n">destructorCount</span><span class="p">;</span>
+  <span class="p">}</span>
+  <span class="kt">int</span> <span class="n">val</span><span class="p">;</span>
+<span class="p">};</span>
+
+<span class="k">typedef</span> <span class="n">std</span><span class="o">::</span><span class="n">function</span><span class="o">&lt;</span><span class="kt">void</span><span class="p">(</span><span class="n">OwnershipTestClass</span><span class="o">*</span><span class="p">)</span><span class="o">&gt;</span> <span class="n">CustomDeleter</span><span class="p">;</span>
+
+<span class="kt">void</span> <span class="n">customDelete</span><span class="p">(</span><span class="n">OwnershipTestClass</span><span class="o">*</span> <span class="n">p</span><span class="p">)</span> <span class="p">{</span>
+  <span class="o">++</span><span class="n">customDeleterCount</span><span class="p">;</span>
+  <span class="k">delete</span> <span class="n">p</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="kt">void</span> <span class="n">customDeleteArray</span><span class="p">(</span><span class="n">OwnershipTestClass</span><span class="o">*</span> <span class="n">p</span><span class="p">)</span> <span class="p">{</span>
+  <span class="o">++</span><span class="n">customDeleterCount</span><span class="p">;</span>
+  <span class="k">delete</span><span class="p">[]</span> <span class="n">p</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="p">}</span>  <span class="c1">// namespace</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">IOBuf</span><span class="p">,</span> <span class="n">takeOwnershipUniquePtr</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">destructorCount</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+  <span class="p">{</span>
+    <span class="n">std</span><span class="o">::</span><span class="n">unique_ptr</span><span class="o">&lt;</span><span class="n">OwnershipTestClass</span><span class="o">&gt;</span> <span class="n">p</span><span class="p">(</span><span class="k">new</span> <span class="n">OwnershipTestClass</span><span class="p">());</span>
+  <span class="p">}</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">destructorCount</span><span class="p">);</span>
+
+  <span class="n">destructorCount</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+  <span class="p">{</span>
+    <span class="n">std</span><span class="o">::</span><span class="n">unique_ptr</span><span class="o">&lt;</span><span class="n">OwnershipTestClass</span><span class="p">[]</span><span class="o">&gt;</span> <span class="n">p</span><span class="p">(</span><span class="k">new</span> <span class="n">OwnershipTestClass</span><span class="p">[</span><span class="mi">2</span><span class="p">]);</span>
+  <span class="p">}</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="n">destructorCount</span><span class="p">);</span>
+
+  <span class="n">destructorCount</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+  <span class="p">{</span>
+    <span class="n">std</span><span class="o">::</span><span class="n">unique_ptr</span><span class="o">&lt;</span><span class="n">OwnershipTestClass</span><span class="o">&gt;</span> <span class="n">p</span><span class="p">(</span><span class="k">new</span> <span class="n">OwnershipTestClass</span><span class="p">());</span>
+    <span class="n">std</span><span class="o">::</span><span class="n">unique_ptr</span><span class="o">&lt;</span><span class="n">IOBuf</span><span class="o">&gt;</span> <span class="n">buf</span><span class="p">(</span><span class="n">IOBuf</span><span class="o">::</span><span class="n">takeOwnership</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">move</span><span class="p">(</span><span class="n">p</span><span class="p">)));</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="k">sizeof</span><span class="p">(</span><span class="n">OwnershipTestClass</span><span class="p">),</span> <span class="n">buf</span><span class="o">-&gt;</span><span class="n">length</span><span class="p">());</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">destructorCount</span><span class="p">);</span>
+  <span class="p">}</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">destructorCount</span><span class="p">);</span>
+
+  <span class="n">destructorCount</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+  <span class="p">{</span>
+    <span class="n">std</span><span class="o">::</span><span class="n">unique_ptr</span><span class="o">&lt;</span><span class="n">OwnershipTestClass</span><span class="p">[]</span><span class="o">&gt;</span> <span class="n">p</span><span class="p">(</span><span class="k">new</span> <span class="n">OwnershipTestClass</span><span class="p">[</span><span class="mi">2</span><span class="p">]);</span>
+    <span class="n">std</span><span class="o">::</span><span class="n">unique_ptr</span><span class="o">&lt;</span><span class="n">IOBuf</span><span class="o">&gt;</span> <span class="n">buf</span><span class="p">(</span><span class="n">IOBuf</span><span class="o">::</span><span class="n">takeOwnership</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">move</span><span class="p">(</span><span class="n">p</span><span class="p">),</span> <span class="mi">2</span><span class="p">));</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">2</span> <span class="o">*</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">OwnershipTestClass</span><span class="p">),</span> <span class="n">buf</span><span class="o">-&gt;</span><span class="n">length</span><span class="p">());</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">destructorCount</span><span class="p">);</span>
+  <span class="p">}</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="n">destructorCount</span><span class="p">);</span>
+
+  <span class="n">customDeleterCount</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+  <span class="n">destructorCount</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+  <span class="p">{</span>
+    <span class="n">std</span><span class="o">::</span><span class="n">unique_ptr</span><span class="o">&lt;</span><span class="n">OwnershipTestClass</span><span class="p">,</span> <span class="n">CustomDeleter</span><span class="o">&gt;</span>
+      <span class="n">p</span><span class="p">(</span><span class="k">new</span> <span class="n">OwnershipTestClass</span><span class="p">(),</span> <span class="n">customDelete</span><span class="p">);</span>
+    <span class="n">std</span><span class="o">::</span><span class="n">unique_ptr</span><span class="o">&lt;</span><span class="n">IOBuf</span><span class="o">&gt;</span> <span class="n">buf</span><span class="p">(</span><span class="n">IOBuf</span><span class="o">::</span><span class="n">takeOwnership</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">move</span><span class="p">(</span><span class="n">p</span><span class="p">)));</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="k">sizeof</span><span class="p">(</span><span class="n">OwnershipTestClass</span><span class="p">),</span> <span class="n">buf</span><span class="o">-&gt;</span><span class="n">length</span><span class="p">());</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">destructorCount</span><span class="p">);</span>
+  <span class="p">}</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">destructorCount</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">customDeleterCount</span><span class="p">);</span>
+
+  <span class="n">customDeleterCount</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+  <span class="n">destructorCount</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+  <span class="p">{</span>
+    <span class="n">std</span><span class="o">::</span><span class="n">unique_ptr</span><span class="o">&lt;</span><span class="n">OwnershipTestClass</span><span class="p">[],</span> <span class="n">CustomDeleter</span><span class="o">&gt;</span>
+      <span class="n">p</span><span class="p">(</span><span class="k">new</span> <span class="n">OwnershipTestClass</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span> <span class="n">customDeleteArray</span><span class="p">);</span>
+    <span class="n">std</span><span class="o">::</span><span class="n">unique_ptr</span><span class="o">&lt;</span><span class="n">IOBuf</span><span class="o">&gt;</span> <span class="n">buf</span><span class="p">(</span><span class="n">IOBuf</span><span class="o">::</span><span class="n">takeOwnership</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">move</span><span class="p">(</span><span class="n">p</span><span class="p">),</span> <span class="mi">2</span><span class="p">));</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">2</span> <span class="o">*</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">OwnershipTestClass</span><span class="p">),</span> <span class="n">buf</span><span class="o">-&gt;</span><span class="n">length</span><span class="p">());</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">destructorCount</span><span class="p">);</span>
+  <span class="p">}</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="n">destructorCount</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">customDeleterCount</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">IOBuf</span><span class="p">,</span> <span class="n">Alignment</span><span class="p">)</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-42"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-42">&#182;</a></div><p>max<em>align</em>t doesn't exist in gcc 4.6.2</p></td><td class="code"><div class="highlight"><pre>  <span class="k">struct</span> <span class="n">MaxAlign</span> <span class="p">{</span>
+    <span class="kt">char</span> <span class="n">c</span><span class="p">;</span>
+  <span class="p">}</span> <span class="n">__attribute__</span><span class="p">((</span><span class="n">aligned</span><span class="p">));</span>
+  <span class="n">size_t</span> <span class="n">alignment</span> <span class="o">=</span> <span class="n">alignof</span><span class="p">(</span><span class="n">MaxAlign</span><span class="p">);</span>
+
+  <span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="n">size_t</span><span class="o">&gt;</span> <span class="n">sizes</span> <span class="p">{</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">64</span><span class="p">,</span> <span class="mi">256</span><span class="p">,</span> <span class="mi">1024</span><span class="p">,</span> <span class="mi">1</span> <span class="o">&lt;&lt;</span> <span class="mi">10</span><span class="p">};</span>
+  <span class="k">for</span> <span class="p">(</span><span class="n">size_t</span> <span class="n">size</span> <span class="o">:</span> <span class="n">sizes</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">auto</span> <span class="n">buf</span> <span class="o">=</span> <span class="n">IOBuf</span><span class="o">::</span><span class="n">create</span><span class="p">(</span><span class="n">size</span><span class="p">);</span>
+    <span class="n">uintptr_t</span> <span class="n">p</span> <span class="o">=</span> <span class="k">reinterpret_cast</span><span class="o">&lt;</span><span class="n">uintptr_t</span><span class="o">&gt;</span><span class="p">(</span><span class="n">buf</span><span class="o">-&gt;</span><span class="n">data</span><span class="p">());</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">p</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">alignment</span> <span class="o">-</span> <span class="mi">1</span><span class="p">))</span> <span class="o">&lt;&lt;</span> <span class="s">&quot;size=&quot;</span> <span class="o">&lt;&lt;</span> <span class="n">size</span><span class="p">;</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">TypedIOBuf</span><span class="p">,</span> <span class="n">Simple</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">auto</span> <span class="n">buf</span> <span class="o">=</span> <span class="n">IOBuf</span><span class="o">::</span><span class="n">create</span><span class="p">(</span><span class="mi">0</span><span class="p">);</span>
+  <span class="n">TypedIOBuf</span><span class="o">&lt;</span><span class="n">uint64_t</span><span class="o">&gt;</span> <span class="n">typed</span><span class="p">(</span><span class="n">buf</span><span class="p">.</span><span class="n">get</span><span class="p">());</span>
+  <span class="k">const</span> <span class="n">uint64_t</span> <span class="n">n</span> <span class="o">=</span> <span class="mi">10000</span><span class="p">;</span>
+  <span class="n">typed</span><span class="p">.</span><span class="n">reserve</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">n</span><span class="p">);</span>
+  <span class="n">EXPECT_LE</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="n">typed</span><span class="p">.</span><span class="n">capacity</span><span class="p">());</span>
+  <span class="k">for</span> <span class="p">(</span><span class="n">uint64_t</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">n</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span><span class="p">)</span> <span class="p">{</span>
+    <span class="o">*</span><span class="n">typed</span><span class="p">.</span><span class="n">writableTail</span><span class="p">()</span> <span class="o">=</span> <span class="n">i</span><span class="p">;</span>
+    <span class="n">typed</span><span class="p">.</span><span class="n">append</span><span class="p">(</span><span class="mi">1</span><span class="p">);</span>
+  <span class="p">}</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="n">typed</span><span class="p">.</span><span class="n">length</span><span class="p">());</span>
+  <span class="k">for</span> <span class="p">(</span><span class="n">uint64_t</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">n</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="n">typed</span><span class="p">.</span><span class="n">data</span><span class="p">()[</span><span class="n">i</span><span class="p">]);</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="kt">int</span> <span class="n">main</span><span class="p">(</span><span class="kt">int</span> <span class="n">argc</span><span class="p">,</span> <span class="kt">char</span><span class="o">**</span> <span class="n">argv</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">testing</span><span class="o">::</span><span class="n">InitGoogleTest</span><span class="p">(</span><span class="o">&amp;</span><span class="n">argc</span><span class="p">,</span> <span class="n">argv</span><span class="p">);</span>
+  <span class="n">google</span><span class="o">::</span><span class="n">ParseCommandLineFlags</span><span class="p">(</span><span class="o">&amp;</span><span class="n">argc</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">argv</span><span class="p">,</span> <span class="kc">true</span><span class="p">);</span>
+
+  <span class="k">return</span> <span class="n">RUN_ALL_TESTS</span><span class="p">();</span>
+<span class="p">}</span>
+
+</pre></div></td></tr>
+
+</tbody>
+</table>
+</div>
+
+</body>
+<script>docas={repo:"joekychen/folly",depth:4}</script>
+<script>document.write('<script src=' + ('__proto__' in {} ? 'http://cdnjs.cloudflare.com/ajax/libs/zepto/1.0rc1/zepto.min.js' : 'https://ajax.googleapis.com/ajax/libs/jquery/1.7.2/jquery.min.js')+'><\\/script>')</script>
+<script src="http://baoshan.github.com/moment/min/moment.min.js"></script>
+<script src="../../../../javascript/docco.min.js"></script>
+</html>

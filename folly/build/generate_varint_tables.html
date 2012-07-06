@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html><head><title>joekychen/folly » folly › build › generate_varint_tables.py
+
+</title>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+<meta name="generator" content="Docco">
+<link rel="stylesheet" media="all" href="../../stylesheets/docco.min.css" />
+
+
+</head>
+<body>
+<div id="container">
+<div id="background"></div>
+<table cellpadding="0" cellspacing="0">
+<thead><tr><th class="docs"><a id="home" href="../../index.html"></a><h1>generate_varint_tables.py</h1></th><th class="code"></th></tr></thead>
+<tbody>
+
+
+<tr id="section-1"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-1">&#182;</a></div></td><td class="code"><div class="highlight"><pre><span class="c">#!/usr/bin/env python</span></pre></div></td></tr>
+
+
+<tr id="section-2"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-2">&#182;</a></div><p>Generate tables for GroupVarint32
+Copyright 2011 Facebook</p>
+
+<p>@author Tudor Bosman (tudorb@fb.com)</p>
+
+<p>Reference: http://www.stepanovpapers.com/CIKM_2011.pdf</p>
+
+<p>From 17 encoded bytes, we may use between 5 and 17 bytes to encode 4
+integers.  The first byte is a key that indicates how many bytes each of
+the 4 integers takes:</p>
+
+<p>bit 0..1: length-1 of first integer
+bit 2..3: length-1 of second integer
+bit 4..5: length-1 of third integer
+bit 6..7: length-1 of fourth integer</p>
+
+<p>The value of the first byte is used as the index in a table which returns
+a mask value for the SSSE3 PSHUFB instruction, which takes an XMM register
+(16 bytes) and shuffles bytes from it into a destination XMM register
+(optionally setting some of them to 0)</p>
+
+<p>For example, if the key has value 4, that means that the first integer
+uses 1 byte, the second uses 2 bytes, the third and fourth use 1 byte each,
+so we set the mask value so that</p>
+
+<p>r[0] = a[0]
+r[1] = 0
+r[2] = 0
+r[3] = 0</p>
+
+<p>r[4] = a[1]
+r[5] = a[2]
+r[6] = 0
+r[7] = 0</p>
+
+<p>r[8] = a[3]
+r[9] = 0
+r[10] = 0
+r[11] = 0</p>
+
+<p>r[12] = a[4]
+r[13] = 0
+r[14] = 0
+r[15] = 0</p></td><td class="code"><div class="highlight"><pre><span class="kn">import</span> <span class="nn">os</span>
+<span class="kn">from</span> <span class="nn">optparse</span> <span class="kn">import</span> <span class="n">OptionParser</span>
+
+<span class="n">OUTPUT_FILE</span> <span class="o">=</span> <span class="s">&quot;GroupVarintTables.cpp&quot;</span>
+
+<span class="k">def</span> <span class="nf">generate</span><span class="p">(</span><span class="n">f</span><span class="p">):</span>
+    <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s">&quot;#include &lt;stdint.h&gt;</span><span class="se">\n</span><span class="s">&quot;</span>
+            <span class="s">&quot;#include &lt;x86intrin.h&gt;</span><span class="se">\n</span><span class="s">&quot;</span>
+            <span class="s">&quot;</span><span class="se">\n</span><span class="s">&quot;</span>
+            <span class="s">&quot;namespace folly {</span><span class="se">\n</span><span class="s">&quot;</span>
+            <span class="s">&quot;namespace detail {</span><span class="se">\n</span><span class="s">&quot;</span>
+            <span class="s">&quot;</span><span class="se">\n</span><span class="s">&quot;</span>
+            <span class="s">&quot;extern const __m128i groupVarintSSEMasks[] = {</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">)</span></pre></div></td></tr>
+
+
+<tr id="section-3"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-3">&#182;</a></div><p>Compute SSE masks</p></td><td class="code"><div class="highlight"><pre>    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">256</span><span class="p">):</span>
+        <span class="n">offset</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="n">vals</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span>
+        <span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">4</span><span class="p">):</span>
+            <span class="n">d</span> <span class="o">=</span> <span class="mi">1</span> <span class="o">+</span> <span class="p">((</span><span class="n">i</span> <span class="o">&gt;&gt;</span> <span class="p">(</span><span class="mi">2</span> <span class="o">*</span> <span class="n">j</span><span class="p">))</span> <span class="o">&amp;</span> <span class="mi">3</span><span class="p">)</span></pre></div></td></tr>
+
+
+<tr id="section-4"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-4">&#182;</a></div><p>the j'th integer uses d bytes, consume them</p></td><td class="code"><div class="highlight"><pre>            <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">d</span><span class="p">):</span>
+                <span class="n">vals</span><span class="p">[</span><span class="n">j</span><span class="p">]</span> <span class="o">|=</span> <span class="n">offset</span> <span class="o">&lt;&lt;</span> <span class="p">(</span><span class="mi">8</span> <span class="o">*</span> <span class="n">k</span><span class="p">)</span>
+                <span class="n">offset</span> <span class="o">+=</span> <span class="mi">1</span></pre></div></td></tr>
+
+
+<tr id="section-5"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-5">&#182;</a></div><p>set remaining bytes in result to 0
+0xff: set corresponding byte in result to 0</p></td><td class="code"><div class="highlight"><pre>            <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">d</span><span class="p">,</span> <span class="mi">4</span><span class="p">):</span>
+                <span class="n">vals</span><span class="p">[</span><span class="n">j</span><span class="p">]</span> <span class="o">|=</span> <span class="mh">0xff</span> <span class="o">&lt;&lt;</span> <span class="p">(</span><span class="mi">8</span> <span class="o">*</span> <span class="n">k</span><span class="p">)</span>
+        <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s">&quot;  {{static_cast&lt;int64_t&gt;(0x{1:08x}{0:08x}), &quot;</span>
+            <span class="s">&quot;static_cast&lt;int64_t&gt;(0x{3:08x}{2:08x})}},</span><span class="se">\n</span><span class="s">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="o">*</span><span class="n">vals</span><span class="p">))</span>
+
+    <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s">&quot;};</span><span class="se">\n</span><span class="s">&quot;</span>
+            <span class="s">&quot;</span><span class="se">\n</span><span class="s">&quot;</span>
+            <span class="s">&quot;extern const uint8_t groupVarintLengths[] = {</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">)</span></pre></div></td></tr>
+
+
+<tr id="section-6"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-6">&#182;</a></div><p>Also compute total encoded lengths, including key byte</p></td><td class="code"><div class="highlight"><pre>    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">256</span><span class="p">):</span>
+        <span class="n">offset</span> <span class="o">=</span> <span class="mi">1</span>  <span class="c"># include key byte</span>
+        <span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">4</span><span class="p">):</span>
+            <span class="n">d</span> <span class="o">=</span> <span class="mi">1</span> <span class="o">+</span> <span class="p">((</span><span class="n">i</span> <span class="o">&gt;&gt;</span> <span class="p">(</span><span class="mi">2</span> <span class="o">*</span> <span class="n">j</span><span class="p">))</span> <span class="o">&amp;</span> <span class="mi">3</span><span class="p">)</span>
+            <span class="n">offset</span> <span class="o">+=</span> <span class="n">d</span>
+        <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s">&quot;  {0},</span><span class="se">\n</span><span class="s">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">offset</span><span class="p">))</span>
+
+    <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s">&quot;};</span><span class="se">\n</span><span class="s">&quot;</span>
+            <span class="s">&quot;</span><span class="se">\n</span><span class="s">&quot;</span>
+            <span class="s">&quot;}  // namespace detail</span><span class="se">\n</span><span class="s">&quot;</span>
+            <span class="s">&quot;}  // namespace folly</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">)</span>
+
+<span class="k">def</span> <span class="nf">main</span><span class="p">():</span>
+    <span class="n">parser</span> <span class="o">=</span> <span class="n">OptionParser</span><span class="p">()</span>
+    <span class="n">parser</span><span class="o">.</span><span class="n">add_option</span><span class="p">(</span><span class="s">&quot;--install_dir&quot;</span><span class="p">,</span> <span class="n">dest</span><span class="o">=</span><span class="s">&quot;install_dir&quot;</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="s">&quot;.&quot;</span><span class="p">,</span>
+                      <span class="n">help</span><span class="o">=</span><span class="s">&quot;write output to DIR&quot;</span><span class="p">,</span> <span class="n">metavar</span><span class="o">=</span><span class="s">&quot;DIR&quot;</span><span class="p">)</span>
+    <span class="n">parser</span><span class="o">.</span><span class="n">add_option</span><span class="p">(</span><span class="s">&quot;--fbcode_dir&quot;</span><span class="p">)</span>
+    <span class="p">(</span><span class="n">options</span><span class="p">,</span> <span class="n">args</span><span class="p">)</span> <span class="o">=</span> <span class="n">parser</span><span class="o">.</span><span class="n">parse_args</span><span class="p">()</span>
+    <span class="n">f</span> <span class="o">=</span> <span class="nb">open</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">options</span><span class="o">.</span><span class="n">install_dir</span><span class="p">,</span> <span class="n">OUTPUT_FILE</span><span class="p">),</span> <span class="s">&quot;w&quot;</span><span class="p">)</span>
+    <span class="n">generate</span><span class="p">(</span><span class="n">f</span><span class="p">)</span>
+    <span class="n">f</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+
+<span class="k">if</span> <span class="n">__name__</span> <span class="o">==</span> <span class="s">&quot;__main__&quot;</span><span class="p">:</span>
+    <span class="n">main</span><span class="p">()</span>
+
+</pre></div></td></tr>
+
+</tbody>
+</table>
+</div>
+
+</body>
+<script>docas={repo:"joekychen/folly",depth:2}</script>
+<script>document.write('<script src=' + ('__proto__' in {} ? 'http://cdnjs.cloudflare.com/ajax/libs/zepto/1.0rc1/zepto.min.js' : 'https://ajax.googleapis.com/ajax/libs/jquery/1.7.2/jquery.min.js')+'><\\/script>')</script>
+<script src="http://baoshan.github.com/moment/min/moment.min.js"></script>
+<script src="../../javascript/docco.min.js"></script>
+</html>

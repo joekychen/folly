@@ -1,0 +1,621 @@
+<h2><code>folly/Synchronized.h</code></h2>
+
+<p><code>folly/Synchronized.h</code> introduces a simple abstraction for mutex-
+based concurrency. It replaces convoluted, unwieldy, and just
+plain wrong code with simple constructs that are easy to get
+right and difficult to get wrong.</p>
+
+<h3>Motivation</h3>
+
+<p>Many of our multithreaded Thrift services (not to mention general
+concurrent C++ code) use shared data structures associated with
+locks. This follows the time-honored adage of mutex-based
+concurrency control "associate mutexes with data, not code".
+Examples are abundant and easy to find. For example:</p>
+
+<p>``` Cpp</p>
+
+<pre><code>class AdPublisherHandler : public AdPopulatorIf,
+                           public fb303::FacebookBase,
+                           public ZkBaseApplication {
+  ...
+  OnDemandUpdateIdMap adsToBeUpdated_;
+  ReadWriteMutex adsToBeUpdatedLock_;
+
+  OnDemandUpdateIdMap limitsToBeUpdated_;
+  ReadWriteMutex limitsToBeUpdatedLock_;
+
+  OnDemandUpdateIdMap campaignsToBeUpdated_;
+  ReadWriteMutex campaignsToBeUpdatedLock_;
+  ...
+};
+</code></pre>
+
+<p>```</p>
+
+<p>Whenever the code needs to read or write some of the protected
+data, it acquires the mutex for reading or for reading and
+writing. For example:</p>
+
+<p><code>Cpp
+    void AdPublisherHandler::requestUpdateAdId(const int64_t adId,
+                                               const int32_t dbId) {
+      checkDbHandlingStatus(dbId);
+      RWGuard g(adsToBeUpdatedLock_, RW_WRITE);
+      adsToBeUpdated_[dbId][adId] = 1;
+      adPublisherMonitor_-&gt;addStatValue("request_adId_update", 1, dbId);
+      LOG(INFO) &lt;&lt; "received request to update ad id " &lt;&lt; adId;
+    }
+</code></p>
+
+<p>The pattern is an absolute classic and present everywhere.
+However, it is inefficient, makes incorrect code easy to
+write, is prone to deadlocking, and is bulkier than it could
+otherwise be. To expand:</p>
+
+<ul>
+<li>In the code above, for example, the critical section is only
+the line right after <code>RWGuard</code>'s definition; it is frivolous
+that everything else (including a splurging <code>LOG(INFO)</code>) keeps
+the lock acquired for no good reason. This is because the
+locked regions are not visible; the guard's construction
+introduces a critical section as long as the remainder of the
+current scope.</li>
+<li><p>The correctness of the technique is entirely predicated on
+convention. There is no ostensible error for code that:</p>
+
+<ul><li>manipulates a piece of data without acquiring its lock first</li>
+<li>acquires a different lock instead of the intended one</li>
+<li>acquires a lock in read mode but modifies the guarded data structure</li>
+<li>acquires a lock in read-write mode although it only has <code>const</code>
+access to the guarded data</li>
+<li>acquires one lock when another lock is already held, which may
+lead to deadlocks if another thread acquires locks in the
+inverse order</li></ul></li>
+</ul>
+
+<h3>Introduction to <code>folly/Synchronized.h</code></h3>
+
+<p>The same code sample could be rewritten with <code>Synchronized</code>
+as follows:</p>
+
+<p>``` Cpp
+    class AdPublisherHandler : public AdPopulatorIf,
+                               public fb303::FacebookBase,
+                               public ZkBaseApplication {
+      ...
+      Synchronized<OnDemandUpdateIdMap>
+        adsToBeUpdated<em>,
+        limitsToBeUpdated</em>,
+        campaignsToBeUpdated_;
+      ...
+    };</p>
+
+<pre><code>void AdPublisherHandler::requestUpdateAdId(const int64_t adId,
+                                           const int32_t dbId) {
+  checkDbHandlingStatus(dbId);
+  SYNCHRONIZED (adsToBeUpdated_) {
+    adsToBeUpdated_[dbId][adId] = 1;
+  }
+  adPublisherMonitor_-&gt;addStatValue("request_adId_update", 1, dbId);
+  LOG(INFO) &lt;&lt; "received request to update ad id " &lt;&lt; adId;
+}
+</code></pre>
+
+<p>```</p>
+
+<p>The rewrite does at maximum efficiency what needs to be done:
+acquires the lock associated with the <code>OnDemandUpdateIdMap</code>
+object, writes to the map, and releases the lock immediately
+thereafter.</p>
+
+<p>On the face of it, that's not much to write home about, and not
+an obvious improvement over the previous state of affairs. But
+the features at work invisible in the code above are as important
+as those that are visible:</p>
+
+<ul>
+<li>Unlike before, the data and the mutex protecting it are
+inextricably encapsulated together.</li>
+<li>Critical sections are readily visible and emphasize code that
+needs to do minimal work and be subject to extra scrutiny.</li>
+<li>Dangerous nested <code>SYNCHRONIZED</code> statements are more visible
+than sequenced declarations of guards at the same level. (This
+is not foolproof because a method call issued inside a
+<code>SYNCHRONIZED</code> scope may open its own <code>SYNCHRONIZED</code> block.) A
+construct <code>SYNCHRONIZED_DUAL</code>, discussed later in this
+document, allows locking two objects quasi-simultaneously in
+the same order in all threads, thus avoiding deadlocks.</li>
+<li>If you tried to use <code>adsToBeUpdated_</code> outside the
+<code>SYNCHRONIZED</code> scope, you wouldn't be able to; it is virtually
+impossible to tease the map object without acquiring the
+correct lock. However, inside the <code>SYNCHRONIZED</code> scope, the
+<em>same</em> name serves as the actual underlying object of type
+<code>OnDemandUpdateIdMap</code> (which is a map of maps).</li>
+<li><p>Outside <code>SYNCHRONIZED</code>, if you just want to call one
+method, you can do so by using <code>adsToBeUpdated_</code> as a
+pointer like this:</p>
+
+<p><code>adsToBeUpdated_-&gt;clear();</code></p></li>
+</ul>
+
+<p>This acquires the mutex, calls <code>clear()</code> against the underlying
+map object, and releases the mutex immediately thereafter.</p>
+
+<p><code>Synchronized</code> offers several other methods, which are described
+in detail below.</p>
+
+<h3>Template class <code>Synchronized&lt;T&gt;</code></h3>
+
+<h5>Constructors</h5>
+
+<p>The default constructor default-initializes the data and its
+associated mutex.</p>
+
+<p>The copy constructor locks the source for reading and copies its
+data into the target. (The target is not locked as an object
+under construction is only accessed by one thread.)</p>
+
+<p>Finally, <code>Synchronized&lt;T&gt;</code> defines an explicit constructor that
+takes an object of type <code>T</code> and copies it. For example:</p>
+
+<p>``` Cpp
+    // Default constructed
+    Synchronized&lt; map<string, int> > syncMap1;</p>
+
+<pre><code>// Copy constructed
+Synchronized&lt; map&lt;string, int&gt; &gt; syncMap2(syncMap1);
+
+// Initializing from an existing map
+map&lt;string, int&gt; init;
+init["world"] = 42;
+Synchronized&lt; map&lt;string, int&gt; &gt; syncMap3(init);
+EXPECT_EQ(syncMap3-&gt;size(), 1);
+</code></pre>
+
+<p>```</p>
+
+<h4>Assignment, swap, and copying</h4>
+
+<p>The canonical assignment operator locks both objects involved and
+then copies the underlying data objects. The mutexes are not
+copied. The locks are acquired in increasing address order, so
+deadlock is avoided. For example, there is no problem if one
+thread assigns <code>a = b</code> and the other assigns <code>b = a</code> (other than
+that design probably deserving a Razzie award). Similarly, the
+<code>swap</code> method takes a reference to another <code>Synchronized&lt;T&gt;</code>
+object and swaps the data. Again, locks are acquired in a well-
+defined order. The mutexes are not swapped.</p>
+
+<p>An additional assignment operator accepts a <code>const T&amp;</code> on the
+right-hand side. The operator copies the datum inside a
+critical section.</p>
+
+<p>An additional <code>swap</code> method accepts a <code>T&amp;</code> and swaps the data
+inside a critical section. This is by far the preferred method of
+changing the guarded datum wholesale because it keeps the lock
+only for a short time, thus lowering the pressure on the mutex.</p>
+
+<p>To get a copy of the guarded data, there are two methods
+available: <code>void copy(T*)</code> and <code>T copy()</code>. The first copies data
+to a provided target and the second returns a copy by value. Both
+operations are done under a read lock. Example:</p>
+
+<p>``` Cpp
+    Synchronized&lt; fbvector<fbstring> > syncVec1, syncVec2;
+    fbvector<fbstring> vec;</p>
+
+<pre><code>// Assign
+syncVec1 = syncVec2;
+// Assign straight from vector
+syncVec1 = vec;
+
+// Swap
+syncVec1.swap(syncVec2);
+// Swap with vector
+syncVec1.swap(vec);
+
+// Copy to given target
+syncVec1.copy(&amp;vec);
+// Get a copy by value
+auto copy = syncVec1.copy();
+</code></pre>
+
+<p>```</p>
+
+<h4><code>LockedPtr operator-&gt;()</code> and <code>ConstLockedPtr operator-&gt;() const</code></h4>
+
+<p>We've already seen <code>operator-&gt;</code> at work. Essentially calling a
+method <code>obj-&gt;foo(x, y, z)</code> calls the method <code>foo(x, y, z)</code> inside
+a critical section as long-lived as the call itself. For example:</p>
+
+<p><code>Cpp
+    void fun(Synchronized&lt; fbvector&lt;fbstring&gt; &gt; &amp; vec) {
+      vec-&gt;push_back("hello");
+      vec-&gt;push_back("world");
+    }
+</code></p>
+
+<p>The code above appends two elements to <code>vec</code>, but the elements
+won't appear necessarily one after another. This is because in
+between the two calls the mutex is released, and another thread
+may modify the vector. At the cost of anticipating a little, if
+you want to make sure you insert "world" right after "hello", you
+should do this:</p>
+
+<p><code>Cpp
+    void fun(Synchronized&lt; fbvector&lt;fbstring&gt; &gt; &amp; vec) {
+      SYNCHRONIZED (vec) {
+        vec.push_back("hello");
+        vec.push_back("world");
+      }
+    }
+</code></p>
+
+<p>This brings us to a cautionary discussion. The way <code>operator-&gt;</code>
+works is rather ingenious with creating an unnamed temporary that
+enforces locking and all, but it's not a panacea. Between two
+uses of <code>operator-&gt;</code>, other threads may change the synchronized
+object in arbitrary ways, so you shouldn't assume any sort of
+sequential consistency. For example, the innocent-looking code
+below may be patently wrong.</p>
+
+<p>If another thread clears the vector in between the call to
+<code>empty</code> and the call to <code>pop_back</code>, this code ends up attempting
+to extract an element from an empty vector. Needless to say,
+iteration a la:</p>
+
+<p><code>Cpp
+    // No. NO. NO!
+    FOR_EACH_RANGE (i, vec-&gt;begin(), vec-&gt;end()) {
+      ...
+    }
+</code></p>
+
+<p>is a crime punishable by long debugging nights.</p>
+
+<p>If the <code>Synchronized&lt;T&gt;</code> object involved is <code>const</code>-qualified,
+then you'll only be able to call <code>const</code> methods through `operator-</p>
+
+<blockquote>
+  <p><code>. So, for example,</code>vec->push_back("xyz")<code>won't work if</code>vec<code>
+  were</code>const<code>-qualified. The locking mechanism capitalizes on the
+  assumption that</code>const<code>methods don't modify their underlying
+  data and only acquires a read lock (as opposed to a read and
+  write lock), which is cheaper but works only if the immutability
+  assumption holds. Note that this is strictly not the case because
+  </code>const<code>-ness can always be undone via</code>mutable` members, casts,
+  and surreptitious access to shared data. Our code is seldom
+  guilty of such, and we also assume the STL uses no shenanigans.
+  But be warned.</p>
+</blockquote>
+
+<h4><code>asConst()</code></h4>
+
+<p>Consider:</p>
+
+<p><code>Cpp
+    void fun(Synchronized&lt;fbvector&lt;fbstring&gt;&gt; &amp; vec) {
+      if (vec-&gt;size() &gt; 1000000) {
+        LOG(WARNING) &lt;&lt; "The blinkenlights are overloaded.";
+      }
+      vec-&gt;push_back("another blinkenlight");
+    }
+</code></p>
+
+<p>This code is correct (at least according to a trivial intent),
+but less efficient than it could otherwise be. This is because
+the call <code>vec-&gt;size()</code> acquires a full read-write lock, but only
+needs a read lock. We need to help the type system here by
+telling it "even though <code>vec</code> is a mutable object, consider it a
+constant for this call". This should be easy enough because
+conversion to const is trivial - just issue <code>const_cast&lt;const
+Synchronized&lt;fbvector&lt;fbstring&gt;&gt;&amp;&gt;(vec)</code>. Ouch. To make that
+operation simpler - a lot simpler - <code>Synchronized&lt;T&gt;</code> defines the
+method <code>asConst()</code>, which is a glorious one-liner. With <code>asConst</code>
+in tow, it's very easy to achieve what we wanted:</p>
+
+<p><code>Cpp
+    void fun(Synchronized&lt;fbvector&lt;fbstring&gt;&gt; &amp; vec) {
+      if (vec.asConst()-&gt;size() &gt; 1000000) {
+        LOG(WARNING) &lt;&lt; "The blinkenlights are overloaded.";
+      }
+      vec-&gt;push_back("another blinkenlight");
+    }
+</code></p>
+
+<p>QED (Quite Easy Done). This concludes the documentation for
+<code>Synchronized&lt;T&gt;</code>.</p>
+
+<h3><code>SYNCHRONIZED</code></h3>
+
+<p>The <code>SYNCHRONIZED</code> macro introduces a pseudo-statement that adds
+a whole new level of usability to <code>Synchronized&lt;T&gt;</code>. As
+discussed, <code>operator-&gt;</code> can only lock over the duration of a
+call, so it is insufficient for complex operations. With
+<code>SYNCHRONIZED</code> you get to lock the object in a scoped manner (not
+unlike Java's <code>synchronized</code> statement) and to directly access
+the object inside that scope.</p>
+
+<p><code>SYNCHRONIZED</code> has two forms. We've seen the first one a couple
+of times already:</p>
+
+<p><code>Cpp
+    void fun(Synchronized&lt;fbvector&lt;int&gt;&gt; &amp; vec) {
+      SYNCHRONIZED (vec) {
+        vec.push_back(42);
+        CHECK(vec.back() == 42);
+        ...
+      }
+    }
+</code></p>
+
+<p>The scope introduced by <code>SYNCHRONIZED</code> is a critical section
+guarded by <code>vec</code>'s mutex. In addition to doing that,
+<code>SYNCHRONIZED</code> also does an interesting sleight of hand: it binds
+the name <code>vec</code> inside the scope to the underlying <code>fbvector&lt;int&gt;</code>
+object - as opposed to <code>vec</code>'s normal type, which is
+<code>Synchronized&lt;fbvector&lt;int&gt;&gt;</code>. This fits very nice the "form
+follow function" - inside the critical section you have earned
+access to the actual data, and the name bindings reflect that as
+well. <code>SYNCHRONIZED(xyz)</code> essentially cracks <code>xyz</code> temporarily
+and gives you access to its innards.</p>
+
+<p>Now, what if <code>fun</code> wants to take a pointer to
+<code>Synchronized&lt;fbvector&lt;int&gt;&gt;</code> - let's call it <code>pvec</code>? Generally,
+what if we want to synchronize on an expression as opposed to a
+symbolic variable? In that case <code>SYNCHRONIZED(*pvec)</code> would not
+work because "<code>*pvec</code>" is not a name. That's where the second
+form of <code>SYNCHRONIZED</code> kicks in:</p>
+
+<p><code>Cpp
+    void fun(Synchronized&lt;fbvector&lt;int&gt;&gt; * pvec) {
+      SYNCHRONIZED (vec, *pvec) {
+        vec.push_back(42);
+        CHECK(vec.back() == 42);
+        ...
+      }
+    }
+</code></p>
+
+<p>Ha, so now we pass two arguments to <code>SYNCHRONIZED</code>. The first
+argument is the name bound to the data, and the second argument
+is the expression referring to the <code>Synchronized&lt;T&gt;</code> object. So
+all cases are covered.</p>
+
+<h3><code>SYNCHRONIZED_CONST</code></h3>
+
+<p>Recall from the discussion about <code>asConst()</code> that we
+sometimes want to voluntarily restrict access to an otherwise
+mutable object. The <code>SYNCHRONIZED_CONST</code> pseudo-statement
+makes that intent easily realizable and visible to
+maintainers. For example:</p>
+
+<p><code>Cpp
+    void fun(Synchronized&lt;fbvector&lt;int&gt;&gt; &amp; vec) {
+      fbvector&lt;int&gt; local;
+      SYNCHRONIZED_CONST (vec) {
+        CHECK(vec.size() &gt; 42);
+        local = vec;
+      }
+      local.resize(42000);
+      SYNCHRONIZED (vec) {
+        local.swap(vec);
+      }
+    }
+</code></p>
+
+<p>Inside a <code>SYNCHRONIZED_CONST(xyz)</code> scope, <code>xyz</code> is bound to a <code>const</code>-
+qualified datum. The corresponding lock is a read lock.</p>
+
+<p><code>SYNCHRONIZED_CONST</code> also has a two-arguments version, just like
+<code>SYNCHRONIZED</code>. In fact, <code>SYNCHRONIZED_CONST(a)</code> simply expands
+to <code>SYNCHRONIZED(a, a.asConst())</code> and <code>SYNCHRONIZED_CONST(a, b)</code>
+expands to <code>SYNCHRONIZED(a, (b).asConst())</code>. The type system and
+<code>SYNCHRONIZED</code> take care of the rest.</p>
+
+<h3><code>TIMED_SYNCHRONIZED</code> and <code>TIMED_SYNCHRONIZED_CONST</code></h3>
+
+<p>These pseudo-statements allow you to acquire the mutex with a
+timeout. Example:</p>
+
+<p><code>Cpp
+    void fun(Synchronized&lt;fbvector&lt;int&gt;&gt; &amp; vec) {
+      TIMED_SYNCHRONIZED (10, vec) {
+        if (vec) {
+          vec-&gt;push_back(42);
+          CHECK(vec-&gt;back() == 42);
+        } else {
+            LOG(INFO) &lt;&lt; "Dognabbit, I've been waiting over here for 10 milliseconds and couldn't get through!";
+        }
+      }
+    }
+</code></p>
+
+<p>If the mutex acquisition was successful within a number of
+milliseconds dictated by its first argument, <code>TIMED_SYNCHRONIZED</code>
+binds its second argument to a pointer to the protected object.
+Otherwise, the pointer will be <code>NULL</code>. (Contrast that with
+<code>SYNCHRONIZED</code>), which always succeeds so it binds the protected
+object to a reference.) Inside the <code>TIMED_SYNCHRONIZED</code> statement
+you must, of course, make sure the pointer is not null to make
+sure the operation didn't time out.</p>
+
+<p><code>TIMED_SYNCHRONIZED</code> takes two or three parameters. The first is
+always the timeout, and the remaining one or two are just like
+the parameters of <code>SYNCHRONIZED</code>.</p>
+
+<p>Issuing <code>TIMED_SYNCHRONIZED</code> with a zero timeout is an
+opportunistic attempt to acquire the mutex.</p>
+
+<h3><code>UNSYNCHRONIZED</code></h3>
+
+<p><code>SYNCHRONIZED</code> is a good mechanism for enforcing scoped
+synchronization, but it has the inherent limitation that it
+requires the critical section to be, well, scoped. Sometimes the
+code structure requires a fleeting "escape" from the iron fist of
+synchronization. Clearly, simple cases are handled with sequenced
+<code>SYNCHRONIZED</code> scopes:</p>
+
+<p><code>Cpp
+    Synchronized&lt;map&lt;int, string&gt;&gt; dic;
+    ...
+    SYNCHRONIZED (dic) {
+      if (dic.find(0) != dic.end()) {
+        return;
+      }
+    }
+    LOG(INFO) &lt;&lt; "Key 0 not found, inserting it."
+    SYNCHRONIZED (dic) {
+      dic[0] = "zero";
+    }
+</code></p>
+
+<p>For more complex, nested flow control, you may want to use the
+<code>UNSYNCHRONIZED</code> macro. It (only) works inside a <code>SYNCHRONIZED</code>
+pseudo-statement and temporarily unlocks the mutex:</p>
+
+<p>``` Cpp</p>
+
+<pre><code>Synchronized&lt;map&lt;int, string&gt;&gt; dic;
+...
+SYNCHRONIZED (dic) {
+  auto i = dic.find(0);
+  if (i != dic.end()) {
+    UNSYNCHRONIZED (dic) {
+      LOG(INFO) &lt;&lt; "Key 0 not found, inserting it."
+    }
+    dic[0] = "zero";
+  } else {
+    *i = "zero";
+  }
+}
+LOG(INFO) &lt;&lt; "Key 0 not found, inserting it."
+SYNCHRONIZED (dic) {
+  dic[0] = "zero";
+}
+</code></pre>
+
+<p>```</p>
+
+<p>Clearly <code>UNSYNCHRONIZED</code> comes with specific caveats and
+liabilities. You must assume that during the <code>UNSYNCHRONIZED</code>
+section, other threads might have changed the protected structure
+in arbitrary ways. In the example above, you cannot use the
+iterator <code>i</code> and you cannot assume that the key <code>0</code> is not in the
+map; another thread might have inserted it while you were
+bragging on <code>LOG(INFO)</code>.</p>
+
+<h3><code>SYNCHRONIZED_DUAL</code></h3>
+
+<p>Sometimes locking just one object won't be able to cut the mustard. Consider a
+function that needs to lock two <code>Synchronized</code> objects at the
+same time - for example, to copy some data from one to the other.
+At first sight, it looks like nested <code>SYNCHRONIZED</code> statements
+will work just fine:</p>
+
+<p><code>Cpp
+    void fun(Synchronized&lt;fbvector&lt;int&gt;&gt; &amp; a, Synchronized&lt;fbvector&lt;int&gt;&gt; &amp; b) {
+      SYNCHRONIZED (a) {
+        SYNCHRONIZED (b) {
+          ... use a and b ...
+        }
+      }
+    }
+</code></p>
+
+<p>This code compiles and may even run most of the time, but embeds
+a deadly peril: if one threads call <code>fun(x, y)</code> and another
+thread calls <code>fun(y, x)</code>, then the two threads are liable to
+deadlocking as each thread will be waiting for a lock the other
+is holding. This issue is a classic that applies regardless of
+the fact the objects involved have the same type.</p>
+
+<p>This classic problem has a classic solution: all threads must
+acquire locks in the same order. The actual order is not
+important, just the fact that the order is the same in all
+threads. Many libraries simply acquire mutexes in increasing
+order of their address, which is what we'll do, too. The pseudo-
+statement <code>SYNCHRONIZED_DUAL</code> takes care of all details of proper
+locking of two objects and offering their innards:</p>
+
+<p><code>Cpp
+    void fun(Synchronized&lt;fbvector&lt;int&gt;&gt; &amp; a, Synchronized&lt;fbvector&lt;int&gt;&gt; &amp; b) {
+      SYNCHRONIZED_DUAL (myA, a, myB, b) {
+        ... use myA and myB ...
+      }
+    }
+</code></p>
+
+<p>To avoid potential confusions, <code>SYNCHRONIZED_DUAL</code> only defines a
+four-arguments version. The code above locks <code>a</code> and <code>b</code> in
+increasing order of their address and offers their data under the
+names <code>myA</code> and <code>myB</code>, respectively.</p>
+
+<h3>Synchronizing several data items with one mutex</h3>
+
+<p>The library is geared at protecting one object of a given type
+with a mutex. However, sometimes we'd like to protect two or more
+members with the same mutex. Consider for example a bidirectional
+map, i.e. a map that holds an <code>int</code> to <code>string</code> mapping and also
+the converse <code>string</code> to <code>int</code> mapping. The two maps would need
+to be manipulated simultaneously. There are at least two designs
+that come to mind.</p>
+
+<h4>Using a nested <code>struct</code></h4>
+
+<p>You can easily pack the needed data items in a little struct.
+For example:</p>
+
+<p><code>Cpp
+    class Server {
+      struct BiMap {
+        map&lt;int, string&gt; direct;
+        map&lt;string, int&gt; inverse;
+      };
+      Synchronized&lt;BiMap&gt; bimap_;
+      ...
+    };
+    ...
+    SYNCHRONIZED (bymap_) {
+      bymap_.direct[0] = "zero";
+      bymap_.inverse["zero"] = 0;
+    }
+</code></p>
+
+<p>With this code in tow you get to use <code>bimap_</code> just like any other
+<code>Synchronized</code> object, without much effort.</p>
+
+<h4>Using <code>std::tuple</code></h4>
+
+<p>If you won't stop short of using a spaceship-era approach,
+<code>std::tuple</code> is there for you. The example above could be
+rewritten for the same functionality like this:</p>
+
+<p><code>Cpp
+    class Server {
+      Synchronized&lt;tuple&lt;map&lt;int, string&gt;, map&lt;string, int&gt;&gt;&gt; bimap_;
+      ...
+    };
+    ...
+    SYNCHRONIZED (bymap_) {
+      get&lt;0&gt;(bymap_)[0] = "zero";
+      get&lt;1&gt;(bymap_)["zero"] = 0;
+    }
+</code></p>
+
+<p>The code uses <code>std::get</code> with compile-time integers to access the
+fields in the tuple. The relative advantages and disadvantages of
+using a local struct vs. <code>std::tuple</code> are quite obvious - in the
+first case you need to invest in the definition, in the second
+case you need to put up with slightly more verbose and less clear
+access syntax.</p>
+
+<h3>Summary</h3>
+
+<p><code>Synchronized</code> and its supporting tools offer you a simple,
+robust paradigm for mutual exclusion-based concurrency. Instead
+of manually pairing data with the mutexes that protect it and
+relying on convention to use them appropriately, you can benefit
+of encapsulation and typechecking to offload a large part of that
+task and to provide good guarantees.</p>

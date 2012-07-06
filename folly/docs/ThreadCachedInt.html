@@ -1,0 +1,99 @@
+<h2><code>folly/ThreadCachedInt.h</code></h2>
+
+<p>High-performance atomic increment using thread caching.</p>
+
+<p><code>folly/ThreadCachedInt.h</code> introduces a integer class designed for high
+performance increments from multiple threads simultaneously without
+loss of precision.  It has two read modes, <code>readFast</code> gives a potentially stale
+value with one load, and <code>readFull</code> gives the exact value, but is much slower,
+as discussed below.</p>
+
+<h3>Performance</h3>
+
+<hr />
+
+<p>Increment performance is up to 10x greater than <code>std::atomic_fetch_add</code> in high
+contention environments.  See <code>folly/test/ThreadCachedIntTest.h</code> for more
+comprehensive benchmarks.</p>
+
+<p><code>readFast</code> is as fast as a single load.</p>
+
+<p><code>readFull</code>, on the other hand, requires acquiring a mutex and iterating through
+a list to accumulate the values of all the thread local counters, so is
+significantly slower than <code>readFast</code>.</p>
+
+<h3>Usage</h3>
+
+<hr />
+
+<p>Create an instance and increment it with <code>increment</code> or the operator overloads.
+Read the value with <code>readFast</code> for quick, potentially stale data, or <code>readFull</code>
+for a more expensive but precise result. There are additional convenience
+functions as well, such as <code>set</code>.</p>
+
+<p><code>Cpp
+    ThreadCachedInt&lt;int64_t&gt; val;
+    EXPECT_EQ(0, val.readFast());
+    ++val;                        // increment in thread local counter only
+    EXPECT_EQ(0, val.readFast()); // increment has not been flushed
+    EXPECT_EQ(1, val.readFull()); // accumulates all thread local counters
+    val.set(2);
+    EXPECT_EQ(2, val.readFast());
+    EXPECT_EQ(2, val.readFull());
+</code></p>
+
+<h3>Implementation</h3>
+
+<hr />
+
+<p><code>folly::ThreadCachedInt</code> uses <code>folly::ThreadLocal</code> to store thread specific
+objects that each have a local counter.  When incrementing, the thread local
+instance is incremented.  If the local counter passes the cache size, the value
+is flushed to the global counter with an atomic increment.  It is this global
+counter that is read with <code>readFast</code> via a simple load, but will not count any
+of the updates that haven't been flushed.</p>
+
+<p>In order to read the exact value, <code>ThreadCachedInt</code> uses the extended
+<code>readAllThreads()</code> API of <code>folly::ThreadLocal</code> to iterate through all the
+references to all the associated thread local object instances.  This currently
+requires acquiring a global mutex and iterating through the references,
+accumulating the counters along with the global counter.  This also means that
+the first use of the object from a new thread will acquire the mutex in order to
+insert the thread local reference into the list.  By default, there is one
+global mutex per integer type used in <code>ThreadCachedInt</code>.  If you plan on using a
+lot of <code>ThreadCachedInt</code>s in your application, considering breaking up the
+global mutex by introducing additional <code>Tag</code> template parameters.</p>
+
+<p><code>set</code> simply sets the global counter value, and marks all the thread local
+instances as needing to be reset.  When iterating with <code>readFull</code>, thread local
+counters that have been marked as reset are skipped.  When incrementing, thread
+local counters marked for reset are set to zero and unmarked for reset.</p>
+
+<p>Upon destruction, thread local counters are flushed to the parent so that counts
+are not lost after increments in temporary threads.  This requires grabbing the
+global mutex to make sure the parent itself wasn't destroyed in another thread
+already.</p>
+
+<h3>Alternate Implementations</h3>
+
+<hr />
+
+<p>There are of course many ways to skin a cat, and you may notice there is a
+partial alternate implementation in <code>folly/test/ThreadCachedIntTest.cpp</code> that
+provides similar performance.  <code>ShardedAtomicInt</code> simply uses an array of
+<code>std::atomic&lt;int64_t&gt;</code>'s and hashes threads across them to do low-contention
+atomic increments, and <code>readFull</code> just sums up all the ints.</p>
+
+<p>This sounds great, but in order to get the contention low enough to get similar
+performance as ThreadCachedInt with 24 threads, <code>ShardedAtomicInt</code> needs about
+2000 ints to hash across.  This uses about 20x more memory, and the lock-free
+<code>readFull</code> has to sum up all 2048 ints, which ends up being a about 50x slower
+than <code>ThreadCachedInt</code> in low contention situations, which is hopefully the
+common case since it's designed for high-write, low read access patterns.
+Performance of <code>readFull</code> is about the same speed as <code>ThreadCachedInt</code> in high
+contention environments.</p>
+
+<p>Depending on the operating conditions, it may make more sense to use one
+implementation over the other.  For example, a lower contention environment will
+probably be able to use a <code>ShardedAtomicInt</code> with a much smaller array without
+hurting performance, while improving memory consumption and perf of <code>readFull</code>.</p>

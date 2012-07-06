@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html><head><title>joekychen/folly » folly › dynamic.h
+
+</title>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+<meta name="generator" content="Docco">
+<link rel="stylesheet" media="all" href="../stylesheets/docco.min.css" />
+
+
+</head>
+<body>
+<div id="container">
+<div id="background"></div>
+<table cellpadding="0" cellspacing="0">
+<thead><tr><th class="docs"><a id="home" href="../index.html"></a><h1>dynamic.h</h1></th><th class="code"></th></tr></thead>
+<tbody>
+
+
+<tr id="section-1"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-1">&#182;</a></div></td><td class="code"><div class="highlight"><pre><span class="cm">/*</span>
+<span class="cm"> * Copyright 2012 Facebook, Inc.</span>
+<span class="cm"> *</span>
+<span class="cm"> * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span class="cm"> * you may not use this file except in compliance with the License.</span>
+<span class="cm"> * You may obtain a copy of the License at</span>
+<span class="cm"> *</span>
+<span class="cm"> *   http://www.apache.org/licenses/LICENSE-2.0</span>
+<span class="cm"> *</span>
+<span class="cm"> * Unless required by applicable law or agreed to in writing, software</span>
+<span class="cm"> * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span class="cm"> * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span class="cm"> * See the License for the specific language governing permissions and</span>
+<span class="cm"> * limitations under the License.</span>
+<span class="cm"> */</span>
+
+<span class="cm">/**</span>
+<span class="cm"> * This is a runtime dynamically typed value.  It holds types from a</span>
+<span class="cm"> * specific predetermined set of types (ints, bools, arrays, etc).  In</span>
+<span class="cm"> * particular, it can be used as a convenient in-memory representation</span>
+<span class="cm"> * for complete json objects.</span>
+<span class="cm"> *</span>
+<span class="cm"> * In general you can try to use these objects as if they were the</span>
+<span class="cm"> * type they represent (although in some cases with a slightly less</span>
+<span class="cm"> * complete interface than the raw type), and it&#39;ll just throw a</span>
+<span class="cm"> * TypeError if it is used in an illegal way.</span>
+<span class="cm"> *</span>
+<span class="cm"> * Some examples:</span>
+<span class="cm"> *</span>
+<span class="cm"> *   dynamic twelve = 12;</span>
+<span class="cm"> *   dynamic str = &quot;string&quot;;</span>
+<span class="cm"> *   dynamic map = dynamic::object;</span>
+<span class="cm"> *   map[str] = twelve;</span>
+<span class="cm"> *   map[str + &quot;another_str&quot;] = { &quot;array&quot;, &quot;of&quot;, 4, &quot;elements&quot; };</span>
+<span class="cm"> *   map.insert(&quot;null_element&quot;, nullptr);</span>
+<span class="cm"> *   ++map[str];</span>
+<span class="cm"> *   assert(map[str] == 13);</span>
+<span class="cm"> *</span>
+<span class="cm"> *   // Building a complex object with a sub array inline:</span>
+<span class="cm"> *   dynamic d = dynamic::object</span>
+<span class="cm"> *     (&quot;key&quot;, &quot;value&quot;)</span>
+<span class="cm"> *     (&quot;key2&quot;, { &quot;a&quot;, &quot;array&quot; })</span>
+<span class="cm"> *     ;</span>
+<span class="cm"> *</span>
+<span class="cm"> * Also see folly/json.h for the serialization and deserialization</span>
+<span class="cm"> * functions for JSON.</span>
+<span class="cm"> *</span>
+<span class="cm"> * Note: dynamic is not DefaultConstructible.  Rationale:</span>
+<span class="cm"> *</span>
+<span class="cm"> *   - The intuitive thing to initialize a defaulted dynamic to would</span>
+<span class="cm"> *     be nullptr.</span>
+<span class="cm"> *</span>
+<span class="cm"> *   - However, the expression dynamic d = {} is required to call the</span>
+<span class="cm"> *     default constructor by the standard, which is confusing</span>
+<span class="cm"> *     behavior for dynamic unless the default constructor creates an</span>
+<span class="cm"> *     empty array.</span>
+<span class="cm"> *</span>
+<span class="cm"> * Additional documentation is in folly/docs/Dynamic.md.</span>
+<span class="cm"> *</span>
+<span class="cm"> * @author Jordan DeLong &lt;delong.j@fb.com&gt;</span>
+<span class="cm"> */</span>
+
+<span class="cp">#ifndef FOLLY_DYNAMIC_H_</span>
+<span class="cp">#define FOLLY_DYNAMIC_H_</span>
+
+<span class="cp">#include &lt;unordered_map&gt;</span>
+<span class="cp">#include &lt;memory&gt;</span>
+<span class="cp">#include &lt;string&gt;</span>
+<span class="cp">#include &lt;utility&gt;</span>
+<span class="cp">#include &lt;ostream&gt;</span>
+<span class="cp">#include &lt;type_traits&gt;</span>
+<span class="cp">#include &lt;initializer_list&gt;</span>
+<span class="cp">#include &lt;cstdint&gt;</span>
+<span class="cp">#include &lt;boost/operators.hpp&gt;</span>
+
+<span class="cp">#include &quot;folly/Traits.h&quot;</span>
+<span class="cp">#include &quot;folly/FBVector.h&quot;</span>
+<span class="cp">#include &quot;folly/FBString.h&quot;</span>
+
+<span class="n">namespace</span> <span class="n">folly</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-2"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-2">&#182;</a></div><p>////////////////////////////////////////////////////////////////////</p></td><td class="code"><div class="highlight"><pre><span class="k">struct</span> <span class="n">dynamic</span><span class="p">;</span>
+<span class="k">struct</span> <span class="n">TypeError</span><span class="p">;</span>
+<span class="n">template</span><span class="o">&lt;&gt;</span> <span class="n">FOLLY_ASSUME_RELOCATABLE</span><span class="p">(</span><span class="n">dynamic</span><span class="p">);</span></pre></div></td></tr>
+
+
+<tr id="section-3"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-3">&#182;</a></div><p>////////////////////////////////////////////////////////////////////</p></td><td class="code"><div class="highlight"><pre><span class="k">struct</span> <span class="n">dynamic</span> <span class="o">:</span> <span class="n">private</span> <span class="n">boost</span><span class="o">::</span><span class="n">operators</span><span class="o">&lt;</span><span class="n">dynamic</span><span class="o">&gt;</span> <span class="p">{</span>
+  <span class="k">enum</span> <span class="n">Type</span> <span class="p">{</span>
+    <span class="n">NULLT</span><span class="p">,</span>
+    <span class="n">ARRAY</span><span class="p">,</span>
+    <span class="n">BOOL</span><span class="p">,</span>
+    <span class="n">DOUBLE</span><span class="p">,</span>
+    <span class="n">INT64</span><span class="p">,</span>
+    <span class="n">OBJECT</span><span class="p">,</span>
+    <span class="n">STRING</span><span class="p">,</span>
+  <span class="p">};</span>
+
+  <span class="cm">/*</span>
+<span class="cm">   * We support direct iteration of arrays, and indirect iteration of objects.</span>
+<span class="cm">   * See begin(), end(), keys(), values(), and items() for more.</span>
+<span class="cm">   *</span>
+<span class="cm">   * Array iterators dereference as the elements in the array.</span>
+<span class="cm">   * Object key iterators dereference as the keys in the object.</span>
+<span class="cm">   * Object value iterators dereference as the values in the object.</span>
+<span class="cm">   * Object item iterators dereference as pairs of (key, value).</span>
+<span class="cm">   */</span>
+<span class="nl">private:</span>
+  <span class="k">typedef</span> <span class="n">fbvector</span><span class="o">&lt;</span><span class="n">dynamic</span><span class="o">&gt;</span> <span class="n">Array</span><span class="p">;</span>
+<span class="nl">public:</span>
+  <span class="k">typedef</span> <span class="n">Array</span><span class="o">::</span><span class="n">const_iterator</span> <span class="n">const_iterator</span><span class="p">;</span>
+  <span class="k">struct</span> <span class="n">const_key_iterator</span><span class="p">;</span>
+  <span class="k">struct</span> <span class="n">const_value_iterator</span><span class="p">;</span>
+  <span class="k">struct</span> <span class="n">const_item_iterator</span><span class="p">;</span>
+
+  <span class="cm">/*</span>
+<span class="cm">   * Creation routines for making dynamic objects.  Objects are maps</span>
+<span class="cm">   * from key to value (so named due to json-related origins here).</span>
+<span class="cm">   *</span>
+<span class="cm">   * Example:</span>
+<span class="cm">   *</span>
+<span class="cm">   *   // Make a fairly complex dynamic:</span>
+<span class="cm">   *   dynamic d = dynamic::object(&quot;key&quot;, &quot;value1&quot;)</span>
+<span class="cm">   *                              (&quot;key2&quot;, { &quot;value&quot;, &quot;with&quot;, 4, &quot;words&quot; });</span>
+<span class="cm">   *</span>
+<span class="cm">   *   // Build an object in a few steps:</span>
+<span class="cm">   *   dynamic d = dynamic::object;</span>
+<span class="cm">   *   d[&quot;key&quot;] = 12;</span>
+<span class="cm">   *   d[&quot;something_else&quot;] = { 1, 2, 3, nullptr };</span>
+<span class="cm">   */</span>
+<span class="nl">private:</span>
+  <span class="k">struct</span> <span class="n">ObjectMaker</span><span class="p">;</span>
+
+<span class="nl">public:</span>
+  <span class="n">template</span><span class="o">&lt;</span><span class="n">class</span><span class="p">...</span> <span class="n">Args</span><span class="o">&gt;</span> <span class="k">static</span> <span class="n">ObjectMaker</span> <span class="n">object</span><span class="p">(</span><span class="n">Args</span><span class="o">&amp;&amp;</span><span class="p">...);</span>
+
+  <span class="cm">/*</span>
+<span class="cm">   * String compatibility constructors.</span>
+<span class="cm">   */</span>
+  <span class="cm">/* implicit */</span> <span class="n">dynamic</span><span class="p">(</span><span class="kt">char</span> <span class="k">const</span><span class="o">*</span> <span class="n">val</span><span class="p">);</span>
+  <span class="cm">/* implicit */</span> <span class="n">dynamic</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">string</span> <span class="k">const</span><span class="o">&amp;</span> <span class="n">val</span><span class="p">);</span>
+
+  <span class="cm">/*</span>
+<span class="cm">   * This is part of the plumbing for object(), above.  Used to create</span>
+<span class="cm">   * a new object dynamic.</span>
+<span class="cm">   */</span>
+  <span class="cm">/* implicit */</span> <span class="n">dynamic</span><span class="p">(</span><span class="n">ObjectMaker</span> <span class="p">(</span><span class="o">*</span><span class="p">)());</span>
+  <span class="cm">/* implicit */</span> <span class="n">dynamic</span><span class="p">(</span><span class="n">ObjectMaker</span> <span class="k">const</span><span class="o">&amp;</span><span class="p">)</span> <span class="o">=</span> <span class="n">delete</span><span class="p">;</span>
+  <span class="cm">/* implicit */</span> <span class="n">dynamic</span><span class="p">(</span><span class="n">ObjectMaker</span><span class="o">&amp;&amp;</span><span class="p">);</span>
+
+  <span class="cm">/*</span>
+<span class="cm">   * Create a new array from an initializer list.</span>
+<span class="cm">   *</span>
+<span class="cm">   * For example:</span>
+<span class="cm">   *</span>
+<span class="cm">   *   dynamic v = { 1, 2, 3, &quot;foo&quot; };</span>
+<span class="cm">   */</span>
+  <span class="cm">/* implicit */</span> <span class="n">dynamic</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">initializer_list</span><span class="o">&lt;</span><span class="n">dynamic</span><span class="o">&gt;</span> <span class="n">il</span><span class="p">);</span>
+
+  <span class="cm">/*</span>
+<span class="cm">   * Conversion constructors from most of the other types.</span>
+<span class="cm">   */</span>
+  <span class="n">template</span><span class="o">&lt;</span><span class="n">class</span> <span class="n">T</span><span class="o">&gt;</span> <span class="cm">/* implicit */</span> <span class="n">dynamic</span><span class="p">(</span><span class="n">T</span> <span class="n">t</span><span class="p">);</span>
+
+  <span class="cm">/*</span>
+<span class="cm">   * Create a dynamic that is an array of the values from the supplied</span>
+<span class="cm">   * iterator range.</span>
+<span class="cm">   */</span>
+  <span class="n">template</span><span class="o">&lt;</span><span class="n">class</span> <span class="n">Iterator</span><span class="o">&gt;</span> <span class="n">dynamic</span><span class="p">(</span><span class="n">Iterator</span> <span class="n">first</span><span class="p">,</span> <span class="n">Iterator</span> <span class="n">last</span><span class="p">);</span>
+
+  <span class="n">dynamic</span><span class="p">(</span><span class="n">dynamic</span> <span class="k">const</span><span class="o">&amp;</span><span class="p">);</span>
+  <span class="n">dynamic</span><span class="p">(</span><span class="n">dynamic</span><span class="o">&amp;&amp;</span><span class="p">);</span>
+  <span class="o">~</span><span class="n">dynamic</span><span class="p">();</span>
+
+  <span class="cm">/*</span>
+<span class="cm">   * &quot;Deep&quot; equality comparison.  This will compare all the way down</span>
+<span class="cm">   * an object or array, and is potentially expensive.</span>
+<span class="cm">   */</span>
+  <span class="n">bool</span> <span class="n">operator</span><span class="o">==</span><span class="p">(</span><span class="n">dynamic</span> <span class="k">const</span><span class="o">&amp;</span> <span class="n">o</span><span class="p">)</span> <span class="k">const</span><span class="p">;</span>
+
+  <span class="cm">/*</span>
+<span class="cm">   * For all types except object this returns the natural ordering on</span>
+<span class="cm">   * those types.  For objects, we throw TypeError.</span>
+<span class="cm">   */</span>
+  <span class="n">bool</span> <span class="n">operator</span><span class="o">&lt;</span><span class="p">(</span><span class="n">dynamic</span> <span class="k">const</span><span class="o">&amp;</span> <span class="n">o</span><span class="p">)</span> <span class="k">const</span><span class="p">;</span>
+
+  <span class="cm">/*</span>
+<span class="cm">   * General operators.</span>
+<span class="cm">   *</span>
+<span class="cm">   * These throw TypeError when used with types or type combinations</span>
+<span class="cm">   * that don&#39;t support them.</span>
+<span class="cm">   *</span>
+<span class="cm">   * These functions may also throw if you use 64-bit integers with</span>
+<span class="cm">   * doubles when the integers are too big to fit in a double.</span>
+<span class="cm">   */</span>
+  <span class="n">dynamic</span><span class="o">&amp;</span> <span class="n">operator</span><span class="o">+=</span><span class="p">(</span><span class="n">dynamic</span> <span class="k">const</span><span class="o">&amp;</span><span class="p">);</span>
+  <span class="n">dynamic</span><span class="o">&amp;</span> <span class="n">operator</span><span class="o">-=</span><span class="p">(</span><span class="n">dynamic</span> <span class="k">const</span><span class="o">&amp;</span><span class="p">);</span>
+  <span class="n">dynamic</span><span class="o">&amp;</span> <span class="n">operator</span><span class="o">*=</span><span class="p">(</span><span class="n">dynamic</span> <span class="k">const</span><span class="o">&amp;</span><span class="p">);</span>
+  <span class="n">dynamic</span><span class="o">&amp;</span> <span class="n">operator</span><span class="o">/=</span><span class="p">(</span><span class="n">dynamic</span> <span class="k">const</span><span class="o">&amp;</span><span class="p">);</span>
+  <span class="n">dynamic</span><span class="o">&amp;</span> <span class="n">operator</span><span class="o">%=</span><span class="p">(</span><span class="n">dynamic</span> <span class="k">const</span><span class="o">&amp;</span><span class="p">);</span>
+  <span class="n">dynamic</span><span class="o">&amp;</span> <span class="n">operator</span><span class="o">|=</span><span class="p">(</span><span class="n">dynamic</span> <span class="k">const</span><span class="o">&amp;</span><span class="p">);</span>
+  <span class="n">dynamic</span><span class="o">&amp;</span> <span class="n">operator</span><span class="o">&amp;=</span><span class="p">(</span><span class="n">dynamic</span> <span class="k">const</span><span class="o">&amp;</span><span class="p">);</span>
+  <span class="n">dynamic</span><span class="o">&amp;</span> <span class="n">operator</span><span class="o">^=</span><span class="p">(</span><span class="n">dynamic</span> <span class="k">const</span><span class="o">&amp;</span><span class="p">);</span>
+  <span class="n">dynamic</span><span class="o">&amp;</span> <span class="n">operator</span><span class="o">++</span><span class="p">();</span>
+  <span class="n">dynamic</span><span class="o">&amp;</span> <span class="n">operator</span><span class="o">--</span><span class="p">();</span>
+
+  <span class="cm">/*</span>
+<span class="cm">   * Assignment from other dynamics.  Because of the implicit conversion</span>
+<span class="cm">   * to dynamic from its potential types, you can use this to change the</span>
+<span class="cm">   * type pretty intuitively.</span>
+<span class="cm">   *</span>
+<span class="cm">   * Basic guarantee only.</span>
+<span class="cm">   */</span>
+  <span class="n">dynamic</span><span class="o">&amp;</span> <span class="n">operator</span><span class="o">=</span><span class="p">(</span><span class="n">dynamic</span> <span class="k">const</span><span class="o">&amp;</span><span class="p">);</span>
+  <span class="n">dynamic</span><span class="o">&amp;</span> <span class="n">operator</span><span class="o">=</span><span class="p">(</span><span class="n">dynamic</span><span class="o">&amp;&amp;</span><span class="p">);</span>
+
+  <span class="cm">/*</span>
+<span class="cm">   * For simple dynamics (not arrays or objects), this prints the</span>
+<span class="cm">   * value to an std::ostream in the expected way.  Respects the</span>
+<span class="cm">   * formatting manipulators that have been sent to the stream</span>
+<span class="cm">   * already.</span>
+<span class="cm">   *</span>
+<span class="cm">   * If the dynamic holds an object or array, this prints them in a</span>
+<span class="cm">   * format very similar to JSON.  (It will in fact actually be JSON</span>
+<span class="cm">   * as long as the dynamic validly represents a JSON object---i.e. it</span>
+<span class="cm">   * can&#39;t have non-string keys.)</span>
+<span class="cm">   */</span>
+  <span class="n">friend</span> <span class="n">std</span><span class="o">::</span><span class="n">ostream</span><span class="o">&amp;</span> <span class="n">operator</span><span class="o">&lt;&lt;</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">ostream</span><span class="o">&amp;</span><span class="p">,</span> <span class="n">dynamic</span> <span class="k">const</span><span class="o">&amp;</span><span class="p">);</span>
+
+  <span class="cm">/*</span>
+<span class="cm">   * Returns true if this dynamic is of the specified type.</span>
+<span class="cm">   */</span>
+  <span class="n">bool</span> <span class="n">isString</span><span class="p">()</span> <span class="k">const</span><span class="p">;</span>
+  <span class="n">bool</span> <span class="n">isObject</span><span class="p">()</span> <span class="k">const</span><span class="p">;</span>
+  <span class="n">bool</span> <span class="n">isBool</span><span class="p">()</span> <span class="k">const</span><span class="p">;</span>
+  <span class="n">bool</span> <span class="n">isNull</span><span class="p">()</span> <span class="k">const</span><span class="p">;</span>
+  <span class="n">bool</span> <span class="n">isArray</span><span class="p">()</span> <span class="k">const</span><span class="p">;</span>
+  <span class="n">bool</span> <span class="n">isDouble</span><span class="p">()</span> <span class="k">const</span><span class="p">;</span>
+  <span class="n">bool</span> <span class="n">isInt</span><span class="p">()</span> <span class="k">const</span><span class="p">;</span>
+
+  <span class="cm">/*</span>
+<span class="cm">   * Returns: isInt() || isDouble().</span>
+<span class="cm">   */</span>
+  <span class="n">bool</span> <span class="n">isNumber</span><span class="p">()</span> <span class="k">const</span><span class="p">;</span>
+
+  <span class="cm">/*</span>
+<span class="cm">   * Returns the type of this dynamic.</span>
+<span class="cm">   */</span>
+  <span class="n">Type</span> <span class="n">type</span><span class="p">()</span> <span class="k">const</span><span class="p">;</span>
+
+  <span class="cm">/*</span>
+<span class="cm">   * Extract a value while trying to convert to the specified type.</span>
+<span class="cm">   * Throws exceptions if we cannot convert from the real type to the</span>
+<span class="cm">   * requested type.</span>
+<span class="cm">   *</span>
+<span class="cm">   * Note you can only use this to access integral types or strings,</span>
+<span class="cm">   * since arrays and objects are generally best delt with as a</span>
+<span class="cm">   * dynamic.</span>
+<span class="cm">   */</span>
+  <span class="n">fbstring</span> <span class="n">asString</span><span class="p">()</span> <span class="k">const</span><span class="p">;</span>
+  <span class="kt">double</span>   <span class="n">asDouble</span><span class="p">()</span> <span class="k">const</span><span class="p">;</span>
+  <span class="kt">int64_t</span>  <span class="n">asInt</span><span class="p">()</span> <span class="k">const</span><span class="p">;</span>
+  <span class="n">bool</span>     <span class="n">asBool</span><span class="p">()</span> <span class="k">const</span><span class="p">;</span>
+
+  <span class="cm">/*</span>
+<span class="cm">   * Returns: true if this dynamic is null, an empty array, an empty</span>
+<span class="cm">   * object, or an empty string.</span>
+<span class="cm">   */</span>
+  <span class="n">bool</span> <span class="n">empty</span><span class="p">()</span> <span class="k">const</span><span class="p">;</span>
+
+  <span class="cm">/*</span>
+<span class="cm">   * If this is an array or an object, returns the number of elements</span>
+<span class="cm">   * contained.  If it is a string, returns the length.  Otherwise</span>
+<span class="cm">   * throws TypeError.</span>
+<span class="cm">   */</span>
+  <span class="n">std</span><span class="o">::</span><span class="kt">size_t</span> <span class="n">size</span><span class="p">()</span> <span class="k">const</span><span class="p">;</span>
+
+  <span class="cm">/*</span>
+<span class="cm">   * You can iterate over the values of the array.  Calling these on</span>
+<span class="cm">   * non-arrays will throw a TypeError.</span>
+<span class="cm">   */</span>
+  <span class="n">const_iterator</span> <span class="n">begin</span><span class="p">()</span>  <span class="k">const</span><span class="p">;</span>
+  <span class="n">const_iterator</span> <span class="n">end</span><span class="p">()</span>    <span class="k">const</span><span class="p">;</span>
+
+<span class="nl">private:</span>
+  <span class="cm">/*</span>
+<span class="cm">   * Helper object returned by keys(), values(), and items().</span>
+<span class="cm">   */</span>
+  <span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">T</span><span class="o">&gt;</span> <span class="k">struct</span> <span class="n">IterableProxy</span><span class="p">;</span>
+
+<span class="nl">public:</span>
+  <span class="cm">/*</span>
+<span class="cm">   * You can iterate over the keys, values, or items (std::pair of key and</span>
+<span class="cm">   * value) in an object.  Calling these on non-objects will throw a TypeError.</span>
+<span class="cm">   */</span>
+  <span class="n">IterableProxy</span><span class="o">&lt;</span><span class="n">const_key_iterator</span><span class="o">&gt;</span> <span class="n">keys</span><span class="p">()</span> <span class="k">const</span><span class="p">;</span>
+  <span class="n">IterableProxy</span><span class="o">&lt;</span><span class="n">const_value_iterator</span><span class="o">&gt;</span> <span class="n">values</span><span class="p">()</span> <span class="k">const</span><span class="p">;</span>
+  <span class="n">IterableProxy</span><span class="o">&lt;</span><span class="n">const_item_iterator</span><span class="o">&gt;</span> <span class="n">items</span><span class="p">()</span> <span class="k">const</span><span class="p">;</span>
+
+  <span class="cm">/*</span>
+<span class="cm">   * AssociativeContainer-style find interface for objects.  Throws if</span>
+<span class="cm">   * this is not an object.</span>
+<span class="cm">   *</span>
+<span class="cm">   * Returns: end() if the key is not present, or an iterator pointing</span>
+<span class="cm">   * to the item.</span>
+<span class="cm">   */</span>
+  <span class="n">const_item_iterator</span> <span class="n">find</span><span class="p">(</span><span class="n">dynamic</span> <span class="k">const</span><span class="o">&amp;</span><span class="p">)</span> <span class="k">const</span><span class="p">;</span>
+
+  <span class="cm">/*</span>
+<span class="cm">   * If this is an object, returns whether it contains a field with</span>
+<span class="cm">   * the given name.  Otherwise throws TypeError.</span>
+<span class="cm">   */</span>
+  <span class="n">std</span><span class="o">::</span><span class="kt">size_t</span> <span class="n">count</span><span class="p">(</span><span class="n">dynamic</span> <span class="k">const</span><span class="o">&amp;</span><span class="p">)</span> <span class="k">const</span><span class="p">;</span>
+
+  <span class="cm">/*</span>
+<span class="cm">   * For objects or arrays, provides access to sub-fields by index or</span>
+<span class="cm">   * field name.</span>
+<span class="cm">   *</span>
+<span class="cm">   * Using these with dynamic objects that are not arrays or objects</span>
+<span class="cm">   * will throw a TypeError.  Using an index that is out of range or</span>
+<span class="cm">   * object-element that&#39;s not present throws std::out_of_range.</span>
+<span class="cm">   */</span>
+  <span class="n">dynamic</span> <span class="k">const</span><span class="o">&amp;</span> <span class="n">at</span><span class="p">(</span><span class="n">dynamic</span> <span class="k">const</span><span class="o">&amp;</span><span class="p">)</span> <span class="k">const</span><span class="p">;</span>
+  <span class="n">dynamic</span><span class="o">&amp;</span>       <span class="n">at</span><span class="p">(</span><span class="n">dynamic</span> <span class="k">const</span><span class="o">&amp;</span><span class="p">);</span>
+
+  <span class="cm">/*</span>
+<span class="cm">   * This works for access to both objects and arrays.</span>
+<span class="cm">   *</span>
+<span class="cm">   * In the case of an array, the index must be an integer, and this will throw</span>
+<span class="cm">   * std::out_of_range if it is less than zero or greater than size().</span>
+<span class="cm">   *</span>
+<span class="cm">   * In the case of an object, the non-const overload inserts a null</span>
+<span class="cm">   * value if the key isn&#39;t present.  The const overload will throw</span>
+<span class="cm">   * std::out_of_range if the key is not present.</span>
+<span class="cm">   *</span>
+<span class="cm">   * These functions do not invalidate iterators.</span>
+<span class="cm">   */</span>
+  <span class="n">dynamic</span><span class="o">&amp;</span>       <span class="n">operator</span><span class="p">[](</span><span class="n">dynamic</span> <span class="k">const</span><span class="o">&amp;</span><span class="p">);</span>
+  <span class="n">dynamic</span> <span class="k">const</span><span class="o">&amp;</span> <span class="n">operator</span><span class="p">[](</span><span class="n">dynamic</span> <span class="k">const</span><span class="o">&amp;</span><span class="p">)</span> <span class="k">const</span><span class="p">;</span>
+
+  <span class="cm">/*</span>
+<span class="cm">   * Only defined for objects, throws TypeError otherwise.</span>
+<span class="cm">   *</span>
+<span class="cm">   * getDefault will return the value associated with the supplied key, the</span>
+<span class="cm">   * supplied default otherwise. setDefault will set the key to the supplied</span>
+<span class="cm">   * default if it is not yet set, otherwise leaving it. setDefault returns</span>
+<span class="cm">   * a reference to the existing value if present, the new value otherwise.</span>
+<span class="cm">   */</span>
+  <span class="n">dynamic</span>
+  <span class="n">getDefault</span><span class="p">(</span><span class="k">const</span> <span class="n">dynamic</span><span class="o">&amp;</span> <span class="n">k</span><span class="p">,</span> <span class="k">const</span> <span class="n">dynamic</span><span class="o">&amp;</span> <span class="n">v</span> <span class="o">=</span> <span class="n">dynamic</span><span class="o">::</span><span class="n">object</span><span class="p">)</span> <span class="k">const</span><span class="p">;</span>
+  <span class="n">dynamic</span><span class="o">&amp;&amp;</span> <span class="n">getDefault</span><span class="p">(</span><span class="k">const</span> <span class="n">dynamic</span><span class="o">&amp;</span> <span class="n">k</span><span class="p">,</span> <span class="n">dynamic</span><span class="o">&amp;&amp;</span> <span class="n">v</span><span class="p">)</span> <span class="k">const</span><span class="p">;</span>
+  <span class="n">template</span><span class="o">&lt;</span><span class="n">class</span> <span class="n">K</span><span class="p">,</span> <span class="n">class</span> <span class="n">V</span> <span class="o">=</span> <span class="n">dynamic</span><span class="o">&gt;</span>
+  <span class="n">dynamic</span><span class="o">&amp;</span> <span class="n">setDefault</span><span class="p">(</span><span class="n">K</span><span class="o">&amp;&amp;</span> <span class="n">k</span><span class="p">,</span> <span class="n">V</span><span class="o">&amp;&amp;</span> <span class="n">v</span> <span class="o">=</span> <span class="n">dynamic</span><span class="o">::</span><span class="n">object</span><span class="p">);</span>
+
+  <span class="cm">/*</span>
+<span class="cm">   * Resizes an array so it has at n elements, using the supplied</span>
+<span class="cm">   * default to fill new elements.  Throws TypeError if this dynamic</span>
+<span class="cm">   * is not an array.</span>
+<span class="cm">   *</span>
+<span class="cm">   * May invalidate iterators.</span>
+<span class="cm">   *</span>
+<span class="cm">   * Post: size() == n</span>
+<span class="cm">   */</span>
+  <span class="kt">void</span> <span class="n">resize</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="kt">size_t</span> <span class="n">n</span><span class="p">,</span> <span class="n">dynamic</span> <span class="k">const</span><span class="o">&amp;</span> <span class="o">=</span> <span class="n">nullptr</span><span class="p">);</span>
+
+  <span class="cm">/*</span>
+<span class="cm">   * Inserts the supplied key-value pair to an object, or throws if</span>
+<span class="cm">   * it&#39;s not an object.</span>
+<span class="cm">   *</span>
+<span class="cm">   * Invalidates iterators.</span>
+<span class="cm">   */</span>
+  <span class="n">template</span><span class="o">&lt;</span><span class="n">class</span> <span class="n">K</span><span class="p">,</span> <span class="n">class</span> <span class="n">V</span><span class="o">&gt;</span> <span class="kt">void</span> <span class="n">insert</span><span class="p">(</span><span class="n">K</span><span class="o">&amp;&amp;</span><span class="p">,</span> <span class="n">V</span><span class="o">&amp;&amp;</span> <span class="n">val</span><span class="p">);</span>
+
+  <span class="cm">/*</span>
+<span class="cm">   * Erase an element from a dynamic object, by key.</span>
+<span class="cm">   *</span>
+<span class="cm">   * Invalidates iterators to the element being erased.</span>
+<span class="cm">   *</span>
+<span class="cm">   * Returns the number of elements erased (i.e. 1 or 0).</span>
+<span class="cm">   */</span>
+  <span class="n">std</span><span class="o">::</span><span class="kt">size_t</span> <span class="n">erase</span><span class="p">(</span><span class="n">dynamic</span> <span class="k">const</span><span class="o">&amp;</span> <span class="n">key</span><span class="p">);</span>
+
+  <span class="cm">/*</span>
+<span class="cm">   * Erase an element from a dynamic object or array, using an</span>
+<span class="cm">   * iterator or an iterator range.</span>
+<span class="cm">   *</span>
+<span class="cm">   * In arrays, invalidates iterators to elements after the element</span>
+<span class="cm">   * being erased.  In objects, invalidates iterators to the elements</span>
+<span class="cm">   * being erased.</span>
+<span class="cm">   *</span>
+<span class="cm">   * Returns a new iterator to the first element beyond any elements</span>
+<span class="cm">   * removed, or end() if there are none.  (The iteration order does</span>
+<span class="cm">   * not change.)</span>
+<span class="cm">   */</span>
+  <span class="n">const_iterator</span> <span class="n">erase</span><span class="p">(</span><span class="n">const_iterator</span> <span class="n">it</span><span class="p">);</span>
+  <span class="n">const_iterator</span> <span class="n">erase</span><span class="p">(</span><span class="n">const_iterator</span> <span class="n">first</span><span class="p">,</span> <span class="n">const_iterator</span> <span class="n">last</span><span class="p">);</span>
+
+  <span class="n">const_key_iterator</span> <span class="n">erase</span><span class="p">(</span><span class="n">const_key_iterator</span> <span class="n">it</span><span class="p">);</span>
+  <span class="n">const_key_iterator</span> <span class="n">erase</span><span class="p">(</span><span class="n">const_key_iterator</span> <span class="n">first</span><span class="p">,</span> <span class="n">const_key_iterator</span> <span class="n">last</span><span class="p">);</span>
+
+  <span class="n">const_value_iterator</span> <span class="n">erase</span><span class="p">(</span><span class="n">const_value_iterator</span> <span class="n">it</span><span class="p">);</span>
+  <span class="n">const_value_iterator</span> <span class="n">erase</span><span class="p">(</span><span class="n">const_value_iterator</span> <span class="n">first</span><span class="p">,</span>
+                             <span class="n">const_value_iterator</span> <span class="n">last</span><span class="p">);</span>
+
+  <span class="n">const_item_iterator</span> <span class="n">erase</span><span class="p">(</span><span class="n">const_item_iterator</span> <span class="n">it</span><span class="p">);</span>
+  <span class="n">const_item_iterator</span> <span class="n">erase</span><span class="p">(</span><span class="n">const_item_iterator</span> <span class="n">first</span><span class="p">,</span>
+                            <span class="n">const_item_iterator</span> <span class="n">last</span><span class="p">);</span>
+  <span class="cm">/*</span>
+<span class="cm">   * Append elements to an array.  If this is not an array, throws</span>
+<span class="cm">   * TypeError.</span>
+<span class="cm">   *</span>
+<span class="cm">   * Invalidates iterators.</span>
+<span class="cm">   */</span>
+  <span class="kt">void</span> <span class="n">push_back</span><span class="p">(</span><span class="n">dynamic</span> <span class="k">const</span><span class="o">&amp;</span><span class="p">);</span>
+  <span class="kt">void</span> <span class="n">push_back</span><span class="p">(</span><span class="n">dynamic</span><span class="o">&amp;&amp;</span><span class="p">);</span>
+
+  <span class="cm">/*</span>
+<span class="cm">   * Get a hash code.  This function is called by a std::hash&lt;&gt;</span>
+<span class="cm">   * specialization, also.</span>
+<span class="cm">   *</span>
+<span class="cm">   * Throws TypeError if this is an object, array, or null.</span>
+<span class="cm">   */</span>
+  <span class="n">std</span><span class="o">::</span><span class="kt">size_t</span> <span class="n">hash</span><span class="p">()</span> <span class="k">const</span><span class="p">;</span>
+
+<span class="nl">private:</span>
+  <span class="n">friend</span> <span class="k">struct</span> <span class="n">TypeError</span><span class="p">;</span>
+  <span class="k">struct</span> <span class="n">ObjectImpl</span><span class="p">;</span>
+  <span class="k">struct</span> <span class="n">ObjectMaker</span><span class="p">;</span>
+  <span class="n">template</span><span class="o">&lt;</span><span class="n">class</span> <span class="n">T</span><span class="o">&gt;</span> <span class="k">struct</span> <span class="n">TypeInfo</span><span class="p">;</span>
+  <span class="n">template</span><span class="o">&lt;</span><span class="n">class</span> <span class="n">T</span><span class="o">&gt;</span> <span class="k">struct</span> <span class="n">CompareOp</span><span class="p">;</span>
+  <span class="n">template</span><span class="o">&lt;</span><span class="n">class</span> <span class="n">T</span><span class="o">&gt;</span> <span class="k">struct</span> <span class="n">GetAddrImpl</span><span class="p">;</span>
+  <span class="n">template</span><span class="o">&lt;</span><span class="n">class</span> <span class="n">T</span><span class="o">&gt;</span> <span class="k">struct</span> <span class="n">PrintImpl</span><span class="p">;</span>
+
+  <span class="n">template</span><span class="o">&lt;</span><span class="n">class</span> <span class="n">T</span><span class="o">&gt;</span> <span class="n">T</span> <span class="k">const</span><span class="o">&amp;</span> <span class="n">get</span><span class="p">()</span> <span class="k">const</span><span class="p">;</span>
+  <span class="n">template</span><span class="o">&lt;</span><span class="n">class</span> <span class="n">T</span><span class="o">&gt;</span> <span class="n">T</span><span class="o">&amp;</span>       <span class="n">get</span><span class="p">();</span>
+  <span class="n">template</span><span class="o">&lt;</span><span class="n">class</span> <span class="n">T</span><span class="o">&gt;</span> <span class="n">T</span><span class="o">*</span>       <span class="n">get_nothrow</span><span class="p">();</span>
+  <span class="n">template</span><span class="o">&lt;</span><span class="n">class</span> <span class="n">T</span><span class="o">&gt;</span> <span class="n">T</span> <span class="k">const</span><span class="o">*</span> <span class="n">get_nothrow</span><span class="p">()</span> <span class="k">const</span><span class="p">;</span>
+  <span class="n">template</span><span class="o">&lt;</span><span class="n">class</span> <span class="n">T</span><span class="o">&gt;</span> <span class="n">T</span><span class="o">*</span>       <span class="n">getAddress</span><span class="p">();</span>
+  <span class="n">template</span><span class="o">&lt;</span><span class="n">class</span> <span class="n">T</span><span class="o">&gt;</span> <span class="n">T</span> <span class="k">const</span><span class="o">*</span> <span class="n">getAddress</span><span class="p">()</span> <span class="k">const</span><span class="p">;</span>
+
+  <span class="n">template</span><span class="o">&lt;</span><span class="n">class</span> <span class="n">T</span><span class="o">&gt;</span> <span class="n">T</span> <span class="n">asImpl</span><span class="p">()</span> <span class="k">const</span><span class="p">;</span>
+
+  <span class="k">static</span> <span class="kt">char</span> <span class="k">const</span><span class="o">*</span> <span class="n">typeName</span><span class="p">(</span><span class="n">Type</span><span class="p">);</span>
+  <span class="kt">void</span> <span class="n">destroy</span><span class="p">();</span>
+  <span class="kt">void</span> <span class="n">print</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">ostream</span><span class="o">&amp;</span><span class="p">)</span> <span class="k">const</span><span class="p">;</span>
+  <span class="kt">void</span> <span class="n">print_as_pseudo_json</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">ostream</span><span class="o">&amp;</span><span class="p">)</span> <span class="k">const</span><span class="p">;</span> <span class="c1">// see json.cpp</span>
+
+<span class="nl">private:</span>
+  <span class="n">Type</span> <span class="n">type_</span><span class="p">;</span>
+  <span class="k">union</span> <span class="n">Data</span> <span class="p">{</span>
+    <span class="n">explicit</span> <span class="n">Data</span><span class="p">()</span> <span class="o">:</span> <span class="n">nul</span><span class="p">(</span><span class="n">nullptr</span><span class="p">)</span> <span class="p">{}</span>
+    <span class="o">~</span><span class="n">Data</span><span class="p">()</span> <span class="p">{}</span></pre></div></td></tr>
+
+
+<tr id="section-4"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-4">&#182;</a></div><p>XXX: gcc does an ICE if we use std::nullptr<em>t instead of void*
+here.  See http://gcc.gnu.org/bugzilla/show</em>bug.cgi?id=50361</p></td><td class="code"><div class="highlight"><pre>    <span class="kt">void</span><span class="o">*</span> <span class="n">nul</span><span class="p">;</span>
+    <span class="n">Array</span> <span class="n">array</span><span class="p">;</span>
+    <span class="n">bool</span> <span class="n">boolean</span><span class="p">;</span>
+    <span class="kt">double</span> <span class="n">doubl</span><span class="p">;</span>
+    <span class="kt">int64_t</span> <span class="n">integer</span><span class="p">;</span>
+    <span class="n">fbstring</span> <span class="n">string</span><span class="p">;</span>
+
+    <span class="cm">/*</span>
+<span class="cm">     * Objects are placement new&#39;d here.  We have to use a char buffer</span>
+<span class="cm">     * because we don&#39;t know the type here (std::unordered_map&lt;&gt; with</span>
+<span class="cm">     * dynamic would be parameterizing a std:: template with an</span>
+<span class="cm">     * incomplete type right now).  (Note that in contrast we know it</span>
+<span class="cm">     * is ok to do this with fbvector because we own it.)</span>
+<span class="cm">     */</span>
+    <span class="kr">typename</span> <span class="n">std</span><span class="o">::</span><span class="n">aligned_storage</span><span class="o">&lt;</span>
+      <span class="k">sizeof</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">unordered_map</span><span class="o">&lt;</span><span class="kt">int</span><span class="p">,</span><span class="kt">int</span><span class="o">&gt;</span><span class="p">),</span>
+      <span class="n">alignof</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">unordered_map</span><span class="o">&lt;</span><span class="kt">int</span><span class="p">,</span><span class="kt">int</span><span class="o">&gt;</span><span class="p">)</span>
+    <span class="o">&gt;::</span><span class="n">type</span> <span class="n">objectBuffer</span><span class="p">;</span>
+  <span class="p">}</span> <span class="n">u_</span><span class="p">;</span>
+<span class="p">};</span></pre></div></td></tr>
+
+
+<tr id="section-5"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-5">&#182;</a></div><p>////////////////////////////////////////////////////////////////////</p></td><td class="code"><div class="highlight"><pre><span class="p">}</span>
+
+<span class="cp">#include &quot;folly/dynamic-inl.h&quot;</span>
+
+<span class="cp">#endif</span>
+
+</pre></div></td></tr>
+
+</tbody>
+</table>
+</div>
+
+</body>
+<script>docas={repo:"joekychen/folly",depth:1}</script>
+<script>document.write('<script src=' + ('__proto__' in {} ? 'http://cdnjs.cloudflare.com/ajax/libs/zepto/1.0rc1/zepto.min.js' : 'https://ajax.googleapis.com/ajax/libs/jquery/1.7.2/jquery.min.js')+'><\\/script>')</script>
+<script src="http://baoshan.github.com/moment/min/moment.min.js"></script>
+<script src="../javascript/docco.min.js"></script>
+</html>

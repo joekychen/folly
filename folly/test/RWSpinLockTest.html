@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html><head><title>joekychen/folly » folly › test › RWSpinLockTest.cpp
+
+</title>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+<meta name="generator" content="Docco">
+<link rel="stylesheet" media="all" href="../../stylesheets/docco.min.css" />
+
+
+</head>
+<body>
+<div id="container">
+<div id="background"></div>
+<table cellpadding="0" cellspacing="0">
+<thead><tr><th class="docs"><a id="home" href="../../index.html"></a><h1>RWSpinLockTest.cpp</h1></th><th class="code"></th></tr></thead>
+<tbody>
+
+
+<tr id="section-1"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-1">&#182;</a></div></td><td class="code"><div class="highlight"><pre><span class="cm">/*</span>
+<span class="cm"> * Copyright 2012 Facebook, Inc.</span>
+<span class="cm"> *</span>
+<span class="cm"> * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span class="cm"> * you may not use this file except in compliance with the License.</span>
+<span class="cm"> * You may obtain a copy of the License at</span>
+<span class="cm"> *</span>
+<span class="cm"> *   http://www.apache.org/licenses/LICENSE-2.0</span>
+<span class="cm"> *</span>
+<span class="cm"> * Unless required by applicable law or agreed to in writing, software</span>
+<span class="cm"> * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span class="cm"> * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span class="cm"> * See the License for the specific language governing permissions and</span>
+<span class="cm"> * limitations under the License.</span>
+<span class="cm"> */</span></pre></div></td></tr>
+
+
+<tr id="section-2"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-2">&#182;</a></div><p>@author xliu (xliux@fb.com)</p></td><td class="code"><div class="highlight"><pre><span class="cp">#include &lt;stdlib.h&gt;</span>
+<span class="cp">#include &lt;unistd.h&gt;</span>
+<span class="cp">#include &lt;vector&gt;</span>
+<span class="cp">#include &lt;thread&gt;</span>
+
+<span class="cp">#include &quot;gtest/gtest.h&quot;</span>
+<span class="cp">#include &lt;gflags/gflags.h&gt;</span>
+<span class="cp">#include &lt;glog/logging.h&gt;</span>
+<span class="cp">#include &quot;folly/RWSpinLock.h&quot;</span>
+
+<span class="n">DEFINE_int32</span><span class="p">(</span><span class="n">num_threads</span><span class="p">,</span> <span class="mi">8</span><span class="p">,</span> <span class="s">&quot;num threads&quot;</span><span class="p">);</span>
+
+<span class="k">namespace</span> <span class="p">{</span>
+
+<span class="k">static</span> <span class="k">const</span> <span class="kt">int</span> <span class="n">kMaxReaders</span> <span class="o">=</span> <span class="mi">50</span><span class="p">;</span>
+<span class="k">static</span> <span class="n">std</span><span class="o">::</span><span class="n">atomic</span><span class="o">&lt;</span><span class="kt">bool</span><span class="o">&gt;</span> <span class="n">stopThread</span><span class="p">;</span>
+<span class="k">using</span> <span class="k">namespace</span> <span class="n">folly</span><span class="p">;</span>
+
+<span class="k">template</span><span class="o">&lt;</span><span class="k">typename</span> <span class="n">RWSpinLockT</span><span class="o">&gt;</span> <span class="k">struct</span> <span class="nl">RWSpinLockTest:</span> <span class="k">public</span> <span class="n">testing</span><span class="o">::</span><span class="n">Test</span> <span class="p">{</span>
+  <span class="k">typedef</span> <span class="n">RWSpinLockT</span> <span class="n">RWSpinLockType</span><span class="p">;</span>
+<span class="p">};</span>
+
+<span class="k">typedef</span> <span class="n">testing</span><span class="o">::</span><span class="n">Types</span><span class="o">&lt;</span><span class="n">RWSpinLock</span>
+<span class="cp">#if defined(__GNUC__) &amp;&amp; (defined(__i386) || defined(__x86_64__) || \</span>
+<span class="cp">    defined(ARCH_K8))</span>
+        <span class="p">,</span> <span class="n">RWTicketSpinLockT</span><span class="o">&lt;</span><span class="mi">32</span><span class="p">,</span> <span class="kc">true</span><span class="o">&gt;</span><span class="p">,</span>
+        <span class="n">RWTicketSpinLockT</span><span class="o">&lt;</span><span class="mi">32</span><span class="p">,</span> <span class="kc">false</span><span class="o">&gt;</span><span class="p">,</span>
+        <span class="n">RWTicketSpinLockT</span><span class="o">&lt;</span><span class="mi">64</span><span class="p">,</span> <span class="kc">true</span><span class="o">&gt;</span><span class="p">,</span>
+        <span class="n">RWTicketSpinLockT</span><span class="o">&lt;</span><span class="mi">64</span><span class="p">,</span> <span class="kc">false</span><span class="o">&gt;</span>
+<span class="cp">#endif</span>
+<span class="o">&gt;</span> <span class="n">Implementations</span><span class="p">;</span>
+
+<span class="n">TYPED_TEST_CASE</span><span class="p">(</span><span class="n">RWSpinLockTest</span><span class="p">,</span> <span class="n">Implementations</span><span class="p">);</span>
+
+<span class="k">template</span><span class="o">&lt;</span><span class="k">typename</span> <span class="n">RWSpinLockType</span><span class="o">&gt;</span>
+<span class="k">static</span> <span class="kt">void</span> <span class="n">run</span><span class="p">(</span><span class="n">RWSpinLockType</span><span class="o">*</span> <span class="n">lock</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">int64_t</span> <span class="n">reads</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+  <span class="n">int64_t</span> <span class="n">writes</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+  <span class="k">while</span> <span class="p">(</span><span class="o">!</span><span class="n">stopThread</span><span class="p">.</span><span class="n">load</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">memory_order_acquire</span><span class="p">))</span> <span class="p">{</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">rand</span><span class="p">()</span> <span class="o">%</span> <span class="mi">10</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span> <span class="c1">// write</span>
+      <span class="k">typename</span> <span class="n">RWSpinLockType</span><span class="o">::</span><span class="n">WriteHolder</span> <span class="n">guard</span><span class="p">(</span><span class="n">lock</span><span class="p">);</span>
+      <span class="o">++</span><span class="n">writes</span><span class="p">;</span>
+    <span class="p">}</span> <span class="k">else</span> <span class="p">{</span> <span class="c1">// read</span>
+      <span class="k">typename</span> <span class="n">RWSpinLockType</span><span class="o">::</span><span class="n">ReadHolder</span> <span class="n">guard</span><span class="p">(</span><span class="n">lock</span><span class="p">);</span>
+      <span class="o">++</span><span class="n">reads</span><span class="p">;</span>
+    <span class="p">}</span>
+  <span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-3"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-3">&#182;</a></div><p>VLOG(0) &lt;&lt; "total reads: " &lt;&lt; reads &lt;&lt; "; total writes: " &lt;&lt; writes;</p></td><td class="code"><div class="highlight"><pre><span class="p">}</span>
+
+
+<span class="n">TYPED_TEST</span><span class="p">(</span><span class="n">RWSpinLockTest</span><span class="p">,</span> <span class="n">Writer_Wait_Readers</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">typedef</span> <span class="k">typename</span> <span class="n">TestFixture</span><span class="o">::</span><span class="n">RWSpinLockType</span> <span class="n">RWSpinLockType</span><span class="p">;</span>
+  <span class="n">RWSpinLockType</span> <span class="n">l</span><span class="p">;</span>
+
+  <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">kMaxReaders</span><span class="p">;</span> <span class="o">++</span><span class="n">i</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">l</span><span class="p">.</span><span class="n">try_lock_shared</span><span class="p">());</span>
+    <span class="n">EXPECT_FALSE</span><span class="p">(</span><span class="n">l</span><span class="p">.</span><span class="n">try_lock</span><span class="p">());</span>
+  <span class="p">}</span>
+
+  <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">kMaxReaders</span><span class="p">;</span> <span class="o">++</span><span class="n">i</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">EXPECT_FALSE</span><span class="p">(</span><span class="n">l</span><span class="p">.</span><span class="n">try_lock</span><span class="p">());</span>
+    <span class="n">l</span><span class="p">.</span><span class="n">unlock_shared</span><span class="p">();</span>
+  <span class="p">}</span>
+
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">l</span><span class="p">.</span><span class="n">try_lock</span><span class="p">());</span>
+<span class="p">}</span>
+
+<span class="n">TYPED_TEST</span><span class="p">(</span><span class="n">RWSpinLockTest</span><span class="p">,</span> <span class="n">Readers_Wait_Writer</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">typedef</span> <span class="k">typename</span> <span class="n">TestFixture</span><span class="o">::</span><span class="n">RWSpinLockType</span> <span class="n">RWSpinLockType</span><span class="p">;</span>
+  <span class="n">RWSpinLockType</span> <span class="n">l</span><span class="p">;</span>
+
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">l</span><span class="p">.</span><span class="n">try_lock</span><span class="p">());</span>
+
+  <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">kMaxReaders</span><span class="p">;</span> <span class="o">++</span><span class="n">i</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">EXPECT_FALSE</span><span class="p">(</span><span class="n">l</span><span class="p">.</span><span class="n">try_lock_shared</span><span class="p">());</span>
+  <span class="p">}</span>
+
+  <span class="n">l</span><span class="p">.</span><span class="n">unlock_and_lock_shared</span><span class="p">();</span>
+  <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">kMaxReaders</span> <span class="o">-</span> <span class="mi">1</span><span class="p">;</span> <span class="o">++</span><span class="n">i</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">l</span><span class="p">.</span><span class="n">try_lock_shared</span><span class="p">());</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="n">TYPED_TEST</span><span class="p">(</span><span class="n">RWSpinLockTest</span><span class="p">,</span> <span class="n">Writer_Wait_Writer</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">typedef</span> <span class="k">typename</span> <span class="n">TestFixture</span><span class="o">::</span><span class="n">RWSpinLockType</span> <span class="n">RWSpinLockType</span><span class="p">;</span>
+  <span class="n">RWSpinLockType</span> <span class="n">l</span><span class="p">;</span>
+
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">l</span><span class="p">.</span><span class="n">try_lock</span><span class="p">());</span>
+  <span class="n">EXPECT_FALSE</span><span class="p">(</span><span class="n">l</span><span class="p">.</span><span class="n">try_lock</span><span class="p">());</span>
+  <span class="n">l</span><span class="p">.</span><span class="n">unlock</span><span class="p">();</span>
+
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">l</span><span class="p">.</span><span class="n">try_lock</span><span class="p">());</span>
+  <span class="n">EXPECT_FALSE</span><span class="p">(</span><span class="n">l</span><span class="p">.</span><span class="n">try_lock</span><span class="p">());</span>
+<span class="p">}</span>
+
+<span class="n">TYPED_TEST</span><span class="p">(</span><span class="n">RWSpinLockTest</span><span class="p">,</span> <span class="n">Read_Holders</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">typedef</span> <span class="k">typename</span> <span class="n">TestFixture</span><span class="o">::</span><span class="n">RWSpinLockType</span> <span class="n">RWSpinLockType</span><span class="p">;</span>
+  <span class="n">RWSpinLockType</span> <span class="n">l</span><span class="p">;</span>
+
+  <span class="p">{</span>
+    <span class="k">typename</span> <span class="n">RWSpinLockType</span><span class="o">::</span><span class="n">ReadHolder</span> <span class="n">guard</span><span class="p">(</span><span class="o">&amp;</span><span class="n">l</span><span class="p">);</span>
+    <span class="n">EXPECT_FALSE</span><span class="p">(</span><span class="n">l</span><span class="p">.</span><span class="n">try_lock</span><span class="p">());</span>
+    <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">l</span><span class="p">.</span><span class="n">try_lock_shared</span><span class="p">());</span>
+    <span class="n">l</span><span class="p">.</span><span class="n">unlock_shared</span><span class="p">();</span>
+
+    <span class="n">EXPECT_FALSE</span><span class="p">(</span><span class="n">l</span><span class="p">.</span><span class="n">try_lock</span><span class="p">());</span>
+  <span class="p">}</span>
+
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">l</span><span class="p">.</span><span class="n">try_lock</span><span class="p">());</span>
+  <span class="n">l</span><span class="p">.</span><span class="n">unlock</span><span class="p">();</span>
+<span class="p">}</span>
+
+<span class="n">TYPED_TEST</span><span class="p">(</span><span class="n">RWSpinLockTest</span><span class="p">,</span> <span class="n">Write_Holders</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">typedef</span> <span class="k">typename</span> <span class="n">TestFixture</span><span class="o">::</span><span class="n">RWSpinLockType</span> <span class="n">RWSpinLockType</span><span class="p">;</span>
+  <span class="n">RWSpinLockType</span> <span class="n">l</span><span class="p">;</span>
+  <span class="p">{</span>
+    <span class="k">typename</span> <span class="n">RWSpinLockType</span><span class="o">::</span><span class="n">WriteHolder</span> <span class="n">guard</span><span class="p">(</span><span class="o">&amp;</span><span class="n">l</span><span class="p">);</span>
+    <span class="n">EXPECT_FALSE</span><span class="p">(</span><span class="n">l</span><span class="p">.</span><span class="n">try_lock</span><span class="p">());</span>
+    <span class="n">EXPECT_FALSE</span><span class="p">(</span><span class="n">l</span><span class="p">.</span><span class="n">try_lock_shared</span><span class="p">());</span>
+  <span class="p">}</span>
+
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">l</span><span class="p">.</span><span class="n">try_lock_shared</span><span class="p">());</span>
+  <span class="n">EXPECT_FALSE</span><span class="p">(</span><span class="n">l</span><span class="p">.</span><span class="n">try_lock</span><span class="p">());</span>
+  <span class="n">l</span><span class="p">.</span><span class="n">unlock_shared</span><span class="p">();</span>
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">l</span><span class="p">.</span><span class="n">try_lock</span><span class="p">());</span>
+<span class="p">}</span>
+
+<span class="n">TYPED_TEST</span><span class="p">(</span><span class="n">RWSpinLockTest</span><span class="p">,</span> <span class="n">ConcurrentTests</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">typedef</span> <span class="k">typename</span> <span class="n">TestFixture</span><span class="o">::</span><span class="n">RWSpinLockType</span> <span class="n">RWSpinLockType</span><span class="p">;</span>
+  <span class="n">RWSpinLockType</span> <span class="n">l</span><span class="p">;</span>
+  <span class="n">srand</span><span class="p">(</span><span class="n">time</span><span class="p">(</span><span class="nb">NULL</span><span class="p">));</span>
+
+  <span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="kr">thread</span><span class="o">&gt;</span> <span class="n">threads</span><span class="p">;</span>
+  <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">FLAGS_num_threads</span><span class="p">;</span> <span class="o">++</span><span class="n">i</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">threads</span><span class="p">.</span><span class="n">push_back</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="kr">thread</span><span class="p">(</span><span class="o">&amp;</span><span class="n">run</span><span class="o">&lt;</span><span class="n">RWSpinLockType</span><span class="o">&gt;</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">l</span><span class="p">));</span>
+  <span class="p">}</span>
+
+  <span class="n">sleep</span><span class="p">(</span><span class="mi">1</span><span class="p">);</span>
+  <span class="n">stopThread</span><span class="p">.</span><span class="n">store</span><span class="p">(</span><span class="kc">true</span><span class="p">,</span> <span class="n">std</span><span class="o">::</span><span class="n">memory_order_release</span><span class="p">);</span>
+
+  <span class="k">for</span> <span class="p">(</span><span class="k">auto</span><span class="o">&amp;</span> <span class="n">t</span> <span class="o">:</span> <span class="n">threads</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">t</span><span class="p">.</span><span class="n">join</span><span class="p">();</span>
+  <span class="p">}</span>
+<span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-4"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-4">&#182;</a></div><p>RWSpinLock specific tests</p></td><td class="code"><div class="highlight"><pre><span class="n">TEST</span><span class="p">(</span><span class="n">RWSpinLock</span><span class="p">,</span> <span class="n">lock_unlock_tests</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">folly</span><span class="o">::</span><span class="n">RWSpinLock</span> <span class="n">lock</span><span class="p">;</span>
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">lock</span><span class="p">.</span><span class="n">try_lock_upgrade</span><span class="p">());</span>
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">lock</span><span class="p">.</span><span class="n">try_lock_shared</span><span class="p">());</span>
+  <span class="n">EXPECT_FALSE</span><span class="p">(</span><span class="n">lock</span><span class="p">.</span><span class="n">try_lock</span><span class="p">());</span>
+  <span class="n">EXPECT_FALSE</span><span class="p">(</span><span class="n">lock</span><span class="p">.</span><span class="n">try_lock_upgrade</span><span class="p">());</span>
+  <span class="n">lock</span><span class="p">.</span><span class="n">unlock_upgrade</span><span class="p">();</span>
+  <span class="n">EXPECT_FALSE</span><span class="p">(</span><span class="n">lock</span><span class="p">.</span><span class="n">try_lock</span><span class="p">());</span>
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">lock</span><span class="p">.</span><span class="n">try_lock_upgrade</span><span class="p">());</span>
+  <span class="n">lock</span><span class="p">.</span><span class="n">unlock_upgrade</span><span class="p">();</span>
+  <span class="n">lock</span><span class="p">.</span><span class="n">unlock_shared</span><span class="p">();</span>
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">lock</span><span class="p">.</span><span class="n">try_lock</span><span class="p">());</span>
+  <span class="n">EXPECT_FALSE</span><span class="p">(</span><span class="n">lock</span><span class="p">.</span><span class="n">try_lock_upgrade</span><span class="p">());</span>
+  <span class="n">lock</span><span class="p">.</span><span class="n">unlock_and_lock_upgrade</span><span class="p">();</span>
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">lock</span><span class="p">.</span><span class="n">try_lock_shared</span><span class="p">());</span>
+  <span class="n">lock</span><span class="p">.</span><span class="n">unlock_shared</span><span class="p">();</span>
+  <span class="n">lock</span><span class="p">.</span><span class="n">unlock_upgrade_and_lock_shared</span><span class="p">();</span>
+  <span class="n">lock</span><span class="p">.</span><span class="n">unlock_shared</span><span class="p">();</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">lock</span><span class="p">.</span><span class="n">bits</span><span class="p">());</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">RWSpinLock</span><span class="p">,</span> <span class="n">concurrent_holder_test</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">srand</span><span class="p">(</span><span class="n">time</span><span class="p">(</span><span class="nb">NULL</span><span class="p">));</span>
+
+  <span class="n">folly</span><span class="o">::</span><span class="n">RWSpinLock</span> <span class="n">lock</span><span class="p">;</span>
+  <span class="n">std</span><span class="o">::</span><span class="n">atomic</span><span class="o">&lt;</span><span class="n">int64_t</span><span class="o">&gt;</span> <span class="n">reads</span><span class="p">(</span><span class="mi">0</span><span class="p">);</span>
+  <span class="n">std</span><span class="o">::</span><span class="n">atomic</span><span class="o">&lt;</span><span class="n">int64_t</span><span class="o">&gt;</span> <span class="n">writes</span><span class="p">(</span><span class="mi">0</span><span class="p">);</span>
+  <span class="n">std</span><span class="o">::</span><span class="n">atomic</span><span class="o">&lt;</span><span class="n">int64_t</span><span class="o">&gt;</span> <span class="n">upgrades</span><span class="p">(</span><span class="mi">0</span><span class="p">);</span>
+  <span class="n">std</span><span class="o">::</span><span class="n">atomic</span><span class="o">&lt;</span><span class="kt">bool</span><span class="o">&gt;</span> <span class="n">stop</span><span class="p">(</span><span class="kc">false</span><span class="p">);</span>
+
+  <span class="k">auto</span> <span class="n">go</span> <span class="o">=</span> <span class="p">[</span><span class="o">&amp;</span><span class="p">]</span> <span class="p">{</span>
+    <span class="k">while</span> <span class="p">(</span><span class="o">!</span><span class="n">stop</span><span class="p">.</span><span class="n">load</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">memory_order_acquire</span><span class="p">))</span> <span class="p">{</span>
+      <span class="k">auto</span> <span class="n">r</span> <span class="o">=</span> <span class="p">(</span><span class="n">uint32_t</span><span class="p">)(</span><span class="n">rand</span><span class="p">())</span> <span class="o">%</span> <span class="mi">10</span><span class="p">;</span>
+      <span class="k">if</span> <span class="p">(</span><span class="n">r</span> <span class="o">&lt;</span> <span class="mi">3</span><span class="p">)</span> <span class="p">{</span>          <span class="c1">// starts from write lock</span>
+        <span class="n">RWSpinLock</span><span class="o">::</span><span class="n">ReadHolder</span> <span class="n">rg</span><span class="p">(</span>
+            <span class="n">RWSpinLock</span><span class="o">::</span><span class="n">UpgradedHolder</span> <span class="n">ug</span><span class="p">(</span>
+              <span class="n">RWSpinLock</span><span class="o">::</span><span class="n">WriteHolder</span><span class="p">(</span><span class="o">&amp;</span><span class="n">lock</span><span class="p">)));</span>
+        <span class="n">writes</span><span class="p">.</span><span class="n">fetch_add</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">std</span><span class="o">::</span><span class="n">memory_order_acq_rel</span><span class="p">);;</span>
+
+      <span class="p">}</span> <span class="k">else</span> <span class="k">if</span> <span class="p">(</span><span class="n">r</span> <span class="o">&lt;</span> <span class="mi">6</span><span class="p">)</span> <span class="p">{</span>   <span class="c1">// starts from upgrade lock</span>
+        <span class="n">RWSpinLock</span><span class="o">::</span><span class="n">UpgradedHolder</span> <span class="n">ug</span><span class="p">(</span><span class="o">&amp;</span><span class="n">lock</span><span class="p">);</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">r</span> <span class="o">&lt;</span> <span class="mi">4</span><span class="p">)</span> <span class="p">{</span>
+          <span class="n">RWSpinLock</span><span class="o">::</span><span class="n">WriteHolder</span> <span class="n">wg</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">move</span><span class="p">(</span><span class="n">ug</span><span class="p">));</span>
+        <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+          <span class="n">RWSpinLock</span><span class="o">::</span><span class="n">ReadHolder</span> <span class="n">rg</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">move</span><span class="p">(</span><span class="n">ug</span><span class="p">));</span>
+        <span class="p">}</span>
+        <span class="n">upgrades</span><span class="p">.</span><span class="n">fetch_add</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">std</span><span class="o">::</span><span class="n">memory_order_acq_rel</span><span class="p">);;</span>
+      <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+        <span class="n">RWSpinLock</span><span class="o">::</span><span class="n">UpgradedHolder</span> <span class="n">ug</span><span class="p">(</span>
+            <span class="n">RWSpinLock</span><span class="o">::</span><span class="n">WriteHolder</span><span class="p">(</span>
+              <span class="n">RWSpinLock</span><span class="o">::</span><span class="n">ReadHolder</span><span class="p">(</span><span class="o">&amp;</span><span class="n">lock</span><span class="p">)));</span>
+        <span class="n">reads</span><span class="p">.</span><span class="n">fetch_add</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">std</span><span class="o">::</span><span class="n">memory_order_acq_rel</span><span class="p">);</span>
+      <span class="p">}</span>
+    <span class="p">}</span>
+  <span class="p">};</span>
+
+  <span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="kr">thread</span><span class="o">&gt;</span> <span class="n">threads</span><span class="p">;</span>
+  <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">FLAGS_num_threads</span><span class="p">;</span> <span class="o">++</span><span class="n">i</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">threads</span><span class="p">.</span><span class="n">push_back</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="kr">thread</span><span class="p">(</span><span class="n">go</span><span class="p">));</span>
+  <span class="p">}</span>
+
+  <span class="n">sleep</span><span class="p">(</span><span class="mi">5</span><span class="p">);</span>
+  <span class="n">stop</span><span class="p">.</span><span class="n">store</span><span class="p">(</span><span class="kc">true</span><span class="p">,</span> <span class="n">std</span><span class="o">::</span><span class="n">memory_order_release</span><span class="p">);</span>
+
+  <span class="k">for</span> <span class="p">(</span><span class="k">auto</span><span class="o">&amp;</span> <span class="n">t</span> <span class="o">:</span> <span class="n">threads</span><span class="p">)</span> <span class="n">t</span><span class="p">.</span><span class="n">join</span><span class="p">();</span>
+
+  <span class="n">LOG</span><span class="p">(</span><span class="n">INFO</span><span class="p">)</span> <span class="o">&lt;&lt;</span> <span class="s">&quot;reads: &quot;</span> <span class="o">&lt;&lt;</span> <span class="n">reads</span><span class="p">.</span><span class="n">load</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">memory_order_acquire</span><span class="p">)</span>
+    <span class="o">&lt;&lt;</span> <span class="s">&quot;; writes: &quot;</span> <span class="o">&lt;&lt;</span> <span class="n">writes</span><span class="p">.</span><span class="n">load</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">memory_order_acquire</span><span class="p">)</span>
+    <span class="o">&lt;&lt;</span> <span class="s">&quot;; upgrades: &quot;</span> <span class="o">&lt;&lt;</span> <span class="n">upgrades</span><span class="p">.</span><span class="n">load</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">memory_order_acquire</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="p">}</span>
+
+<span class="kt">int</span> <span class="n">main</span><span class="p">(</span><span class="kt">int</span> <span class="n">argc</span><span class="p">,</span> <span class="kt">char</span><span class="o">**</span> <span class="n">argv</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">testing</span><span class="o">::</span><span class="n">InitGoogleTest</span><span class="p">(</span><span class="o">&amp;</span><span class="n">argc</span><span class="p">,</span> <span class="n">argv</span><span class="p">);</span>
+  <span class="n">google</span><span class="o">::</span><span class="n">ParseCommandLineFlags</span><span class="p">(</span><span class="o">&amp;</span><span class="n">argc</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">argv</span><span class="p">,</span> <span class="kc">true</span><span class="p">);</span>
+  <span class="k">return</span> <span class="n">RUN_ALL_TESTS</span><span class="p">();</span>
+<span class="p">}</span>
+
+</pre></div></td></tr>
+
+</tbody>
+</table>
+</div>
+
+</body>
+<script>docas={repo:"joekychen/folly",depth:2}</script>
+<script>document.write('<script src=' + ('__proto__' in {} ? 'http://cdnjs.cloudflare.com/ajax/libs/zepto/1.0rc1/zepto.min.js' : 'https://ajax.googleapis.com/ajax/libs/jquery/1.7.2/jquery.min.js')+'><\\/script>')</script>
+<script src="http://baoshan.github.com/moment/min/moment.min.js"></script>
+<script src="../../javascript/docco.min.js"></script>
+</html>

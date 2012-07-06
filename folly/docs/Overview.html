@@ -1,0 +1,255 @@
+<h2><code>folly/</code></h2>
+
+<h3>Introduction</h3>
+
+<p>Folly (acronymed loosely after Facebook Open Source Library) is a
+library of C++11 components designed with practicality and efficiency
+in mind. It complements (as opposed to competing against) offerings
+such as Boost and of course <code>std</code>. In fact, we embark on defining our
+own component only when something we need is either not available, or
+does not meet the needed performance profile.</p>
+
+<p>Performance concerns permeate much of Folly, sometimes leading to
+designs that are more idiosyncratic than they would otherwise be (see
+e.g. <code>PackedSyncPtr.h</code>, <code>SmallLocks.h</code>). Good performance at large
+scale is a unifying theme in all of Folly.</p>
+
+<h3>Logical Design</h3>
+
+<p>Folly is a collection of relatively independent components, some as
+simple as a few symbols. There is no restriction on internal
+dependencies, meaning that a given folly module may use any other
+folly components.</p>
+
+<p>All symbols are defined in the top-level namespace <code>folly</code>, except of
+course macros. Macro names are ALL_UPPERCASE. Namespace <code>folly</code>
+defines other internal namespaces such as <code>internal</code> or <code>detail</code>. User
+code should not depend on symbols in those namespaces.</p>
+
+<h3>Physical Design</h3>
+
+<p>At the top level Folly uses the classic "stuttering" scheme
+<code>folly/folly</code> used by Boost and others. The first directory serves as
+an installation root of the library (with possible versioning a la
+<code>folly-1.0/</code>), and the second is to distinguish the library when
+including files, e.g. <code>#include "folly/FBString.h"</code>.</p>
+
+<p>The directory structure is flat (mimicking the namespace structure),
+i.e. we don't have an elaborate directory hierarchy (it is possible
+this will change in future versions). The subdirectory <code>experimental</code>
+contains files that are used inside folly and possibly at Facebook but
+not considered stable enough for client use. Your code should not use
+files in <code>folly/experimental</code> lest it may break when you update Folly.</p>
+
+<p>The <code>folly/folly/test</code> subdirectory includes the unittests for all
+components, usually named <code>ComponentXyzTest.cpp</code> for each
+<code>ComponentXyz.*</code>. The <code>folly/folly/docs</code> directory contains
+documentation.</p>
+
+<h3>Compatibility</h3>
+
+<p>Currently, <code>folly</code> has been tested on gcc 4.6 on 64-bit installations
+of Fedora 17, Ubuntu 12.04, and Debian wheezy. It might work unmodified
+on other 64-bit Linux platforms.</p>
+
+<h3>Components</h3>
+
+<p>Below is a list of Folly components in alphabetical order, along with
+a brief description of each.</p>
+
+<h4><code>Arena.h</code>, <code>ThreadCachedArena.h</code></h4>
+
+<p>Simple arena for memory allocation: multiple allocations get freed all
+at once. With threaded version.</p>
+
+<h4><a href="AtomicHashMap.md"><code>AtomicHashMap.h</code>, <code>AtomicHashArray.h</code></a></h4>
+
+<p>High-performance atomic hash map with almost lock-free operation.</p>
+
+<h4><a href="Benchmark.md"><code>Benchmark.h</code></a></h4>
+
+<p>A small framework for benchmarking code. Client code registers
+benchmarks, optionally with an argument that dictates the scale of the
+benchmark (iterations, working set size etc). The framework runs
+benchmarks (subject to a command-line flag) and produces formatted
+output with timing information.</p>
+
+<h4><code>Bits.h</code></h4>
+
+<p>Various bit manipulation utilities optimized for speed; includes functions
+that wrap the
+<a href="http://linux.die.net/man/3/ffsll">ffsl(l)</a> primitives in a uniform
+interface.</p>
+
+<h4><code>ConcurrentSkipList.h</code></h4>
+
+<p>An implementation of the structure described in <a href="http://www.cs.tau.ac.il/~shanir/nir-pubs-web/Papers/OPODIS2006-BA.pdf">A Provably Correct
+Scalable Concurrent Skip
+List</a>
+by Herlihy et al.</p>
+
+<h4><a href="Conv.md"><code>Conv.h</code></a></h4>
+
+<p>A variety of data conversion routines (notably to and from string),
+optimized for speed and safety.</p>
+
+<h4><code>DiscriminatedPtr.h</code></h4>
+
+<p>Similar to <code>boost::variant</code>, but restricted to pointers only. Uses the
+highest-order unused 16 bits in a pointer as discriminator. So
+<code>sizeof(DiscriminatedPtr&lt;int, string, Widget&gt;) == sizeof(void*)</code>.</p>
+
+<h4><a href="Dynamic.md"><code>dynamic.h</code></a></h4>
+
+<p>Dynamically-typed object, created with JSON objects in mind.</p>
+
+<h4><code>Endian.h</code></h4>
+
+<p>Endian conversion primitives.</p>
+
+<h4><code>Escape.h</code></h4>
+
+<p>Escapes a string in C style.</p>
+
+<h4><code>eventfd.h</code></h4>
+
+<p>Wrapper around the
+<a href="http://www.kernel.org/doc/man-pages/online/pages/man2/eventfd.2.html"><code>eventfd</code></a>
+system call.</p>
+
+<h4><a href="FBString.md"><code>FBString.h</code></a></h4>
+
+<p>A drop-in implementation of <code>std::string</code> with a variety of optimizations.</p>
+
+<h4><a href="FBVector.md"><code>FBVector.h</code></a></h4>
+
+<p>A mostly drop-in implementation of <code>std::vector</code> with a variety of
+optimizations.</p>
+
+<h4><code>Foreach.h</code></h4>
+
+<p>Pseudo-statements (implemented as macros) for iteration.</p>
+
+<h4><a href="Format.md"><code>Format.h</code></a></h4>
+
+<p>Python-style formatting utilities.</p>
+
+<h4><a href="GroupVarint.md"><code>GroupVarint.h</code></a></h4>
+
+<p><a href="http://www.ir.uwaterloo.ca/book/addenda-06-index-compression.html">Group Varint
+encoding</a>
+for 32-bit values.</p>
+
+<h4><code>Hash.h</code></h4>
+
+<p>Various popular hash function implementations.</p>
+
+<h4><a href="Histogram.md"><code>Histogram.h</code></a></h4>
+
+<p>A simple class for collecting histogram data.</p>
+
+<h4><code>IntrusiveList.h</code></h4>
+
+<p>Convenience type definitions for using <code>boost::intrusive_list</code>.</p>
+
+<h4><code>json.h</code></h4>
+
+<p>JSON serializer and deserializer. Uses <code>dynamic.h</code>.</p>
+
+<h4><code>Likely.h</code></h4>
+
+<p>Wrappers around <a href="http://gcc.gnu.org/onlinedocs/gcc/Other-Builtins.html"><code>__builtin_expect</code></a>.</p>
+
+<h4><code>Malloc.h</code></h4>
+
+<p>Memory allocation helpers, particularly when using jemalloc.</p>
+
+<h4><code>MapUtil.h</code></h4>
+
+<p>Helpers for finding items in associative containers (such as
+<code>std::map</code> and <code>std::unordered_map</code>).</p>
+
+<h4><a href="PackedSyncPtr.md"><code>PackedSyncPtr.h</code></a></h4>
+
+<p>A highly specialized data structure consisting of a pointer, a 1-bit
+spin lock, and a 15-bit integral, all inside one 64-bit word.</p>
+
+<h4><code>Preprocessor.h</code></h4>
+
+<p>Necessarily evil stuff.</p>
+
+<h4><code>PrettyPrint.h</code></h4>
+
+<p>Pretty-printer for numbers that appends suffixes of unit used: bytes
+(kb, MB, ...), metric suffixes (k, M, G, ...), and time (s, ms, us,
+ns, ...).</p>
+
+<h4><a href="ProducerConsumerQueue.md"><code>ProducerConsumerQueue.h</code></a></h4>
+
+<p>Lock free single-reader, single-writer queue.</p>
+
+<h4><code>Random.h</code></h4>
+
+<p>Defines only one function---<code>randomNumberSeed()</code>.</p>
+
+<h4><code>Range.h</code></h4>
+
+<p>Boost-style range facility and the <code>StringPiece</code> specialization.</p>
+
+<h4><code>RWSpinLock.h</code></h4>
+
+<p>Fast and compact reader-writer spin lock.</p>
+
+<h4><code>ScopeGuard.h</code></h4>
+
+<p>C++11 incarnation of the old <a href="http://drdobbs.com/184403758">ScopeGuard</a> idiom.</p>
+
+<h4><a href="SmallLocks.md"><code>SmallLocks.h</code></a></h4>
+
+<p>Very small spin locks (1 byte and 1 bit).</p>
+
+<h4><code>small_vector.h</code></h4>
+
+<p>Vector with the small buffer optimization and an optional embedded
+<code>PicoSpinLock</code>.</p>
+
+<h4><code>sorted_vector_types.h</code></h4>
+
+<p>Collections similar to <code>std::map</code> but implemented as sorted vectors.</p>
+
+<h4><code>StlAllocator.h</code></h4>
+
+<p>STL allocator wrapping a simple allocate/deallocate interface.</p>
+
+<h4><code>String.h</code></h4>
+
+<p>String utilities that connect <code>folly::fbstring</code> with <code>std::string</code>.</p>
+
+<h4><a href="Synchronized.md"><code>Synchronized.h</code></a></h4>
+
+<p>High-level synchronization library.</p>
+
+<h4><code>System.h</code></h4>
+
+<p>Demangling and errno utilities.</p>
+
+<h4><a href="ThreadCachedInt.md"><code>ThreadCachedInt.h</code></a></h4>
+
+<p>High-performance atomic increment using thread caching.</p>
+
+<h4><a href="ThreadLocal.md"><code>ThreadLocal.h</code></a></h4>
+
+<p>Improved thread local storage for non-trivial types.</p>
+
+<h4><code>TimeoutQueue.h</code></h4>
+
+<p>Queue with per-item timeout.</p>
+
+<h4><code>Traits.h</code></h4>
+
+<p>Type traits that complement those defined in the standard C++11 header
+<code>&lt;traits&gt;</code>.</p>
+
+<h4><code>Unicode.h</code></h4>
+
+<p>Defines the <code>codePointToUtf8</code> function.</p>

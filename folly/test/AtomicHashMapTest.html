@@ -1,0 +1,843 @@
+<!DOCTYPE html>
+<html><head><title>joekychen/folly » folly › test › AtomicHashMapTest.cpp
+
+</title>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+<meta name="generator" content="Docco">
+<link rel="stylesheet" media="all" href="../../stylesheets/docco.min.css" />
+
+
+</head>
+<body>
+<div id="container">
+<div id="background"></div>
+<table cellpadding="0" cellspacing="0">
+<thead><tr><th class="docs"><a id="home" href="../../index.html"></a><h1>AtomicHashMapTest.cpp</h1></th><th class="code"></th></tr></thead>
+<tbody>
+
+
+<tr id="section-1"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-1">&#182;</a></div></td><td class="code"><div class="highlight"><pre><span class="cm">/*</span>
+<span class="cm"> * Copyright 2012 Facebook, Inc.</span>
+<span class="cm"> *</span>
+<span class="cm"> * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span class="cm"> * you may not use this file except in compliance with the License.</span>
+<span class="cm"> * You may obtain a copy of the License at</span>
+<span class="cm"> *</span>
+<span class="cm"> *   http://www.apache.org/licenses/LICENSE-2.0</span>
+<span class="cm"> *</span>
+<span class="cm"> * Unless required by applicable law or agreed to in writing, software</span>
+<span class="cm"> * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span class="cm"> * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span class="cm"> * See the License for the specific language governing permissions and</span>
+<span class="cm"> * limitations under the License.</span>
+<span class="cm"> */</span>
+
+<span class="cp">#include &quot;folly/AtomicHashMap.h&quot;</span>
+
+<span class="cp">#include &lt;glog/logging.h&gt;</span>
+<span class="cp">#include &lt;gtest/gtest.h&gt;</span>
+<span class="cp">#include &lt;sys/time.h&gt;</span>
+<span class="cp">#include &lt;thread&gt;</span>
+<span class="cp">#include &lt;atomic&gt;</span>
+
+<span class="cp">#include &quot;folly/Benchmark.h&quot;</span>
+<span class="cp">#include &quot;folly/Conv.h&quot;</span>
+
+<span class="k">using</span> <span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="p">;</span>
+<span class="k">using</span> <span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="p">;</span>
+<span class="k">using</span> <span class="n">folly</span><span class="o">::</span><span class="n">AtomicHashMap</span><span class="p">;</span>
+<span class="k">using</span> <span class="n">folly</span><span class="o">::</span><span class="n">AtomicHashArray</span><span class="p">;</span></pre></div></td></tr>
+
+
+<tr id="section-2"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-2">&#182;</a></div><p>Tunables:</p></td><td class="code"><div class="highlight"><pre><span class="n">DEFINE_double</span><span class="p">(</span><span class="n">targetLoadFactor</span><span class="p">,</span> <span class="mf">0.75</span><span class="p">,</span> <span class="s">&quot;Target memory utilization fraction.&quot;</span><span class="p">);</span>
+<span class="n">DEFINE_double</span><span class="p">(</span><span class="n">maxLoadFactor</span><span class="p">,</span> <span class="mf">0.80</span><span class="p">,</span> <span class="s">&quot;Max before growth.&quot;</span><span class="p">);</span>
+<span class="n">DEFINE_int32</span><span class="p">(</span><span class="n">numThreads</span><span class="p">,</span> <span class="mi">8</span><span class="p">,</span> <span class="s">&quot;Threads to use for concurrency tests.&quot;</span><span class="p">);</span>
+<span class="n">DEFINE_int64</span><span class="p">(</span><span class="n">numBMElements</span><span class="p">,</span> <span class="mi">12</span> <span class="o">*</span> <span class="mi">1000</span> <span class="o">*</span> <span class="mi">1000</span><span class="p">,</span> <span class="s">&quot;Size of maps for benchmarks.&quot;</span><span class="p">);</span>
+
+<span class="k">const</span> <span class="kt">double</span> <span class="n">LF</span> <span class="o">=</span> <span class="n">FLAGS_maxLoadFactor</span> <span class="o">/</span> <span class="n">FLAGS_targetLoadFactor</span><span class="p">;</span>
+<span class="k">const</span> <span class="kt">int</span> <span class="n">maxBMElements</span> <span class="o">=</span> <span class="kt">int</span><span class="p">(</span><span class="n">FLAGS_numBMElements</span> <span class="o">*</span> <span class="n">LF</span><span class="p">);</span> <span class="c1">// hit our target LF.</span>
+
+<span class="k">static</span> <span class="n">int64_t</span> <span class="n">nowInUsec</span><span class="p">()</span> <span class="p">{</span>
+  <span class="n">timeval</span> <span class="n">tv</span><span class="p">;</span>
+  <span class="n">gettimeofday</span><span class="p">(</span><span class="o">&amp;</span><span class="n">tv</span><span class="p">,</span> <span class="mi">0</span><span class="p">);</span>
+  <span class="k">return</span> <span class="n">int64_t</span><span class="p">(</span><span class="n">tv</span><span class="p">.</span><span class="n">tv_sec</span><span class="p">)</span> <span class="o">*</span> <span class="mi">1000</span> <span class="o">*</span> <span class="mi">1000</span> <span class="o">+</span> <span class="n">tv</span><span class="p">.</span><span class="n">tv_usec</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">Ahm</span><span class="p">,</span> <span class="n">BasicStrings</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">typedef</span> <span class="n">AtomicHashMap</span><span class="o">&lt;</span><span class="n">int64_t</span><span class="p">,</span><span class="n">string</span><span class="o">&gt;</span> <span class="n">AHM</span><span class="p">;</span>
+  <span class="n">AHM</span> <span class="n">myMap</span><span class="p">(</span><span class="mi">1024</span><span class="p">);</span>
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">myMap</span><span class="p">.</span><span class="n">begin</span><span class="p">()</span> <span class="o">==</span> <span class="n">myMap</span><span class="p">.</span><span class="n">end</span><span class="p">());</span>
+
+  <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="mi">100</span><span class="p">;</span> <span class="o">++</span><span class="n">i</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">myMap</span><span class="p">.</span><span class="n">insert</span><span class="p">(</span><span class="n">make_pair</span><span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="n">folly</span><span class="o">::</span><span class="n">to</span><span class="o">&lt;</span><span class="n">string</span><span class="o">&gt;</span><span class="p">(</span><span class="n">i</span><span class="p">)));</span>
+  <span class="p">}</span>
+  <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="mi">100</span><span class="p">;</span> <span class="o">++</span><span class="n">i</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">myMap</span><span class="p">.</span><span class="n">find</span><span class="p">(</span><span class="n">i</span><span class="p">)</span><span class="o">-&gt;</span><span class="n">second</span><span class="p">,</span> <span class="n">folly</span><span class="o">::</span><span class="n">to</span><span class="o">&lt;</span><span class="n">string</span><span class="o">&gt;</span><span class="p">(</span><span class="n">i</span><span class="p">));</span>
+  <span class="p">}</span>
+
+  <span class="n">myMap</span><span class="p">.</span><span class="n">insert</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">make_pair</span><span class="p">(</span><span class="mi">999</span><span class="p">,</span> <span class="s">&quot;A&quot;</span><span class="p">));</span>
+  <span class="n">myMap</span><span class="p">.</span><span class="n">insert</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">make_pair</span><span class="p">(</span><span class="mi">999</span><span class="p">,</span> <span class="s">&quot;B&quot;</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">myMap</span><span class="p">.</span><span class="n">find</span><span class="p">(</span><span class="mi">999</span><span class="p">)</span><span class="o">-&gt;</span><span class="n">second</span><span class="p">,</span> <span class="s">&quot;A&quot;</span><span class="p">);</span> <span class="c1">// shouldn&#39;t have overwritten</span>
+  <span class="n">myMap</span><span class="p">.</span><span class="n">find</span><span class="p">(</span><span class="mi">999</span><span class="p">)</span><span class="o">-&gt;</span><span class="n">second</span> <span class="o">=</span> <span class="s">&quot;B&quot;</span><span class="p">;</span>
+  <span class="n">myMap</span><span class="p">.</span><span class="n">find</span><span class="p">(</span><span class="mi">999</span><span class="p">)</span><span class="o">-&gt;</span><span class="n">second</span> <span class="o">=</span> <span class="s">&quot;C&quot;</span><span class="p">;</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">myMap</span><span class="p">.</span><span class="n">find</span><span class="p">(</span><span class="mi">999</span><span class="p">)</span><span class="o">-&gt;</span><span class="n">second</span><span class="p">,</span> <span class="s">&quot;C&quot;</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">myMap</span><span class="p">.</span><span class="n">find</span><span class="p">(</span><span class="mi">999</span><span class="p">)</span><span class="o">-&gt;</span><span class="n">first</span><span class="p">,</span> <span class="mi">999</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="k">typedef</span> <span class="n">int32_t</span>     <span class="n">KeyT</span><span class="p">;</span>
+<span class="k">typedef</span> <span class="n">int64_t</span>     <span class="n">KeyTBig</span><span class="p">;</span>
+<span class="k">typedef</span> <span class="n">int32_t</span>     <span class="n">ValueT</span><span class="p">;</span>
+
+<span class="k">typedef</span> <span class="n">AtomicHashMap</span><span class="o">&lt;</span><span class="n">KeyT</span><span class="p">,</span><span class="n">ValueT</span><span class="o">&gt;</span> <span class="n">AHMapT</span><span class="p">;</span>
+<span class="k">typedef</span> <span class="n">AHMapT</span><span class="o">::</span><span class="n">value_type</span> <span class="n">RecordT</span><span class="p">;</span>
+<span class="k">typedef</span> <span class="n">AtomicHashArray</span><span class="o">&lt;</span><span class="n">KeyT</span><span class="p">,</span><span class="n">ValueT</span><span class="o">&gt;</span> <span class="n">AHArrayT</span><span class="p">;</span>
+
+<span class="n">AHArrayT</span><span class="o">::</span><span class="n">Config</span> <span class="n">config</span><span class="p">;</span>
+<span class="k">static</span> <span class="n">AHArrayT</span><span class="o">::</span><span class="n">SmartPtr</span> <span class="n">globalAHA</span><span class="p">(</span><span class="n">nullptr</span><span class="p">);</span>
+<span class="k">static</span> <span class="n">std</span><span class="o">::</span><span class="n">unique_ptr</span><span class="o">&lt;</span><span class="n">AHMapT</span><span class="o">&gt;</span> <span class="n">globalAHM</span><span class="p">;</span></pre></div></td></tr>
+
+
+<tr id="section-3"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-3">&#182;</a></div><p>Generate a deterministic value based on an input key</p></td><td class="code"><div class="highlight"><pre><span class="k">static</span> <span class="kt">int</span> <span class="n">genVal</span><span class="p">(</span><span class="kt">int</span> <span class="n">key</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">return</span> <span class="n">key</span> <span class="o">/</span> <span class="mi">3</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">Ahm</span><span class="p">,</span> <span class="n">grow</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">VLOG</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span> <span class="o">&lt;&lt;</span> <span class="s">&quot;Overhead: &quot;</span> <span class="o">&lt;&lt;</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">AHArrayT</span><span class="p">)</span> <span class="o">&lt;&lt;</span> <span class="s">&quot; (array) &quot;</span> <span class="o">&lt;&lt;</span>
+    <span class="k">sizeof</span><span class="p">(</span><span class="n">AHMapT</span><span class="p">)</span> <span class="o">+</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">AHArrayT</span><span class="p">)</span> <span class="o">&lt;&lt;</span> <span class="s">&quot; (map/set) Bytes.&quot;</span><span class="p">;</span>
+  <span class="kt">int</span> <span class="n">numEntries</span> <span class="o">=</span> <span class="mi">10000</span><span class="p">;</span>
+  <span class="kt">float</span> <span class="n">sizeFactor</span> <span class="o">=</span> <span class="mf">0.46</span><span class="p">;</span>
+
+  <span class="n">std</span><span class="o">::</span><span class="n">unique_ptr</span><span class="o">&lt;</span><span class="n">AHMapT</span><span class="o">&gt;</span> <span class="n">m</span><span class="p">(</span><span class="k">new</span> <span class="n">AHMapT</span><span class="p">(</span><span class="kt">int</span><span class="p">(</span><span class="n">numEntries</span> <span class="o">*</span> <span class="n">sizeFactor</span><span class="p">),</span> <span class="n">config</span><span class="p">));</span></pre></div></td></tr>
+
+
+<tr id="section-4"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-4">&#182;</a></div><p>load map - make sure we succeed and the index is accurate</p></td><td class="code"><div class="highlight"><pre>  <span class="kt">bool</span> <span class="n">success</span> <span class="o">=</span> <span class="kc">true</span><span class="p">;</span>
+  <span class="k">for</span> <span class="p">(</span><span class="n">uint64_t</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">numEntries</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">auto</span> <span class="n">ret</span> <span class="o">=</span> <span class="n">m</span><span class="o">-&gt;</span><span class="n">insert</span><span class="p">(</span><span class="n">RecordT</span><span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="n">genVal</span><span class="p">(</span><span class="n">i</span><span class="p">)));</span>
+    <span class="n">success</span> <span class="o">&amp;=</span> <span class="n">ret</span><span class="p">.</span><span class="n">second</span><span class="p">;</span>
+    <span class="n">success</span> <span class="o">&amp;=</span> <span class="p">(</span><span class="n">m</span><span class="o">-&gt;</span><span class="n">findAt</span><span class="p">(</span><span class="n">ret</span><span class="p">.</span><span class="n">first</span><span class="p">.</span><span class="n">getIndex</span><span class="p">())</span><span class="o">-&gt;</span><span class="n">second</span> <span class="o">==</span> <span class="n">genVal</span><span class="p">(</span><span class="n">i</span><span class="p">));</span>
+  <span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-5"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-5">&#182;</a></div><p>Overwrite vals to make sure there are no dups
+Every insert should fail because the keys are already in the map.</p></td><td class="code"><div class="highlight"><pre>  <span class="n">success</span> <span class="o">=</span> <span class="kc">true</span><span class="p">;</span>
+  <span class="k">for</span> <span class="p">(</span><span class="n">uint64_t</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">numEntries</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">auto</span> <span class="n">ret</span> <span class="o">=</span> <span class="n">m</span><span class="o">-&gt;</span><span class="n">insert</span><span class="p">(</span><span class="n">RecordT</span><span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="n">genVal</span><span class="p">(</span><span class="n">i</span> <span class="o">*</span> <span class="mi">2</span><span class="p">)));</span>
+    <span class="n">success</span> <span class="o">&amp;=</span> <span class="p">(</span><span class="n">ret</span><span class="p">.</span><span class="n">second</span> <span class="o">==</span> <span class="kc">false</span><span class="p">);</span>  <span class="c1">// fail on collision</span>
+    <span class="n">success</span> <span class="o">&amp;=</span> <span class="p">(</span><span class="n">ret</span><span class="p">.</span><span class="n">first</span><span class="o">-&gt;</span><span class="n">second</span> <span class="o">==</span> <span class="n">genVal</span><span class="p">(</span><span class="n">i</span><span class="p">));</span> <span class="c1">// return the previous value</span>
+    <span class="n">success</span> <span class="o">&amp;=</span> <span class="p">(</span><span class="n">m</span><span class="o">-&gt;</span><span class="n">findAt</span><span class="p">(</span><span class="n">ret</span><span class="p">.</span><span class="n">first</span><span class="p">.</span><span class="n">getIndex</span><span class="p">())</span><span class="o">-&gt;</span><span class="n">second</span> <span class="o">==</span> <span class="n">genVal</span><span class="p">(</span><span class="n">i</span><span class="p">));</span>
+  <span class="p">}</span>
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">success</span><span class="p">);</span></pre></div></td></tr>
+
+
+<tr id="section-6"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-6">&#182;</a></div><p>check correctness</p></td><td class="code"><div class="highlight"><pre>  <span class="n">size_t</span> <span class="n">cap</span> <span class="o">=</span> <span class="n">m</span><span class="o">-&gt;</span><span class="n">capacity</span><span class="p">();</span>
+  <span class="n">ValueT</span> <span class="n">val</span><span class="p">;</span>
+  <span class="n">EXPECT_GT</span><span class="p">(</span><span class="n">m</span><span class="o">-&gt;</span><span class="n">numSubMaps</span><span class="p">(),</span> <span class="mi">1</span><span class="p">);</span>  <span class="c1">// make sure we grew</span>
+  <span class="n">success</span> <span class="o">=</span> <span class="kc">true</span><span class="p">;</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">m</span><span class="o">-&gt;</span><span class="n">size</span><span class="p">(),</span> <span class="n">numEntries</span><span class="p">);</span>
+  <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">numEntries</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">success</span> <span class="o">&amp;=</span> <span class="p">(</span><span class="n">m</span><span class="o">-&gt;</span><span class="n">find</span><span class="p">(</span><span class="n">i</span><span class="p">)</span><span class="o">-&gt;</span><span class="n">second</span> <span class="o">==</span> <span class="n">genVal</span><span class="p">(</span><span class="n">i</span><span class="p">));</span>
+  <span class="p">}</span>
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">success</span><span class="p">);</span></pre></div></td></tr>
+
+
+<tr id="section-7"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-7">&#182;</a></div><p>Check findAt</p></td><td class="code"><div class="highlight"><pre>  <span class="n">success</span> <span class="o">=</span> <span class="kc">true</span><span class="p">;</span>
+  <span class="n">KeyT</span> <span class="n">key</span><span class="p">(</span><span class="mi">0</span><span class="p">);</span>
+  <span class="n">AHMapT</span><span class="o">::</span><span class="n">const_iterator</span> <span class="n">retIt</span><span class="p">;</span>
+  <span class="k">for</span> <span class="p">(</span><span class="n">uint64_t</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">numEntries</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">retIt</span> <span class="o">=</span> <span class="n">m</span><span class="o">-&gt;</span><span class="n">find</span><span class="p">(</span><span class="n">i</span><span class="p">);</span>
+    <span class="n">retIt</span> <span class="o">=</span> <span class="n">m</span><span class="o">-&gt;</span><span class="n">findAt</span><span class="p">(</span><span class="n">retIt</span><span class="p">.</span><span class="n">getIndex</span><span class="p">());</span>
+    <span class="n">success</span> <span class="o">&amp;=</span> <span class="p">(</span><span class="n">retIt</span><span class="o">-&gt;</span><span class="n">second</span> <span class="o">==</span> <span class="n">genVal</span><span class="p">(</span><span class="n">i</span><span class="p">));</span>
+    <span class="n">success</span> <span class="o">&amp;=</span> <span class="p">(</span><span class="n">retIt</span><span class="o">-&gt;</span><span class="n">first</span> <span class="o">==</span> <span class="n">i</span><span class="p">);</span>
+  <span class="p">}</span>
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">success</span><span class="p">);</span></pre></div></td></tr>
+
+
+<tr id="section-8"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-8">&#182;</a></div><p>Try modifying value</p></td><td class="code"><div class="highlight"><pre>  <span class="n">m</span><span class="o">-&gt;</span><span class="n">find</span><span class="p">(</span><span class="mi">8</span><span class="p">)</span><span class="o">-&gt;</span><span class="n">second</span> <span class="o">=</span> <span class="mi">5309</span><span class="p">;</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">m</span><span class="o">-&gt;</span><span class="n">find</span><span class="p">(</span><span class="mi">8</span><span class="p">)</span><span class="o">-&gt;</span><span class="n">second</span><span class="p">,</span> <span class="mi">5309</span><span class="p">);</span></pre></div></td></tr>
+
+
+<tr id="section-9"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-9">&#182;</a></div><p>check clear()</p></td><td class="code"><div class="highlight"><pre>  <span class="n">m</span><span class="o">-&gt;</span><span class="n">clear</span><span class="p">();</span>
+  <span class="n">success</span> <span class="o">=</span> <span class="kc">true</span><span class="p">;</span>
+  <span class="k">for</span> <span class="p">(</span><span class="n">uint64_t</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">numEntries</span> <span class="o">/</span> <span class="mi">2</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">success</span> <span class="o">&amp;=</span> <span class="n">m</span><span class="o">-&gt;</span><span class="n">insert</span><span class="p">(</span><span class="n">RecordT</span><span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="n">genVal</span><span class="p">(</span><span class="n">i</span><span class="p">))).</span><span class="n">second</span><span class="p">;</span>
+  <span class="p">}</span>
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">success</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">m</span><span class="o">-&gt;</span><span class="n">size</span><span class="p">(),</span> <span class="n">numEntries</span> <span class="o">/</span> <span class="mi">2</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">Ahm</span><span class="p">,</span> <span class="n">iterator</span><span class="p">)</span> <span class="p">{</span>
+  <span class="kt">int</span> <span class="n">numEntries</span> <span class="o">=</span> <span class="mi">10000</span><span class="p">;</span>
+  <span class="kt">float</span> <span class="n">sizeFactor</span> <span class="o">=</span> <span class="mf">.46</span><span class="p">;</span>
+  <span class="n">std</span><span class="o">::</span><span class="n">unique_ptr</span><span class="o">&lt;</span><span class="n">AHMapT</span><span class="o">&gt;</span> <span class="n">m</span><span class="p">(</span><span class="k">new</span> <span class="n">AHMapT</span><span class="p">(</span><span class="kt">int</span><span class="p">(</span><span class="n">numEntries</span> <span class="o">*</span> <span class="n">sizeFactor</span><span class="p">),</span> <span class="n">config</span><span class="p">));</span></pre></div></td></tr>
+
+
+<tr id="section-10"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-10">&#182;</a></div><p>load map - make sure we succeed and the index is accurate</p></td><td class="code"><div class="highlight"><pre>  <span class="k">for</span> <span class="p">(</span><span class="n">uint64_t</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">numEntries</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">m</span><span class="o">-&gt;</span><span class="n">insert</span><span class="p">(</span><span class="n">RecordT</span><span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="n">genVal</span><span class="p">(</span><span class="n">i</span><span class="p">)));</span>
+  <span class="p">}</span>
+
+  <span class="kt">bool</span> <span class="n">success</span> <span class="o">=</span> <span class="kc">true</span><span class="p">;</span>
+  <span class="kt">int</span> <span class="n">count</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+  <span class="n">FOR_EACH</span><span class="p">(</span><span class="n">it</span><span class="p">,</span> <span class="o">*</span><span class="n">m</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">success</span> <span class="o">&amp;=</span> <span class="p">(</span><span class="n">it</span><span class="o">-&gt;</span><span class="n">second</span> <span class="o">==</span> <span class="n">genVal</span><span class="p">(</span><span class="n">it</span><span class="o">-&gt;</span><span class="n">first</span><span class="p">));</span>
+    <span class="o">++</span><span class="n">count</span><span class="p">;</span>
+  <span class="p">}</span>
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">success</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">count</span><span class="p">,</span> <span class="n">numEntries</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="k">class</span> <span class="nc">Counters</span> <span class="p">{</span>
+<span class="k">private</span><span class="o">:</span></pre></div></td></tr>
+
+
+<tr id="section-11"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-11">&#182;</a></div><p>NOTE: Unfortunately can't currently put a std::atomic<int64_t> in
+the value in ahm since it doesn't support non-copyable but
+move-constructible value types yet.</p></td><td class="code"><div class="highlight"><pre>  <span class="n">AtomicHashMap</span><span class="o">&lt;</span><span class="n">int64_t</span><span class="p">,</span><span class="n">int64_t</span><span class="o">&gt;</span> <span class="n">ahm</span><span class="p">;</span>
+
+<span class="k">public</span><span class="o">:</span>
+  <span class="k">explicit</span> <span class="n">Counters</span><span class="p">(</span><span class="n">size_t</span> <span class="n">numCounters</span><span class="p">)</span> <span class="o">:</span> <span class="n">ahm</span><span class="p">(</span><span class="n">numCounters</span><span class="p">)</span> <span class="p">{}</span>
+
+  <span class="kt">void</span> <span class="n">increment</span><span class="p">(</span><span class="n">int64_t</span> <span class="n">obj_id</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">auto</span> <span class="n">ret</span> <span class="o">=</span> <span class="n">ahm</span><span class="p">.</span><span class="n">insert</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">make_pair</span><span class="p">(</span><span class="n">obj_id</span><span class="p">,</span> <span class="mi">1</span><span class="p">));</span>
+    <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">ret</span><span class="p">.</span><span class="n">second</span><span class="p">)</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-12"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-12">&#182;</a></div><p>obj_id already exists, increment count</p></td><td class="code"><div class="highlight"><pre>      <span class="n">__sync_fetch_and_add</span><span class="p">(</span><span class="o">&amp;</span><span class="n">ret</span><span class="p">.</span><span class="n">first</span><span class="o">-&gt;</span><span class="n">second</span><span class="p">,</span> <span class="mi">1</span><span class="p">);</span>
+    <span class="p">}</span>
+  <span class="p">}</span>
+
+  <span class="n">int64_t</span> <span class="n">getValue</span><span class="p">(</span><span class="n">int64_t</span> <span class="n">obj_id</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">auto</span> <span class="n">ret</span> <span class="o">=</span> <span class="n">ahm</span><span class="p">.</span><span class="n">find</span><span class="p">(</span><span class="n">obj_id</span><span class="p">);</span>
+    <span class="k">return</span> <span class="n">ret</span> <span class="o">!=</span> <span class="n">ahm</span><span class="p">.</span><span class="n">end</span><span class="p">()</span> <span class="o">?</span> <span class="n">ret</span><span class="o">-&gt;</span><span class="n">second</span> <span class="o">:</span> <span class="mi">0</span><span class="p">;</span>
+  <span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-13"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-13">&#182;</a></div><p>export the counters without blocking increments</p></td><td class="code"><div class="highlight"><pre>  <span class="n">string</span> <span class="n">toString</span><span class="p">()</span> <span class="p">{</span>
+    <span class="n">string</span> <span class="n">ret</span> <span class="o">=</span> <span class="s">&quot;{</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">;</span>
+    <span class="n">ret</span><span class="p">.</span><span class="n">reserve</span><span class="p">(</span><span class="n">ahm</span><span class="p">.</span><span class="n">size</span><span class="p">()</span> <span class="o">*</span> <span class="mi">32</span><span class="p">);</span>
+    <span class="k">for</span> <span class="p">(</span><span class="k">const</span> <span class="k">auto</span><span class="o">&amp;</span> <span class="n">e</span> <span class="o">:</span> <span class="n">ahm</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">ret</span> <span class="o">+=</span> <span class="n">folly</span><span class="o">::</span><span class="n">to</span><span class="o">&lt;</span><span class="n">string</span><span class="o">&gt;</span><span class="p">(</span>
+        <span class="s">&quot;  [&quot;</span><span class="p">,</span> <span class="n">e</span><span class="p">.</span><span class="n">first</span><span class="p">,</span> <span class="s">&quot;:&quot;</span><span class="p">,</span> <span class="n">e</span><span class="p">.</span><span class="n">second</span><span class="p">,</span> <span class="s">&quot;]</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">);</span>
+    <span class="p">}</span>
+    <span class="n">ret</span> <span class="o">+=</span> <span class="s">&quot;}</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">;</span>
+    <span class="k">return</span> <span class="n">ret</span><span class="p">;</span>
+  <span class="p">}</span>
+<span class="p">};</span></pre></div></td></tr>
+
+
+<tr id="section-14"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-14">&#182;</a></div><p>If you get an error "terminate called without an active exception", there
+might be too many threads getting created - decrease numKeys and/or mult.</p></td><td class="code"><div class="highlight"><pre><span class="n">TEST</span><span class="p">(</span><span class="n">Ahm</span><span class="p">,</span> <span class="n">counter</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">const</span> <span class="kt">int</span> <span class="n">numKeys</span> <span class="o">=</span> <span class="mi">10</span><span class="p">;</span>
+  <span class="k">const</span> <span class="kt">int</span> <span class="n">mult</span> <span class="o">=</span> <span class="mi">10</span><span class="p">;</span>
+  <span class="n">Counters</span> <span class="n">c</span><span class="p">(</span><span class="n">numKeys</span><span class="p">);</span>
+  <span class="n">vector</span><span class="o">&lt;</span><span class="n">int64_t</span><span class="o">&gt;</span> <span class="n">keys</span><span class="p">;</span>
+  <span class="n">FOR_EACH_RANGE</span><span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">numKeys</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">keys</span><span class="p">.</span><span class="n">push_back</span><span class="p">(</span><span class="n">i</span><span class="p">);</span>
+  <span class="p">}</span>
+  <span class="n">vector</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="kr">thread</span><span class="o">&gt;</span> <span class="n">threads</span><span class="p">;</span>
+  <span class="k">for</span> <span class="p">(</span><span class="k">auto</span> <span class="n">key</span> <span class="o">:</span> <span class="n">keys</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">FOR_EACH_RANGE</span><span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">key</span> <span class="o">*</span> <span class="n">mult</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">threads</span><span class="p">.</span><span class="n">push_back</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="kr">thread</span><span class="p">([</span><span class="o">&amp;</span><span class="p">,</span> <span class="n">key</span><span class="p">]</span> <span class="p">{</span> <span class="n">c</span><span class="p">.</span><span class="n">increment</span><span class="p">(</span><span class="n">key</span><span class="p">);</span> <span class="p">}));</span>
+    <span class="p">}</span>
+  <span class="p">}</span>
+  <span class="k">for</span> <span class="p">(</span><span class="k">auto</span><span class="o">&amp;</span> <span class="n">t</span> <span class="o">:</span> <span class="n">threads</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">t</span><span class="p">.</span><span class="n">join</span><span class="p">();</span>
+  <span class="p">}</span>
+  <span class="n">string</span> <span class="n">str</span> <span class="o">=</span> <span class="n">c</span><span class="p">.</span><span class="n">toString</span><span class="p">();</span>
+  <span class="k">for</span> <span class="p">(</span><span class="k">auto</span> <span class="n">key</span> <span class="o">:</span> <span class="n">keys</span><span class="p">)</span> <span class="p">{</span>
+    <span class="kt">int</span> <span class="n">val</span> <span class="o">=</span> <span class="n">key</span> <span class="o">*</span> <span class="n">mult</span><span class="p">;</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">val</span><span class="p">,</span> <span class="n">c</span><span class="p">.</span><span class="n">getValue</span><span class="p">(</span><span class="n">key</span><span class="p">));</span>
+    <span class="n">EXPECT_NE</span><span class="p">(</span><span class="n">string</span><span class="o">::</span><span class="n">npos</span><span class="p">,</span> <span class="n">str</span><span class="p">.</span><span class="n">find</span><span class="p">(</span><span class="n">folly</span><span class="o">::</span><span class="n">to</span><span class="o">&lt;</span><span class="n">string</span><span class="o">&gt;</span><span class="p">(</span><span class="s">&quot;[&quot;</span><span class="p">,</span><span class="n">key</span><span class="p">,</span><span class="s">&quot;:&quot;</span><span class="p">,</span><span class="n">val</span><span class="p">,</span><span class="s">&quot;]&quot;</span><span class="p">)));</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="k">class</span> <span class="nc">Integer</span> <span class="p">{</span>
+
+ <span class="k">public</span><span class="o">:</span>
+  <span class="k">explicit</span> <span class="n">Integer</span><span class="p">(</span><span class="n">KeyT</span> <span class="n">v</span> <span class="o">=</span> <span class="mi">0</span><span class="p">)</span> <span class="o">:</span> <span class="n">v_</span><span class="p">(</span><span class="n">v</span><span class="p">)</span> <span class="p">{}</span>
+
+  <span class="n">Integer</span><span class="o">&amp;</span> <span class="k">operator</span><span class="o">=</span><span class="p">(</span><span class="k">const</span> <span class="n">Integer</span><span class="o">&amp;</span> <span class="n">a</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">static</span> <span class="kt">bool</span> <span class="n">throwException_</span> <span class="o">=</span> <span class="kc">false</span><span class="p">;</span>
+    <span class="n">throwException_</span> <span class="o">=</span> <span class="o">!</span><span class="n">throwException_</span><span class="p">;</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">throwException_</span><span class="p">)</span> <span class="p">{</span>
+      <span class="k">throw</span> <span class="mi">1</span><span class="p">;</span>
+    <span class="p">}</span>
+    <span class="n">v_</span> <span class="o">=</span> <span class="n">a</span><span class="p">.</span><span class="n">v_</span><span class="p">;</span>
+    <span class="k">return</span> <span class="o">*</span><span class="k">this</span><span class="p">;</span>
+  <span class="p">}</span>
+
+  <span class="kt">bool</span> <span class="k">operator</span><span class="o">==</span><span class="p">(</span><span class="k">const</span> <span class="n">Integer</span><span class="o">&amp;</span> <span class="n">a</span><span class="p">)</span> <span class="k">const</span> <span class="p">{</span> <span class="k">return</span> <span class="n">v_</span> <span class="o">==</span> <span class="n">a</span><span class="p">.</span><span class="n">v_</span><span class="p">;</span> <span class="p">}</span>
+
+ <span class="k">private</span><span class="o">:</span>
+  <span class="n">KeyT</span> <span class="n">v_</span><span class="p">;</span>
+<span class="p">};</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">Ahm</span><span class="p">,</span> <span class="n">map_exception_safety</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">typedef</span> <span class="n">AtomicHashMap</span><span class="o">&lt;</span><span class="n">KeyT</span><span class="p">,</span><span class="n">Integer</span><span class="o">&gt;</span> <span class="n">MyMapT</span><span class="p">;</span>
+
+  <span class="kt">int</span> <span class="n">numEntries</span> <span class="o">=</span> <span class="mi">10000</span><span class="p">;</span>
+  <span class="kt">float</span> <span class="n">sizeFactor</span> <span class="o">=</span> <span class="mf">0.46</span><span class="p">;</span>
+  <span class="n">std</span><span class="o">::</span><span class="n">unique_ptr</span><span class="o">&lt;</span><span class="n">MyMapT</span><span class="o">&gt;</span> <span class="n">m</span><span class="p">(</span><span class="k">new</span> <span class="n">MyMapT</span><span class="p">(</span><span class="kt">int</span><span class="p">(</span><span class="n">numEntries</span> <span class="o">*</span> <span class="n">sizeFactor</span><span class="p">)));</span>
+
+  <span class="kt">bool</span> <span class="n">success</span> <span class="o">=</span> <span class="kc">true</span><span class="p">;</span>
+  <span class="kt">int</span> <span class="n">count</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+  <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">numEntries</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">try</span> <span class="p">{</span>
+      <span class="n">m</span><span class="o">-&gt;</span><span class="n">insert</span><span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="n">Integer</span><span class="p">(</span><span class="n">genVal</span><span class="p">(</span><span class="n">i</span><span class="p">)));</span>
+      <span class="n">success</span> <span class="o">&amp;=</span> <span class="p">(</span><span class="n">m</span><span class="o">-&gt;</span><span class="n">find</span><span class="p">(</span><span class="n">i</span><span class="p">)</span><span class="o">-&gt;</span><span class="n">second</span> <span class="o">==</span> <span class="n">Integer</span><span class="p">(</span><span class="n">genVal</span><span class="p">(</span><span class="n">i</span><span class="p">)));</span>
+      <span class="o">++</span><span class="n">count</span><span class="p">;</span>
+    <span class="p">}</span> <span class="k">catch</span> <span class="p">(...)</span> <span class="p">{</span>
+      <span class="n">success</span> <span class="o">&amp;=</span> <span class="o">!</span><span class="n">m</span><span class="o">-&gt;</span><span class="n">count</span><span class="p">(</span><span class="n">i</span><span class="p">);</span>
+    <span class="p">}</span>
+  <span class="p">}</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">count</span><span class="p">,</span> <span class="n">m</span><span class="o">-&gt;</span><span class="n">size</span><span class="p">());</span>
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">success</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">Ahm</span><span class="p">,</span> <span class="n">basicErase</span><span class="p">)</span> <span class="p">{</span>
+  <span class="kt">int</span> <span class="n">numEntries</span> <span class="o">=</span> <span class="mi">3000</span><span class="p">;</span>
+
+  <span class="n">std</span><span class="o">::</span><span class="n">unique_ptr</span><span class="o">&lt;</span><span class="n">AHMapT</span><span class="o">&gt;</span> <span class="n">s</span><span class="p">(</span><span class="k">new</span> <span class="n">AHMapT</span><span class="p">(</span><span class="n">numEntries</span><span class="p">,</span> <span class="n">config</span><span class="p">));</span></pre></div></td></tr>
+
+
+<tr id="section-15"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-15">&#182;</a></div><p>Iterate filling up the map and deleting all keys a few times
+to test more than one subMap.</p></td><td class="code"><div class="highlight"><pre>  <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">iterations</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">iterations</span> <span class="o">&lt;</span> <span class="mi">4</span><span class="p">;</span> <span class="o">++</span><span class="n">iterations</span><span class="p">)</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-16"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-16">&#182;</a></div><p>Testing insertion of keys</p></td><td class="code"><div class="highlight"><pre>    <span class="kt">bool</span> <span class="n">success</span> <span class="o">=</span> <span class="kc">true</span><span class="p">;</span>
+    <span class="k">for</span> <span class="p">(</span><span class="n">uint64_t</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">numEntries</span><span class="p">;</span> <span class="o">++</span><span class="n">i</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">success</span> <span class="o">&amp;=</span> <span class="o">!</span><span class="p">(</span><span class="n">s</span><span class="o">-&gt;</span><span class="n">count</span><span class="p">(</span><span class="n">i</span><span class="p">));</span>
+      <span class="k">auto</span> <span class="n">ret</span> <span class="o">=</span> <span class="n">s</span><span class="o">-&gt;</span><span class="n">insert</span><span class="p">(</span><span class="n">RecordT</span><span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="n">i</span><span class="p">));</span>
+      <span class="n">success</span> <span class="o">&amp;=</span> <span class="n">s</span><span class="o">-&gt;</span><span class="n">count</span><span class="p">(</span><span class="n">i</span><span class="p">);</span>
+      <span class="n">success</span> <span class="o">&amp;=</span> <span class="n">ret</span><span class="p">.</span><span class="n">second</span><span class="p">;</span>
+    <span class="p">}</span>
+    <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">success</span><span class="p">);</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">s</span><span class="o">-&gt;</span><span class="n">size</span><span class="p">(),</span> <span class="n">numEntries</span><span class="p">);</span></pre></div></td></tr>
+
+
+<tr id="section-17"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-17">&#182;</a></div><p>Delete every key in the map and verify that the key is gone and the the
+size is correct.</p></td><td class="code"><div class="highlight"><pre>    <span class="n">success</span> <span class="o">=</span> <span class="kc">true</span><span class="p">;</span>
+    <span class="k">for</span> <span class="p">(</span><span class="n">uint64_t</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">numEntries</span><span class="p">;</span> <span class="o">++</span><span class="n">i</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">success</span> <span class="o">&amp;=</span> <span class="n">s</span><span class="o">-&gt;</span><span class="n">erase</span><span class="p">(</span><span class="n">i</span><span class="p">);</span>
+      <span class="n">success</span> <span class="o">&amp;=</span> <span class="p">(</span><span class="n">s</span><span class="o">-&gt;</span><span class="n">size</span><span class="p">()</span> <span class="o">==</span> <span class="n">numEntries</span> <span class="o">-</span> <span class="mi">1</span> <span class="o">-</span> <span class="n">i</span><span class="p">);</span>
+      <span class="n">success</span> <span class="o">&amp;=</span> <span class="o">!</span><span class="p">(</span><span class="n">s</span><span class="o">-&gt;</span><span class="n">count</span><span class="p">(</span><span class="n">i</span><span class="p">));</span>
+      <span class="n">success</span> <span class="o">&amp;=</span> <span class="o">!</span><span class="p">(</span><span class="n">s</span><span class="o">-&gt;</span><span class="n">erase</span><span class="p">(</span><span class="n">i</span><span class="p">));</span>
+    <span class="p">}</span>
+    <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">success</span><span class="p">);</span>
+  <span class="p">}</span>
+  <span class="n">VLOG</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span> <span class="o">&lt;&lt;</span> <span class="s">&quot;Final number of subMaps = &quot;</span> <span class="o">&lt;&lt;</span> <span class="n">s</span><span class="o">-&gt;</span><span class="n">numSubMaps</span><span class="p">();</span>
+<span class="p">}</span>
+
+<span class="k">namespace</span> <span class="p">{</span>
+
+<span class="kr">inline</span> <span class="n">KeyT</span> <span class="n">randomizeKey</span><span class="p">(</span><span class="kt">int</span> <span class="n">key</span><span class="p">)</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-18"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-18">&#182;</a></div><p>We deterministically randomize the key to more accurately simulate
+real-world usage, and to avoid pathalogical performance patterns (e.g.
+those related to <em>_gnu</em>cxx::hash<int64_t>()(1) == 1).</p>
+
+<p>Use a hash function we don't normally use for ints to avoid interactions.</p></td><td class="code"><div class="highlight"><pre>  <span class="k">return</span> <span class="n">folly</span><span class="o">::</span><span class="n">hash</span><span class="o">::</span><span class="n">jenkins_rev_mix32</span><span class="p">(</span><span class="n">key</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="kt">int</span> <span class="n">numOpsPerThread</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+
+<span class="kt">void</span><span class="o">*</span> <span class="n">insertThread</span><span class="p">(</span><span class="kt">void</span><span class="o">*</span> <span class="n">jj</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">int64_t</span> <span class="n">j</span> <span class="o">=</span> <span class="p">(</span><span class="n">int64_t</span><span class="p">)</span> <span class="n">jj</span><span class="p">;</span>
+  <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">numOpsPerThread</span><span class="p">;</span> <span class="o">++</span><span class="n">i</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">KeyT</span> <span class="n">key</span> <span class="o">=</span> <span class="n">randomizeKey</span><span class="p">(</span><span class="n">i</span> <span class="o">+</span> <span class="n">j</span> <span class="o">*</span> <span class="n">numOpsPerThread</span><span class="p">);</span>
+    <span class="n">globalAHM</span><span class="o">-&gt;</span><span class="n">insert</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">genVal</span><span class="p">(</span><span class="n">key</span><span class="p">));</span>
+  <span class="p">}</span>
+  <span class="k">return</span> <span class="nb">NULL</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="kt">void</span><span class="o">*</span> <span class="n">insertThreadArr</span><span class="p">(</span><span class="kt">void</span><span class="o">*</span> <span class="n">jj</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">int64_t</span> <span class="n">j</span> <span class="o">=</span> <span class="p">(</span><span class="n">int64_t</span><span class="p">)</span> <span class="n">jj</span><span class="p">;</span>
+  <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">numOpsPerThread</span><span class="p">;</span> <span class="o">++</span><span class="n">i</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">KeyT</span> <span class="n">key</span> <span class="o">=</span> <span class="n">randomizeKey</span><span class="p">(</span><span class="n">i</span> <span class="o">+</span> <span class="n">j</span> <span class="o">*</span> <span class="n">numOpsPerThread</span><span class="p">);</span>
+    <span class="n">globalAHA</span><span class="o">-&gt;</span><span class="n">insert</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">make_pair</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">genVal</span><span class="p">(</span><span class="n">key</span><span class="p">)));</span>
+  <span class="p">}</span>
+  <span class="k">return</span> <span class="nb">NULL</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="n">std</span><span class="o">::</span><span class="n">atomic</span><span class="o">&lt;</span><span class="kt">bool</span><span class="o">&gt;</span> <span class="n">runThreadsCreatedAllThreads</span><span class="p">;</span>
+<span class="kt">void</span> <span class="n">runThreads</span><span class="p">(</span><span class="kt">void</span> <span class="o">*</span><span class="p">(</span><span class="o">*</span><span class="kr">thread</span><span class="p">)(</span><span class="kt">void</span><span class="o">*</span><span class="p">),</span> <span class="kt">int</span> <span class="n">numThreads</span><span class="p">,</span> <span class="kt">void</span> <span class="o">**</span><span class="n">statuses</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">folly</span><span class="o">::</span><span class="n">BenchmarkSuspender</span> <span class="n">susp</span><span class="p">;</span>
+  <span class="n">runThreadsCreatedAllThreads</span><span class="p">.</span><span class="n">store</span><span class="p">(</span><span class="kc">false</span><span class="p">);</span>
+  <span class="n">vector</span><span class="o">&lt;</span><span class="n">pthread_t</span><span class="o">&gt;</span> <span class="n">threadIds</span><span class="p">;</span>
+  <span class="k">for</span> <span class="p">(</span><span class="n">int64_t</span> <span class="n">j</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">j</span> <span class="o">&lt;</span> <span class="n">numThreads</span><span class="p">;</span> <span class="n">j</span><span class="o">++</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">pthread_t</span> <span class="n">tid</span><span class="p">;</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">pthread_create</span><span class="p">(</span><span class="o">&amp;</span><span class="n">tid</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">,</span> <span class="kr">thread</span><span class="p">,</span> <span class="p">(</span><span class="kt">void</span><span class="o">*</span><span class="p">)</span> <span class="n">j</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+       <span class="n">LOG</span><span class="p">(</span><span class="n">ERROR</span><span class="p">)</span> <span class="o">&lt;&lt;</span> <span class="s">&quot;Could not start thread&quot;</span><span class="p">;</span>
+    <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+      <span class="n">threadIds</span><span class="p">.</span><span class="n">push_back</span><span class="p">(</span><span class="n">tid</span><span class="p">);</span>
+    <span class="p">}</span>
+  <span class="p">}</span>
+  <span class="n">susp</span><span class="p">.</span><span class="n">dismiss</span><span class="p">();</span>
+
+  <span class="n">runThreadsCreatedAllThreads</span><span class="p">.</span><span class="n">store</span><span class="p">(</span><span class="kc">true</span><span class="p">);</span>
+  <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">threadIds</span><span class="p">.</span><span class="n">size</span><span class="p">();</span> <span class="o">++</span><span class="n">i</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">pthread_join</span><span class="p">(</span><span class="n">threadIds</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="n">statuses</span> <span class="o">==</span> <span class="nb">NULL</span> <span class="o">?</span> <span class="nb">NULL</span> <span class="o">:</span> <span class="o">&amp;</span><span class="n">statuses</span><span class="p">[</span><span class="n">i</span><span class="p">]);</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="kt">void</span> <span class="n">runThreads</span><span class="p">(</span><span class="kt">void</span> <span class="o">*</span><span class="p">(</span><span class="o">*</span><span class="kr">thread</span><span class="p">)(</span><span class="kt">void</span><span class="o">*</span><span class="p">))</span> <span class="p">{</span>
+  <span class="n">runThreads</span><span class="p">(</span><span class="kr">thread</span><span class="p">,</span> <span class="n">FLAGS_numThreads</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">Ahm</span><span class="p">,</span> <span class="n">collision_test</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">const</span> <span class="kt">int</span> <span class="n">numInserts</span> <span class="o">=</span> <span class="mi">1000000</span> <span class="o">/</span> <span class="mi">4</span><span class="p">;</span></pre></div></td></tr>
+
+
+<tr id="section-19"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-19">&#182;</a></div><p>Doing the same number on each thread so we collide.</p></td><td class="code"><div class="highlight"><pre>  <span class="n">numOpsPerThread</span> <span class="o">=</span> <span class="n">numInserts</span><span class="p">;</span>
+
+  <span class="kt">float</span> <span class="n">sizeFactor</span> <span class="o">=</span> <span class="mf">0.46</span><span class="p">;</span>
+  <span class="kt">int</span> <span class="n">entrySize</span> <span class="o">=</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">KeyT</span><span class="p">)</span> <span class="o">+</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">ValueT</span><span class="p">);</span>
+  <span class="n">VLOG</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span> <span class="o">&lt;&lt;</span> <span class="s">&quot;Testing &quot;</span> <span class="o">&lt;&lt;</span> <span class="n">numInserts</span> <span class="o">&lt;&lt;</span> <span class="s">&quot; unique &quot;</span> <span class="o">&lt;&lt;</span> <span class="n">entrySize</span> <span class="o">&lt;&lt;</span>
+    <span class="s">&quot; Byte entries replicated in &quot;</span> <span class="o">&lt;&lt;</span> <span class="n">FLAGS_numThreads</span> <span class="o">&lt;&lt;</span>
+    <span class="s">&quot; threads with &quot;</span> <span class="o">&lt;&lt;</span> <span class="n">FLAGS_maxLoadFactor</span> <span class="o">*</span> <span class="mf">100.0</span> <span class="o">&lt;&lt;</span> <span class="s">&quot;% max load factor.&quot;</span><span class="p">;</span>
+
+  <span class="n">globalAHM</span><span class="p">.</span><span class="n">reset</span><span class="p">(</span><span class="k">new</span> <span class="n">AHMapT</span><span class="p">(</span><span class="kt">int</span><span class="p">(</span><span class="n">numInserts</span> <span class="o">*</span> <span class="n">sizeFactor</span><span class="p">),</span> <span class="n">config</span><span class="p">));</span>
+
+  <span class="n">size_t</span> <span class="n">sizeInit</span> <span class="o">=</span> <span class="n">globalAHM</span><span class="o">-&gt;</span><span class="n">capacity</span><span class="p">();</span>
+  <span class="n">VLOG</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span> <span class="o">&lt;&lt;</span> <span class="s">&quot;  Initial capacity: &quot;</span> <span class="o">&lt;&lt;</span> <span class="n">sizeInit</span><span class="p">;</span>
+
+  <span class="kt">double</span> <span class="n">start</span> <span class="o">=</span> <span class="n">nowInUsec</span><span class="p">();</span>
+  <span class="n">runThreads</span><span class="p">([](</span><span class="kt">void</span><span class="o">*</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kt">void</span><span class="o">*</span> <span class="p">{</span> <span class="c1">// collisionInsertThread</span>
+    <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">numOpsPerThread</span><span class="p">;</span> <span class="o">++</span><span class="n">i</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">KeyT</span> <span class="n">key</span> <span class="o">=</span> <span class="n">randomizeKey</span><span class="p">(</span><span class="n">i</span><span class="p">);</span>
+      <span class="n">globalAHM</span><span class="o">-&gt;</span><span class="n">insert</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">genVal</span><span class="p">(</span><span class="n">key</span><span class="p">));</span>
+    <span class="p">}</span>
+    <span class="k">return</span> <span class="n">nullptr</span><span class="p">;</span>
+  <span class="p">});</span>
+  <span class="kt">double</span> <span class="n">elapsed</span> <span class="o">=</span> <span class="n">nowInUsec</span><span class="p">()</span> <span class="o">-</span> <span class="n">start</span><span class="p">;</span>
+
+  <span class="n">size_t</span> <span class="n">finalCap</span> <span class="o">=</span> <span class="n">globalAHM</span><span class="o">-&gt;</span><span class="n">capacity</span><span class="p">();</span>
+  <span class="n">size_t</span> <span class="n">sizeAHM</span> <span class="o">=</span> <span class="n">globalAHM</span><span class="o">-&gt;</span><span class="n">size</span><span class="p">();</span>
+  <span class="n">VLOG</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span> <span class="o">&lt;&lt;</span> <span class="n">elapsed</span><span class="o">/</span><span class="n">sizeAHM</span> <span class="o">&lt;&lt;</span> <span class="s">&quot; usec per &quot;</span> <span class="o">&lt;&lt;</span> <span class="n">FLAGS_numThreads</span> <span class="o">&lt;&lt;</span>
+    <span class="s">&quot; duplicate inserts (atomic).&quot;</span><span class="p">;</span>
+  <span class="n">VLOG</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span> <span class="o">&lt;&lt;</span> <span class="s">&quot;  Final capacity: &quot;</span> <span class="o">&lt;&lt;</span> <span class="n">finalCap</span> <span class="o">&lt;&lt;</span> <span class="s">&quot; in &quot;</span> <span class="o">&lt;&lt;</span>
+    <span class="n">globalAHM</span><span class="o">-&gt;</span><span class="n">numSubMaps</span><span class="p">()</span> <span class="o">&lt;&lt;</span> <span class="s">&quot; sub maps (&quot;</span> <span class="o">&lt;&lt;</span>
+    <span class="n">sizeAHM</span> <span class="o">*</span> <span class="mi">100</span> <span class="o">/</span> <span class="n">finalCap</span> <span class="o">&lt;&lt;</span> <span class="s">&quot;% load factor, &quot;</span> <span class="o">&lt;&lt;</span>
+    <span class="p">(</span><span class="n">finalCap</span> <span class="o">-</span> <span class="n">sizeInit</span><span class="p">)</span> <span class="o">*</span> <span class="mi">100</span> <span class="o">/</span> <span class="n">sizeInit</span> <span class="o">&lt;&lt;</span> <span class="s">&quot;% growth).&quot;</span><span class="p">;</span></pre></div></td></tr>
+
+
+<tr id="section-20"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-20">&#182;</a></div><p>check correctness</p></td><td class="code"><div class="highlight"><pre>  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">sizeAHM</span><span class="p">,</span> <span class="n">numInserts</span><span class="p">);</span>
+  <span class="kt">bool</span> <span class="n">success</span> <span class="o">=</span> <span class="kc">true</span><span class="p">;</span>
+  <span class="n">ValueT</span> <span class="n">val</span><span class="p">;</span>
+  <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">numInserts</span><span class="p">;</span> <span class="o">++</span><span class="n">i</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">KeyT</span> <span class="n">key</span> <span class="o">=</span> <span class="n">randomizeKey</span><span class="p">(</span><span class="n">i</span><span class="p">);</span>
+    <span class="n">success</span> <span class="o">&amp;=</span> <span class="p">(</span><span class="n">globalAHM</span><span class="o">-&gt;</span><span class="n">find</span><span class="p">(</span><span class="n">key</span><span class="p">)</span><span class="o">-&gt;</span><span class="n">second</span> <span class="o">==</span> <span class="n">genVal</span><span class="p">(</span><span class="n">key</span><span class="p">));</span>
+  <span class="p">}</span>
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">success</span><span class="p">);</span></pre></div></td></tr>
+
+
+<tr id="section-21"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-21">&#182;</a></div><p>check colliding finds</p></td><td class="code"><div class="highlight"><pre>  <span class="n">start</span> <span class="o">=</span> <span class="n">nowInUsec</span><span class="p">();</span>
+  <span class="n">runThreads</span><span class="p">([](</span><span class="kt">void</span><span class="o">*</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kt">void</span><span class="o">*</span> <span class="p">{</span> <span class="c1">// collisionFindThread</span>
+    <span class="n">KeyT</span> <span class="n">key</span><span class="p">(</span><span class="mi">0</span><span class="p">);</span>
+    <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">numOpsPerThread</span><span class="p">;</span> <span class="o">++</span><span class="n">i</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">globalAHM</span><span class="o">-&gt;</span><span class="n">find</span><span class="p">(</span><span class="n">key</span><span class="p">);</span>
+    <span class="p">}</span>
+    <span class="k">return</span> <span class="n">nullptr</span><span class="p">;</span>
+  <span class="p">});</span>
+
+  <span class="n">elapsed</span> <span class="o">=</span> <span class="n">nowInUsec</span><span class="p">()</span> <span class="o">-</span> <span class="n">start</span><span class="p">;</span>
+
+  <span class="n">VLOG</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span> <span class="o">&lt;&lt;</span> <span class="n">elapsed</span><span class="o">/</span><span class="n">sizeAHM</span> <span class="o">&lt;&lt;</span> <span class="s">&quot; usec per &quot;</span> <span class="o">&lt;&lt;</span> <span class="n">FLAGS_numThreads</span> <span class="o">&lt;&lt;</span>
+    <span class="s">&quot; duplicate finds (atomic).&quot;</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="k">namespace</span> <span class="p">{</span>
+
+<span class="k">const</span> <span class="kt">int</span> <span class="n">kInsertPerThread</span> <span class="o">=</span> <span class="mi">100000</span><span class="p">;</span>
+<span class="kt">int</span> <span class="n">raceFinalSizeEstimate</span><span class="p">;</span>
+
+<span class="kt">void</span><span class="o">*</span> <span class="n">raceIterateThread</span><span class="p">(</span><span class="kt">void</span><span class="o">*</span> <span class="n">jj</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">int64_t</span> <span class="n">j</span> <span class="o">=</span> <span class="p">(</span><span class="n">int64_t</span><span class="p">)</span> <span class="n">jj</span><span class="p">;</span>
+  <span class="kt">int</span> <span class="n">count</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+
+  <span class="n">AHMapT</span><span class="o">::</span><span class="n">iterator</span> <span class="n">it</span> <span class="o">=</span> <span class="n">globalAHM</span><span class="o">-&gt;</span><span class="n">begin</span><span class="p">();</span>
+  <span class="n">AHMapT</span><span class="o">::</span><span class="n">iterator</span> <span class="n">end</span> <span class="o">=</span> <span class="n">globalAHM</span><span class="o">-&gt;</span><span class="n">end</span><span class="p">();</span>
+  <span class="k">for</span> <span class="p">(;</span> <span class="n">it</span> <span class="o">!=</span> <span class="n">end</span><span class="p">;</span> <span class="o">++</span><span class="n">it</span><span class="p">)</span> <span class="p">{</span>
+    <span class="o">++</span><span class="n">count</span><span class="p">;</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">count</span> <span class="o">&gt;</span> <span class="n">raceFinalSizeEstimate</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">EXPECT_FALSE</span><span class="p">(</span><span class="s">&quot;Infinite loop in iterator.&quot;</span><span class="p">);</span>
+      <span class="k">return</span> <span class="nb">NULL</span><span class="p">;</span>
+    <span class="p">}</span>
+  <span class="p">}</span>
+  <span class="k">return</span> <span class="nb">NULL</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="kt">void</span><span class="o">*</span> <span class="n">raceInsertRandomThread</span><span class="p">(</span><span class="kt">void</span><span class="o">*</span> <span class="n">jj</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">int64_t</span> <span class="n">j</span> <span class="o">=</span> <span class="p">(</span><span class="n">int64_t</span><span class="p">)</span> <span class="n">jj</span><span class="p">;</span>
+  <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">kInsertPerThread</span><span class="p">;</span> <span class="o">++</span><span class="n">i</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">KeyT</span> <span class="n">key</span> <span class="o">=</span> <span class="n">rand</span><span class="p">();</span>
+    <span class="n">globalAHM</span><span class="o">-&gt;</span><span class="n">insert</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">genVal</span><span class="p">(</span><span class="n">key</span><span class="p">));</span>
+  <span class="p">}</span>
+  <span class="k">return</span> <span class="nb">NULL</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-22"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-22">&#182;</a></div><p>Test for race conditions when inserting and iterating at the same time and
+creating multiple submaps.</p></td><td class="code"><div class="highlight"><pre><span class="n">TEST</span><span class="p">(</span><span class="n">Ahm</span><span class="p">,</span> <span class="n">race_insert_iterate_thread_test</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">const</span> <span class="kt">int</span> <span class="n">kInsertThreads</span> <span class="o">=</span> <span class="mi">20</span><span class="p">;</span>
+  <span class="k">const</span> <span class="kt">int</span> <span class="n">kIterateThreads</span> <span class="o">=</span> <span class="mi">20</span><span class="p">;</span>
+  <span class="n">raceFinalSizeEstimate</span> <span class="o">=</span> <span class="n">kInsertThreads</span> <span class="o">*</span> <span class="n">kInsertPerThread</span><span class="p">;</span>
+
+  <span class="n">VLOG</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span> <span class="o">&lt;&lt;</span> <span class="s">&quot;Testing iteration and insertion with &quot;</span> <span class="o">&lt;&lt;</span> <span class="n">kInsertThreads</span>
+    <span class="o">&lt;&lt;</span> <span class="s">&quot; threads inserting and &quot;</span> <span class="o">&lt;&lt;</span> <span class="n">kIterateThreads</span> <span class="o">&lt;&lt;</span> <span class="s">&quot; threads iterating.&quot;</span><span class="p">;</span>
+
+  <span class="n">globalAHM</span><span class="p">.</span><span class="n">reset</span><span class="p">(</span><span class="k">new</span> <span class="n">AHMapT</span><span class="p">(</span><span class="n">raceFinalSizeEstimate</span> <span class="o">/</span> <span class="mi">9</span><span class="p">,</span> <span class="n">config</span><span class="p">));</span>
+
+  <span class="n">vector</span><span class="o">&lt;</span><span class="n">pthread_t</span><span class="o">&gt;</span> <span class="n">threadIds</span><span class="p">;</span>
+  <span class="k">for</span> <span class="p">(</span><span class="n">int64_t</span> <span class="n">j</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">j</span> <span class="o">&lt;</span> <span class="n">kInsertThreads</span> <span class="o">+</span> <span class="n">kIterateThreads</span><span class="p">;</span> <span class="n">j</span><span class="o">++</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">pthread_t</span> <span class="n">tid</span><span class="p">;</span>
+    <span class="kt">void</span> <span class="o">*</span><span class="p">(</span><span class="o">*</span><span class="kr">thread</span><span class="p">)(</span><span class="kt">void</span><span class="o">*</span><span class="p">)</span> <span class="o">=</span>
+      <span class="p">(</span><span class="n">j</span> <span class="o">&lt;</span> <span class="n">kInsertThreads</span> <span class="o">?</span> <span class="n">raceInsertRandomThread</span> <span class="o">:</span> <span class="n">raceIterateThread</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">pthread_create</span><span class="p">(</span><span class="o">&amp;</span><span class="n">tid</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">,</span> <span class="kr">thread</span><span class="p">,</span> <span class="p">(</span><span class="kt">void</span><span class="o">*</span><span class="p">)</span> <span class="n">j</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">LOG</span><span class="p">(</span><span class="n">ERROR</span><span class="p">)</span> <span class="o">&lt;&lt;</span> <span class="s">&quot;Could not start thread&quot;</span><span class="p">;</span>
+    <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+      <span class="n">threadIds</span><span class="p">.</span><span class="n">push_back</span><span class="p">(</span><span class="n">tid</span><span class="p">);</span>
+    <span class="p">}</span>
+  <span class="p">}</span>
+  <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">threadIds</span><span class="p">.</span><span class="n">size</span><span class="p">();</span> <span class="o">++</span><span class="n">i</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">pthread_join</span><span class="p">(</span><span class="n">threadIds</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="nb">NULL</span><span class="p">);</span>
+  <span class="p">}</span>
+  <span class="n">VLOG</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span> <span class="o">&lt;&lt;</span> <span class="s">&quot;Ended up with &quot;</span> <span class="o">&lt;&lt;</span> <span class="n">globalAHM</span><span class="o">-&gt;</span><span class="n">numSubMaps</span><span class="p">()</span> <span class="o">&lt;&lt;</span> <span class="s">&quot; submaps&quot;</span><span class="p">;</span>
+  <span class="n">VLOG</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span> <span class="o">&lt;&lt;</span> <span class="s">&quot;Final size of map &quot;</span> <span class="o">&lt;&lt;</span> <span class="n">globalAHM</span><span class="o">-&gt;</span><span class="n">size</span><span class="p">();</span>
+<span class="p">}</span>
+
+<span class="k">namespace</span> <span class="p">{</span>
+
+<span class="k">const</span> <span class="kt">int</span> <span class="n">kTestEraseInsertions</span> <span class="o">=</span> <span class="mi">200000</span><span class="p">;</span>
+<span class="n">std</span><span class="o">::</span><span class="n">atomic</span><span class="o">&lt;</span><span class="n">int32_t</span><span class="o">&gt;</span> <span class="n">insertedLevel</span><span class="p">;</span>
+
+<span class="kt">void</span><span class="o">*</span> <span class="n">testEraseInsertThread</span><span class="p">(</span><span class="kt">void</span><span class="o">*</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">kTestEraseInsertions</span><span class="p">;</span> <span class="o">++</span><span class="n">i</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">KeyT</span> <span class="n">key</span> <span class="o">=</span> <span class="n">randomizeKey</span><span class="p">(</span><span class="n">i</span><span class="p">);</span>
+    <span class="n">globalAHM</span><span class="o">-&gt;</span><span class="n">insert</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">genVal</span><span class="p">(</span><span class="n">key</span><span class="p">));</span>
+    <span class="n">insertedLevel</span><span class="p">.</span><span class="n">store</span><span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="n">std</span><span class="o">::</span><span class="n">memory_order_release</span><span class="p">);</span>
+  <span class="p">}</span>
+  <span class="n">insertedLevel</span><span class="p">.</span><span class="n">store</span><span class="p">(</span><span class="n">kTestEraseInsertions</span><span class="p">,</span> <span class="n">std</span><span class="o">::</span><span class="n">memory_order_release</span><span class="p">);</span>
+  <span class="k">return</span> <span class="nb">NULL</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="kt">void</span><span class="o">*</span> <span class="n">testEraseEraseThread</span><span class="p">(</span><span class="kt">void</span><span class="o">*</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">kTestEraseInsertions</span><span class="p">;</span> <span class="o">++</span><span class="n">i</span><span class="p">)</span> <span class="p">{</span>
+    <span class="cm">/*</span>
+<span class="cm">     * Make sure that we don&#39;t get ahead of the insert thread, because</span>
+<span class="cm">     * part of the condition for this unit test succeeding is that the</span>
+<span class="cm">     * map ends up empty.</span>
+<span class="cm">     *</span>
+<span class="cm">     * Note, there is a subtle case here when a new submap is</span>
+<span class="cm">     * allocated: the erasing thread might get 0 from count(key)</span>
+<span class="cm">     * because it hasn&#39;t seen numSubMaps_ update yet.  To avoid this</span>
+<span class="cm">     * race causing problems for the test (it&#39;s ok for real usage), we</span>
+<span class="cm">     * lag behind the inserter by more than just element.</span>
+<span class="cm">     */</span>
+    <span class="k">const</span> <span class="kt">int</span> <span class="n">lag</span> <span class="o">=</span> <span class="mi">10</span><span class="p">;</span>
+    <span class="kt">int</span> <span class="n">currentLevel</span><span class="p">;</span>
+    <span class="k">do</span> <span class="p">{</span>
+      <span class="n">currentLevel</span> <span class="o">=</span> <span class="n">insertedLevel</span><span class="p">.</span><span class="n">load</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">memory_order_acquire</span><span class="p">);</span>
+      <span class="k">if</span> <span class="p">(</span><span class="n">currentLevel</span> <span class="o">==</span> <span class="n">kTestEraseInsertions</span><span class="p">)</span> <span class="n">currentLevel</span> <span class="o">+=</span> <span class="n">lag</span> <span class="o">+</span> <span class="mi">1</span><span class="p">;</span>
+    <span class="p">}</span> <span class="k">while</span> <span class="p">(</span><span class="n">currentLevel</span> <span class="o">-</span> <span class="n">lag</span> <span class="o">&lt;</span> <span class="n">i</span><span class="p">);</span>
+
+    <span class="n">KeyT</span> <span class="n">key</span> <span class="o">=</span> <span class="n">randomizeKey</span><span class="p">(</span><span class="n">i</span><span class="p">);</span>
+    <span class="k">while</span> <span class="p">(</span><span class="n">globalAHM</span><span class="o">-&gt;</span><span class="n">count</span><span class="p">(</span><span class="n">key</span><span class="p">))</span> <span class="p">{</span>
+      <span class="k">if</span> <span class="p">(</span><span class="n">globalAHM</span><span class="o">-&gt;</span><span class="n">erase</span><span class="p">(</span><span class="n">key</span><span class="p">))</span> <span class="p">{</span>
+        <span class="k">break</span><span class="p">;</span>
+      <span class="p">}</span>
+    <span class="p">}</span>
+  <span class="p">}</span>
+  <span class="k">return</span> <span class="nb">NULL</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-23"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-23">&#182;</a></div><p>Here we have a single thread inserting some values, and several threads
+racing to delete the values in the order they were inserted.</p></td><td class="code"><div class="highlight"><pre><span class="n">TEST</span><span class="p">(</span><span class="n">Ahm</span><span class="p">,</span> <span class="n">thread_erase_insert_race</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">const</span> <span class="kt">int</span> <span class="n">kInsertThreads</span> <span class="o">=</span> <span class="mi">1</span><span class="p">;</span>
+  <span class="k">const</span> <span class="kt">int</span> <span class="n">kEraseThreads</span> <span class="o">=</span> <span class="mi">10</span><span class="p">;</span>
+
+  <span class="n">VLOG</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span> <span class="o">&lt;&lt;</span> <span class="s">&quot;Testing insertion and erase with &quot;</span> <span class="o">&lt;&lt;</span> <span class="n">kInsertThreads</span>
+    <span class="o">&lt;&lt;</span> <span class="s">&quot; thread inserting and &quot;</span> <span class="o">&lt;&lt;</span> <span class="n">kEraseThreads</span> <span class="o">&lt;&lt;</span> <span class="s">&quot; threads erasing.&quot;</span><span class="p">;</span>
+
+  <span class="n">globalAHM</span><span class="p">.</span><span class="n">reset</span><span class="p">(</span><span class="k">new</span> <span class="n">AHMapT</span><span class="p">(</span><span class="n">kTestEraseInsertions</span> <span class="o">/</span> <span class="mi">4</span><span class="p">,</span> <span class="n">config</span><span class="p">));</span>
+
+  <span class="n">vector</span><span class="o">&lt;</span><span class="n">pthread_t</span><span class="o">&gt;</span> <span class="n">threadIds</span><span class="p">;</span>
+  <span class="k">for</span> <span class="p">(</span><span class="n">int64_t</span> <span class="n">j</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">j</span> <span class="o">&lt;</span> <span class="n">kInsertThreads</span> <span class="o">+</span> <span class="n">kEraseThreads</span><span class="p">;</span> <span class="n">j</span><span class="o">++</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">pthread_t</span> <span class="n">tid</span><span class="p">;</span>
+    <span class="kt">void</span> <span class="o">*</span><span class="p">(</span><span class="o">*</span><span class="kr">thread</span><span class="p">)(</span><span class="kt">void</span><span class="o">*</span><span class="p">)</span> <span class="o">=</span>
+      <span class="p">(</span><span class="n">j</span> <span class="o">&lt;</span> <span class="n">kInsertThreads</span> <span class="o">?</span> <span class="n">testEraseInsertThread</span> <span class="o">:</span> <span class="n">testEraseEraseThread</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">pthread_create</span><span class="p">(</span><span class="o">&amp;</span><span class="n">tid</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">,</span> <span class="kr">thread</span><span class="p">,</span> <span class="p">(</span><span class="kt">void</span><span class="o">*</span><span class="p">)</span> <span class="n">j</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">LOG</span><span class="p">(</span><span class="n">ERROR</span><span class="p">)</span> <span class="o">&lt;&lt;</span> <span class="s">&quot;Could not start thread&quot;</span><span class="p">;</span>
+    <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+      <span class="n">threadIds</span><span class="p">.</span><span class="n">push_back</span><span class="p">(</span><span class="n">tid</span><span class="p">);</span>
+    <span class="p">}</span>
+  <span class="p">}</span>
+  <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">threadIds</span><span class="p">.</span><span class="n">size</span><span class="p">();</span> <span class="n">i</span><span class="o">++</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">pthread_join</span><span class="p">(</span><span class="n">threadIds</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="nb">NULL</span><span class="p">);</span>
+  <span class="p">}</span>
+
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">globalAHM</span><span class="o">-&gt;</span><span class="n">empty</span><span class="p">());</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">globalAHM</span><span class="o">-&gt;</span><span class="n">size</span><span class="p">(),</span> <span class="mi">0</span><span class="p">);</span>
+
+  <span class="n">VLOG</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span> <span class="o">&lt;&lt;</span> <span class="s">&quot;Ended up with &quot;</span> <span class="o">&lt;&lt;</span> <span class="n">globalAHM</span><span class="o">-&gt;</span><span class="n">numSubMaps</span><span class="p">()</span> <span class="o">&lt;&lt;</span> <span class="s">&quot; submaps&quot;</span><span class="p">;</span>
+<span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-24"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-24">&#182;</a></div><p>Repro for T#483734: Duplicate AHM inserts due to incorrect AHA return value.</p></td><td class="code"><div class="highlight"><pre><span class="k">typedef</span> <span class="n">AtomicHashArray</span><span class="o">&lt;</span><span class="n">int32_t</span><span class="p">,</span> <span class="n">int32_t</span><span class="o">&gt;</span> <span class="n">AHA</span><span class="p">;</span>
+<span class="n">AHA</span><span class="o">::</span><span class="n">Config</span> <span class="n">configRace</span><span class="p">;</span>
+<span class="k">auto</span> <span class="n">atomicHashArrayInsertRaceArray</span> <span class="o">=</span> <span class="n">AHA</span><span class="o">::</span><span class="n">create</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="n">configRace</span><span class="p">);</span>
+<span class="kt">void</span><span class="o">*</span> <span class="n">atomicHashArrayInsertRaceThread</span><span class="p">(</span><span class="kt">void</span><span class="o">*</span> <span class="n">j</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">AHA</span><span class="o">*</span> <span class="n">arr</span> <span class="o">=</span> <span class="n">atomicHashArrayInsertRaceArray</span><span class="p">.</span><span class="n">get</span><span class="p">();</span>
+  <span class="n">uintptr_t</span> <span class="n">numInserted</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+  <span class="k">while</span> <span class="p">(</span><span class="o">!</span><span class="n">runThreadsCreatedAllThreads</span><span class="p">.</span><span class="n">load</span><span class="p">());</span>
+  <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="mi">2</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">arr</span><span class="o">-&gt;</span><span class="n">insert</span><span class="p">(</span><span class="n">RecordT</span><span class="p">(</span><span class="n">randomizeKey</span><span class="p">(</span><span class="n">i</span><span class="p">),</span> <span class="mi">0</span><span class="p">)).</span><span class="n">first</span> <span class="o">!=</span> <span class="n">arr</span><span class="o">-&gt;</span><span class="n">end</span><span class="p">())</span> <span class="p">{</span>
+      <span class="n">numInserted</span><span class="o">++</span><span class="p">;</span>
+    <span class="p">}</span>
+  <span class="p">}</span>
+  <span class="n">pthread_exit</span><span class="p">((</span><span class="kt">void</span> <span class="o">*</span><span class="p">)</span> <span class="n">numInserted</span><span class="p">);</span>
+<span class="p">}</span>
+<span class="n">TEST</span><span class="p">(</span><span class="n">Ahm</span><span class="p">,</span> <span class="n">atomic_hash_array_insert_race</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">AHA</span><span class="o">*</span> <span class="n">arr</span> <span class="o">=</span> <span class="n">atomicHashArrayInsertRaceArray</span><span class="p">.</span><span class="n">get</span><span class="p">();</span>
+  <span class="kt">int</span> <span class="n">numIterations</span> <span class="o">=</span> <span class="mi">50000</span><span class="p">,</span> <span class="n">FLAGS_numThreads</span> <span class="o">=</span> <span class="mi">4</span><span class="p">;</span>
+  <span class="kt">void</span><span class="o">*</span> <span class="n">statuses</span><span class="p">[</span><span class="n">FLAGS_numThreads</span><span class="p">];</span>
+  <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">numIterations</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">arr</span><span class="o">-&gt;</span><span class="n">clear</span><span class="p">();</span>
+    <span class="n">runThreads</span><span class="p">(</span><span class="n">atomicHashArrayInsertRaceThread</span><span class="p">,</span> <span class="n">FLAGS_numThreads</span><span class="p">,</span> <span class="n">statuses</span><span class="p">);</span>
+    <span class="n">EXPECT_GE</span><span class="p">(</span><span class="n">arr</span><span class="o">-&gt;</span><span class="n">size</span><span class="p">(),</span> <span class="mi">1</span><span class="p">);</span>
+    <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">j</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">j</span> <span class="o">&lt;</span> <span class="n">FLAGS_numThreads</span><span class="p">;</span> <span class="n">j</span><span class="o">++</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">arr</span><span class="o">-&gt;</span><span class="n">size</span><span class="p">(),</span> <span class="n">uintptr_t</span><span class="p">(</span><span class="n">statuses</span><span class="p">[</span><span class="n">j</span><span class="p">]));</span>
+    <span class="p">}</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="k">namespace</span> <span class="p">{</span>
+
+<span class="kt">void</span> <span class="n">loadGlobalAha</span><span class="p">()</span> <span class="p">{</span>
+  <span class="n">std</span><span class="o">::</span><span class="n">cout</span> <span class="o">&lt;&lt;</span> <span class="s">&quot;loading global AHA with &quot;</span> <span class="o">&lt;&lt;</span> <span class="n">FLAGS_numThreads</span>
+            <span class="o">&lt;&lt;</span> <span class="s">&quot; threads...</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">;</span>
+  <span class="n">uint64_t</span> <span class="n">start</span> <span class="o">=</span> <span class="n">nowInUsec</span><span class="p">();</span>
+  <span class="n">globalAHA</span> <span class="o">=</span> <span class="n">AHArrayT</span><span class="o">::</span><span class="n">create</span><span class="p">(</span><span class="n">maxBMElements</span><span class="p">,</span> <span class="n">config</span><span class="p">);</span>
+  <span class="n">numOpsPerThread</span> <span class="o">=</span> <span class="n">FLAGS_numBMElements</span> <span class="o">/</span> <span class="n">FLAGS_numThreads</span><span class="p">;</span>
+  <span class="n">CHECK_EQ</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">FLAGS_numBMElements</span> <span class="o">%</span> <span class="n">FLAGS_numThreads</span><span class="p">)</span> <span class="o">&lt;&lt;</span>
+    <span class="s">&quot;kNumThreads must evenly divide kNumInserts.&quot;</span><span class="p">;</span>
+  <span class="n">runThreads</span><span class="p">(</span><span class="n">insertThreadArr</span><span class="p">);</span>
+  <span class="n">uint64_t</span> <span class="n">elapsed</span> <span class="o">=</span> <span class="n">nowInUsec</span><span class="p">()</span> <span class="o">-</span> <span class="n">start</span><span class="p">;</span>
+  <span class="n">std</span><span class="o">::</span><span class="n">cout</span> <span class="o">&lt;&lt;</span> <span class="s">&quot;  took &quot;</span> <span class="o">&lt;&lt;</span> <span class="n">elapsed</span> <span class="o">/</span> <span class="mi">1000</span> <span class="o">&lt;&lt;</span> <span class="s">&quot; ms (&quot;</span> <span class="o">&lt;&lt;</span>
+    <span class="p">(</span><span class="n">elapsed</span> <span class="o">*</span> <span class="mi">1000</span> <span class="o">/</span> <span class="n">FLAGS_numBMElements</span><span class="p">)</span> <span class="o">&lt;&lt;</span> <span class="s">&quot; ns/insert).</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">;</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">globalAHA</span><span class="o">-&gt;</span><span class="n">size</span><span class="p">(),</span> <span class="n">FLAGS_numBMElements</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="kt">void</span> <span class="n">loadGlobalAhm</span><span class="p">()</span> <span class="p">{</span>
+  <span class="n">std</span><span class="o">::</span><span class="n">cout</span> <span class="o">&lt;&lt;</span> <span class="s">&quot;loading global AHM with &quot;</span> <span class="o">&lt;&lt;</span> <span class="n">FLAGS_numThreads</span>
+            <span class="o">&lt;&lt;</span> <span class="s">&quot; threads...</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">;</span>
+  <span class="n">uint64_t</span> <span class="n">start</span> <span class="o">=</span> <span class="n">nowInUsec</span><span class="p">();</span>
+  <span class="n">globalAHM</span><span class="p">.</span><span class="n">reset</span><span class="p">(</span><span class="k">new</span> <span class="n">AHMapT</span><span class="p">(</span><span class="n">maxBMElements</span><span class="p">,</span> <span class="n">config</span><span class="p">));</span>
+  <span class="n">numOpsPerThread</span> <span class="o">=</span> <span class="n">FLAGS_numBMElements</span> <span class="o">/</span> <span class="n">FLAGS_numThreads</span><span class="p">;</span>
+  <span class="n">runThreads</span><span class="p">(</span><span class="n">insertThread</span><span class="p">);</span>
+  <span class="n">uint64_t</span> <span class="n">elapsed</span> <span class="o">=</span> <span class="n">nowInUsec</span><span class="p">()</span> <span class="o">-</span> <span class="n">start</span><span class="p">;</span>
+  <span class="n">std</span><span class="o">::</span><span class="n">cout</span> <span class="o">&lt;&lt;</span> <span class="s">&quot;  took &quot;</span> <span class="o">&lt;&lt;</span> <span class="n">elapsed</span> <span class="o">/</span> <span class="mi">1000</span> <span class="o">&lt;&lt;</span> <span class="s">&quot; ms (&quot;</span> <span class="o">&lt;&lt;</span>
+    <span class="p">(</span><span class="n">elapsed</span> <span class="o">*</span> <span class="mi">1000</span> <span class="o">/</span> <span class="n">FLAGS_numBMElements</span><span class="p">)</span> <span class="o">&lt;&lt;</span> <span class="s">&quot; ns/insert).</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">;</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">globalAHM</span><span class="o">-&gt;</span><span class="n">size</span><span class="p">(),</span> <span class="n">FLAGS_numBMElements</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="p">}</span>
+
+<span class="n">BENCHMARK</span><span class="p">(</span><span class="n">st_aha_find</span><span class="p">,</span> <span class="n">iters</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">CHECK_LE</span><span class="p">(</span><span class="n">iters</span><span class="p">,</span> <span class="n">FLAGS_numBMElements</span><span class="p">);</span>
+  <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">iters</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">KeyT</span> <span class="n">key</span> <span class="o">=</span> <span class="n">randomizeKey</span><span class="p">(</span><span class="n">i</span><span class="p">);</span>
+    <span class="n">folly</span><span class="o">::</span><span class="n">doNotOptimizeAway</span><span class="p">(</span><span class="n">globalAHA</span><span class="o">-&gt;</span><span class="n">find</span><span class="p">(</span><span class="n">key</span><span class="p">)</span><span class="o">-&gt;</span><span class="n">second</span><span class="p">);</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="n">BENCHMARK</span><span class="p">(</span><span class="n">st_ahm_find</span><span class="p">,</span> <span class="n">iters</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">CHECK_LE</span><span class="p">(</span><span class="n">iters</span><span class="p">,</span> <span class="n">FLAGS_numBMElements</span><span class="p">);</span>
+  <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">iters</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">KeyT</span> <span class="n">key</span> <span class="o">=</span> <span class="n">randomizeKey</span><span class="p">(</span><span class="n">i</span><span class="p">);</span>
+    <span class="n">folly</span><span class="o">::</span><span class="n">doNotOptimizeAway</span><span class="p">(</span><span class="n">globalAHM</span><span class="o">-&gt;</span><span class="n">find</span><span class="p">(</span><span class="n">key</span><span class="p">)</span><span class="o">-&gt;</span><span class="n">second</span><span class="p">);</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="n">BENCHMARK_DRAW_LINE</span><span class="p">()</span>
+
+<span class="n">BENCHMARK</span><span class="p">(</span><span class="n">mt_ahm_miss</span><span class="p">,</span> <span class="n">iters</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">CHECK_LE</span><span class="p">(</span><span class="n">iters</span><span class="p">,</span> <span class="n">FLAGS_numBMElements</span><span class="p">);</span>
+  <span class="n">numOpsPerThread</span> <span class="o">=</span> <span class="n">iters</span> <span class="o">/</span> <span class="n">FLAGS_numThreads</span><span class="p">;</span>
+  <span class="n">runThreads</span><span class="p">([](</span><span class="kt">void</span><span class="o">*</span> <span class="n">jj</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kt">void</span><span class="o">*</span> <span class="p">{</span>
+    <span class="n">int64_t</span> <span class="n">j</span> <span class="o">=</span> <span class="p">(</span><span class="n">int64_t</span><span class="p">)</span> <span class="n">jj</span><span class="p">;</span>
+    <span class="k">while</span> <span class="p">(</span><span class="o">!</span><span class="n">runThreadsCreatedAllThreads</span><span class="p">.</span><span class="n">load</span><span class="p">());</span>
+    <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">numOpsPerThread</span><span class="p">;</span> <span class="o">++</span><span class="n">i</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">KeyT</span> <span class="n">key</span> <span class="o">=</span> <span class="n">i</span> <span class="o">+</span> <span class="n">j</span> <span class="o">*</span> <span class="n">numOpsPerThread</span> <span class="o">*</span> <span class="mi">100</span><span class="p">;</span>
+      <span class="n">folly</span><span class="o">::</span><span class="n">doNotOptimizeAway</span><span class="p">(</span><span class="n">globalAHM</span><span class="o">-&gt;</span><span class="n">find</span><span class="p">(</span><span class="n">key</span><span class="p">)</span> <span class="o">==</span> <span class="n">globalAHM</span><span class="o">-&gt;</span><span class="n">end</span><span class="p">());</span>
+    <span class="p">}</span>
+    <span class="k">return</span> <span class="n">nullptr</span><span class="p">;</span>
+  <span class="p">});</span>
+<span class="p">}</span>
+
+<span class="n">BENCHMARK</span><span class="p">(</span><span class="n">st_ahm_miss</span><span class="p">,</span> <span class="n">iters</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">CHECK_LE</span><span class="p">(</span><span class="n">iters</span><span class="p">,</span> <span class="n">FLAGS_numBMElements</span><span class="p">);</span>
+  <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">iters</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">KeyT</span> <span class="n">key</span> <span class="o">=</span> <span class="n">randomizeKey</span><span class="p">(</span><span class="n">i</span> <span class="o">+</span> <span class="n">iters</span> <span class="o">*</span> <span class="mi">100</span><span class="p">);</span>
+    <span class="n">folly</span><span class="o">::</span><span class="n">doNotOptimizeAway</span><span class="p">(</span><span class="n">globalAHM</span><span class="o">-&gt;</span><span class="n">find</span><span class="p">(</span><span class="n">key</span><span class="p">)</span> <span class="o">==</span> <span class="n">globalAHM</span><span class="o">-&gt;</span><span class="n">end</span><span class="p">());</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="n">BENCHMARK</span><span class="p">(</span><span class="n">mt_ahm_find_insert_mix</span><span class="p">,</span> <span class="n">iters</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">CHECK_LE</span><span class="p">(</span><span class="n">iters</span><span class="p">,</span> <span class="n">FLAGS_numBMElements</span><span class="p">);</span>
+  <span class="n">numOpsPerThread</span> <span class="o">=</span> <span class="n">iters</span> <span class="o">/</span> <span class="n">FLAGS_numThreads</span><span class="p">;</span>
+  <span class="n">runThreads</span><span class="p">([](</span><span class="kt">void</span><span class="o">*</span> <span class="n">jj</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kt">void</span><span class="o">*</span> <span class="p">{</span>
+    <span class="n">int64_t</span> <span class="n">j</span> <span class="o">=</span> <span class="p">(</span><span class="n">int64_t</span><span class="p">)</span> <span class="n">jj</span><span class="p">;</span>
+    <span class="k">while</span> <span class="p">(</span><span class="o">!</span><span class="n">runThreadsCreatedAllThreads</span><span class="p">.</span><span class="n">load</span><span class="p">());</span>
+    <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">numOpsPerThread</span><span class="p">;</span> <span class="o">++</span><span class="n">i</span><span class="p">)</span> <span class="p">{</span>
+      <span class="k">if</span> <span class="p">(</span><span class="n">i</span> <span class="o">%</span> <span class="mi">128</span><span class="p">)</span> <span class="p">{</span>  <span class="c1">// ~1% insert mix</span>
+        <span class="n">KeyT</span> <span class="n">key</span> <span class="o">=</span> <span class="n">randomizeKey</span><span class="p">(</span><span class="n">i</span> <span class="o">+</span> <span class="n">j</span> <span class="o">*</span> <span class="n">numOpsPerThread</span><span class="p">);</span>
+        <span class="n">folly</span><span class="o">::</span><span class="n">doNotOptimizeAway</span><span class="p">(</span><span class="n">globalAHM</span><span class="o">-&gt;</span><span class="n">find</span><span class="p">(</span><span class="n">key</span><span class="p">)</span><span class="o">-&gt;</span><span class="n">second</span><span class="p">);</span>
+      <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+        <span class="n">KeyT</span> <span class="n">key</span> <span class="o">=</span> <span class="n">randomizeKey</span><span class="p">(</span><span class="n">i</span> <span class="o">+</span> <span class="n">j</span> <span class="o">*</span> <span class="n">numOpsPerThread</span> <span class="o">*</span> <span class="mi">100</span><span class="p">);</span>
+        <span class="n">globalAHM</span><span class="o">-&gt;</span><span class="n">insert</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">genVal</span><span class="p">(</span><span class="n">key</span><span class="p">));</span>
+      <span class="p">}</span>
+    <span class="p">}</span>
+    <span class="k">return</span> <span class="n">nullptr</span><span class="p">;</span>
+  <span class="p">});</span>
+<span class="p">}</span>
+
+<span class="n">BENCHMARK</span><span class="p">(</span><span class="n">mt_aha_find</span><span class="p">,</span> <span class="n">iters</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">CHECK_LE</span><span class="p">(</span><span class="n">iters</span><span class="p">,</span> <span class="n">FLAGS_numBMElements</span><span class="p">);</span>
+  <span class="n">numOpsPerThread</span> <span class="o">=</span> <span class="n">iters</span> <span class="o">/</span> <span class="n">FLAGS_numThreads</span><span class="p">;</span>
+  <span class="n">runThreads</span><span class="p">([](</span><span class="kt">void</span><span class="o">*</span> <span class="n">jj</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kt">void</span><span class="o">*</span> <span class="p">{</span>
+      <span class="n">int64_t</span> <span class="n">j</span> <span class="o">=</span> <span class="p">(</span><span class="n">int64_t</span><span class="p">)</span> <span class="n">jj</span><span class="p">;</span>
+      <span class="k">while</span> <span class="p">(</span><span class="o">!</span><span class="n">runThreadsCreatedAllThreads</span><span class="p">.</span><span class="n">load</span><span class="p">());</span>
+      <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">numOpsPerThread</span><span class="p">;</span> <span class="o">++</span><span class="n">i</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">KeyT</span> <span class="n">key</span> <span class="o">=</span> <span class="n">randomizeKey</span><span class="p">(</span><span class="n">i</span> <span class="o">+</span> <span class="n">j</span> <span class="o">*</span> <span class="n">numOpsPerThread</span><span class="p">);</span>
+        <span class="n">folly</span><span class="o">::</span><span class="n">doNotOptimizeAway</span><span class="p">(</span><span class="n">globalAHA</span><span class="o">-&gt;</span><span class="n">find</span><span class="p">(</span><span class="n">key</span><span class="p">)</span><span class="o">-&gt;</span><span class="n">second</span><span class="p">);</span>
+      <span class="p">}</span>
+      <span class="k">return</span> <span class="n">nullptr</span><span class="p">;</span>
+    <span class="p">});</span>
+<span class="p">}</span>
+
+<span class="n">BENCHMARK</span><span class="p">(</span><span class="n">mt_ahm_find</span><span class="p">,</span> <span class="n">iters</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">CHECK_LE</span><span class="p">(</span><span class="n">iters</span><span class="p">,</span> <span class="n">FLAGS_numBMElements</span><span class="p">);</span>
+  <span class="n">numOpsPerThread</span> <span class="o">=</span> <span class="n">iters</span> <span class="o">/</span> <span class="n">FLAGS_numThreads</span><span class="p">;</span>
+  <span class="n">runThreads</span><span class="p">([](</span><span class="kt">void</span><span class="o">*</span> <span class="n">jj</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kt">void</span><span class="o">*</span> <span class="p">{</span>
+    <span class="n">int64_t</span> <span class="n">j</span> <span class="o">=</span> <span class="p">(</span><span class="n">int64_t</span><span class="p">)</span> <span class="n">jj</span><span class="p">;</span>
+    <span class="k">while</span> <span class="p">(</span><span class="o">!</span><span class="n">runThreadsCreatedAllThreads</span><span class="p">.</span><span class="n">load</span><span class="p">());</span>
+    <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">numOpsPerThread</span><span class="p">;</span> <span class="o">++</span><span class="n">i</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">KeyT</span> <span class="n">key</span> <span class="o">=</span> <span class="n">randomizeKey</span><span class="p">(</span><span class="n">i</span> <span class="o">+</span> <span class="n">j</span> <span class="o">*</span> <span class="n">numOpsPerThread</span><span class="p">);</span>
+      <span class="n">folly</span><span class="o">::</span><span class="n">doNotOptimizeAway</span><span class="p">(</span><span class="n">globalAHM</span><span class="o">-&gt;</span><span class="n">find</span><span class="p">(</span><span class="n">key</span><span class="p">)</span><span class="o">-&gt;</span><span class="n">second</span><span class="p">);</span>
+    <span class="p">}</span>
+    <span class="k">return</span> <span class="n">nullptr</span><span class="p">;</span>
+  <span class="p">});</span>
+<span class="p">}</span>
+
+<span class="n">KeyT</span> <span class="n">k</span><span class="p">;</span>
+<span class="n">BENCHMARK</span><span class="p">(</span><span class="n">st_baseline_modulus_and_random</span><span class="p">,</span> <span class="n">iters</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">iters</span><span class="p">;</span> <span class="o">++</span><span class="n">i</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">k</span> <span class="o">=</span> <span class="n">randomizeKey</span><span class="p">(</span><span class="n">i</span><span class="p">)</span> <span class="o">%</span> <span class="n">iters</span><span class="p">;</span>
+  <span class="p">}</span>
+<span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-25"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-25">&#182;</a></div><p>insertions go last because they reset the map</p></td><td class="code"><div class="highlight"><pre><span class="n">BENCHMARK</span><span class="p">(</span><span class="n">mt_ahm_insert</span><span class="p">,</span> <span class="n">iters</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">BENCHMARK_SUSPEND</span> <span class="p">{</span>
+    <span class="n">globalAHM</span><span class="p">.</span><span class="n">reset</span><span class="p">(</span><span class="k">new</span> <span class="n">AHMapT</span><span class="p">(</span><span class="kt">int</span><span class="p">(</span><span class="n">iters</span> <span class="o">*</span> <span class="n">LF</span><span class="p">),</span> <span class="n">config</span><span class="p">));</span>
+    <span class="n">numOpsPerThread</span> <span class="o">=</span> <span class="n">iters</span> <span class="o">/</span> <span class="n">FLAGS_numThreads</span><span class="p">;</span>
+  <span class="p">}</span>
+  <span class="n">runThreads</span><span class="p">(</span><span class="n">insertThread</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="n">BENCHMARK</span><span class="p">(</span><span class="n">st_ahm_insert</span><span class="p">,</span> <span class="n">iters</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">folly</span><span class="o">::</span><span class="n">BenchmarkSuspender</span> <span class="n">susp</span><span class="p">;</span>
+  <span class="n">std</span><span class="o">::</span><span class="n">unique_ptr</span><span class="o">&lt;</span><span class="n">AHMapT</span><span class="o">&gt;</span> <span class="n">ahm</span><span class="p">(</span><span class="k">new</span> <span class="n">AHMapT</span><span class="p">(</span><span class="kt">int</span><span class="p">(</span><span class="n">iters</span> <span class="o">*</span> <span class="n">LF</span><span class="p">),</span> <span class="n">config</span><span class="p">));</span>
+  <span class="n">susp</span><span class="p">.</span><span class="n">dismiss</span><span class="p">();</span>
+
+  <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">iters</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">KeyT</span> <span class="n">key</span> <span class="o">=</span> <span class="n">randomizeKey</span><span class="p">(</span><span class="n">i</span><span class="p">);</span>
+    <span class="n">ahm</span><span class="o">-&gt;</span><span class="n">insert</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">genVal</span><span class="p">(</span><span class="n">key</span><span class="p">));</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="kt">void</span> <span class="n">benchmarkSetup</span><span class="p">()</span> <span class="p">{</span>
+  <span class="n">config</span><span class="p">.</span><span class="n">maxLoadFactor</span> <span class="o">=</span> <span class="n">FLAGS_maxLoadFactor</span><span class="p">;</span>
+  <span class="n">configRace</span><span class="p">.</span><span class="n">maxLoadFactor</span> <span class="o">=</span> <span class="mf">0.5</span><span class="p">;</span>
+  <span class="kt">int</span> <span class="n">numCores</span> <span class="o">=</span> <span class="n">sysconf</span><span class="p">(</span><span class="n">_SC_NPROCESSORS_ONLN</span><span class="p">);</span>
+  <span class="n">loadGlobalAha</span><span class="p">();</span>
+  <span class="n">loadGlobalAhm</span><span class="p">();</span>
+  <span class="n">string</span> <span class="n">numIters</span> <span class="o">=</span> <span class="n">folly</span><span class="o">::</span><span class="n">to</span><span class="o">&lt;</span><span class="n">string</span><span class="o">&gt;</span><span class="p">(</span>
+    <span class="n">std</span><span class="o">::</span><span class="n">min</span><span class="p">(</span><span class="mi">1000000</span><span class="p">,</span> <span class="kt">int</span><span class="p">(</span><span class="n">FLAGS_numBMElements</span><span class="p">)));</span>
+
+  <span class="n">google</span><span class="o">::</span><span class="n">SetCommandLineOptionWithMode</span><span class="p">(</span>
+    <span class="s">&quot;bm_max_iters&quot;</span><span class="p">,</span> <span class="n">numIters</span><span class="p">.</span><span class="n">c_str</span><span class="p">(),</span> <span class="n">google</span><span class="o">::</span><span class="n">SET_FLAG_IF_DEFAULT</span>
+  <span class="p">);</span>
+  <span class="n">google</span><span class="o">::</span><span class="n">SetCommandLineOptionWithMode</span><span class="p">(</span>
+    <span class="s">&quot;bm_min_iters&quot;</span><span class="p">,</span> <span class="n">numIters</span><span class="p">.</span><span class="n">c_str</span><span class="p">(),</span> <span class="n">google</span><span class="o">::</span><span class="n">SET_FLAG_IF_DEFAULT</span>
+  <span class="p">);</span>
+  <span class="n">string</span> <span class="n">numCoresStr</span> <span class="o">=</span> <span class="n">folly</span><span class="o">::</span><span class="n">to</span><span class="o">&lt;</span><span class="n">string</span><span class="o">&gt;</span><span class="p">(</span><span class="n">numCores</span><span class="p">);</span>
+  <span class="n">google</span><span class="o">::</span><span class="n">SetCommandLineOptionWithMode</span><span class="p">(</span>
+    <span class="s">&quot;numThreads&quot;</span><span class="p">,</span> <span class="n">numCoresStr</span><span class="p">.</span><span class="n">c_str</span><span class="p">(),</span> <span class="n">google</span><span class="o">::</span><span class="n">SET_FLAG_IF_DEFAULT</span>
+  <span class="p">);</span>
+
+  <span class="n">std</span><span class="o">::</span><span class="n">cout</span> <span class="o">&lt;&lt;</span> <span class="s">&quot;</span><span class="se">\n</span><span class="s">Running AHM benchmarks on machine with &quot;</span> <span class="o">&lt;&lt;</span> <span class="n">numCores</span>
+    <span class="o">&lt;&lt;</span> <span class="s">&quot; logical cores.</span><span class="se">\n</span><span class="s">&quot;</span>
+       <span class="s">&quot;  num elements per map: &quot;</span> <span class="o">&lt;&lt;</span> <span class="n">FLAGS_numBMElements</span> <span class="o">&lt;&lt;</span> <span class="s">&quot;</span><span class="se">\n</span><span class="s">&quot;</span>
+    <span class="o">&lt;&lt;</span> <span class="s">&quot;  num threads for mt tests: &quot;</span> <span class="o">&lt;&lt;</span> <span class="n">FLAGS_numThreads</span> <span class="o">&lt;&lt;</span> <span class="s">&quot;</span><span class="se">\n</span><span class="s">&quot;</span>
+    <span class="o">&lt;&lt;</span> <span class="s">&quot;  AHM load factor: &quot;</span> <span class="o">&lt;&lt;</span> <span class="n">FLAGS_targetLoadFactor</span> <span class="o">&lt;&lt;</span> <span class="s">&quot;</span><span class="se">\n\n</span><span class="s">&quot;</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="kt">int</span> <span class="n">main</span><span class="p">(</span><span class="kt">int</span> <span class="n">argc</span><span class="p">,</span> <span class="kt">char</span><span class="o">**</span> <span class="n">argv</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">testing</span><span class="o">::</span><span class="n">InitGoogleTest</span><span class="p">(</span><span class="o">&amp;</span><span class="n">argc</span><span class="p">,</span> <span class="n">argv</span><span class="p">);</span>
+  <span class="n">google</span><span class="o">::</span><span class="n">ParseCommandLineFlags</span><span class="p">(</span><span class="o">&amp;</span><span class="n">argc</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">argv</span><span class="p">,</span> <span class="kc">true</span><span class="p">);</span>
+  <span class="k">auto</span> <span class="n">ret</span> <span class="o">=</span> <span class="n">RUN_ALL_TESTS</span><span class="p">();</span>
+  <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">ret</span> <span class="o">&amp;&amp;</span> <span class="n">FLAGS_benchmark</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">benchmarkSetup</span><span class="p">();</span>
+    <span class="n">folly</span><span class="o">::</span><span class="n">runBenchmarks</span><span class="p">();</span>
+  <span class="p">}</span>
+  <span class="k">return</span> <span class="n">ret</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="cm">/*</span>
+<span class="cm">Benchmarks run on dual Xeon X5650&#39;s @ 2.67GHz w/hyperthreading enabled</span>
+<span class="cm">  (12 physical cores, 12 MB cache, 72 GB RAM)</span>
+
+<span class="cm">Running AHM benchmarks on machine with 24 logical cores.</span>
+<span class="cm">  num elements per map: 12000000</span>
+<span class="cm">  num threads for mt tests: 24</span>
+<span class="cm">  AHM load factor: 0.75</span>
+
+<span class="cm">Benchmark                               Iters   Total t    t/iter iter/sec</span>
+<span class="cm">------------------------------------------------------------------------------</span>
+<span class="cm">Comparing benchmarks: BM_mt_aha_find,BM_mt_ahm_find</span>
+<span class="cm">*       BM_mt_aha_find                1000000  7.767 ms  7.767 ns  122.8 M</span>
+<span class="cm"> +0.81% BM_mt_ahm_find                1000000   7.83 ms   7.83 ns  121.8 M</span>
+<span class="cm">------------------------------------------------------------------------------</span>
+<span class="cm">Comparing benchmarks: BM_st_aha_find,BM_st_ahm_find</span>
+<span class="cm">*       BM_st_aha_find                1000000  57.83 ms  57.83 ns  16.49 M</span>
+<span class="cm"> +77.9% BM_st_ahm_find                1000000  102.9 ms  102.9 ns   9.27 M</span>
+<span class="cm">------------------------------------------------------------------------------</span>
+<span class="cm">BM_mt_ahm_miss                        1000000  2.937 ms  2.937 ns  324.7 M</span>
+<span class="cm">BM_st_ahm_miss                        1000000  164.2 ms  164.2 ns  5.807 M</span>
+<span class="cm">BM_mt_ahm_find_insert_mix             1000000  8.797 ms  8.797 ns  108.4 M</span>
+<span class="cm">BM_mt_ahm_insert                      1000000  17.39 ms  17.39 ns  54.83 M</span>
+<span class="cm">BM_st_ahm_insert                      1000000  106.8 ms  106.8 ns   8.93 M</span>
+<span class="cm">BM_st_baseline_modulus_and_rando      1000000  6.223 ms  6.223 ns  153.2 M</span>
+<span class="cm">*/</span>
+
+</pre></div></td></tr>
+
+</tbody>
+</table>
+</div>
+
+</body>
+<script>docas={repo:"joekychen/folly",depth:2}</script>
+<script>document.write('<script src=' + ('__proto__' in {} ? 'http://cdnjs.cloudflare.com/ajax/libs/zepto/1.0rc1/zepto.min.js' : 'https://ajax.googleapis.com/ajax/libs/jquery/1.7.2/jquery.min.js')+'><\\/script>')</script>
+<script src="http://baoshan.github.com/moment/min/moment.min.js"></script>
+<script src="../../javascript/docco.min.js"></script>
+</html>

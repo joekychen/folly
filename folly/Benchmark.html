@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html><head><title>joekychen/folly » folly › Benchmark.cpp
+
+</title>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+<meta name="generator" content="Docco">
+<link rel="stylesheet" media="all" href="../stylesheets/docco.min.css" />
+
+
+</head>
+<body>
+<div id="container">
+<div id="background"></div>
+<table cellpadding="0" cellspacing="0">
+<thead><tr><th class="docs"><a id="home" href="../index.html"></a><h1>Benchmark.cpp</h1></th><th class="code"></th></tr></thead>
+<tbody>
+
+
+<tr id="section-1"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-1">&#182;</a></div></td><td class="code"><div class="highlight"><pre><span class="cm">/*</span>
+<span class="cm"> * Copyright 2012 Facebook, Inc.</span>
+<span class="cm"> *</span>
+<span class="cm"> * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span class="cm"> * you may not use this file except in compliance with the License.</span>
+<span class="cm"> * You may obtain a copy of the License at</span>
+<span class="cm"> *</span>
+<span class="cm"> *   http://www.apache.org/licenses/LICENSE-2.0</span>
+<span class="cm"> *</span>
+<span class="cm"> * Unless required by applicable law or agreed to in writing, software</span>
+<span class="cm"> * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span class="cm"> * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span class="cm"> * See the License for the specific language governing permissions and</span>
+<span class="cm"> * limitations under the License.</span>
+<span class="cm"> */</span></pre></div></td></tr>
+
+
+<tr id="section-2"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-2">&#182;</a></div><p>@author Andrei Alexandrescu (andrei.alexandrescu@fb.com)</p></td><td class="code"><div class="highlight"><pre><span class="cp">#include &quot;Benchmark.h&quot;</span>
+<span class="cp">#include &quot;Foreach.h&quot;</span>
+<span class="cp">#include &quot;json.h&quot;</span>
+<span class="cp">#include &quot;String.h&quot;</span>
+<span class="cp">#include &lt;algorithm&gt;</span>
+<span class="cp">#include &lt;cmath&gt;</span>
+<span class="cp">#include &lt;iostream&gt;</span>
+<span class="cp">#include &lt;limits&gt;</span>
+<span class="cp">#include &lt;utility&gt;</span>
+<span class="cp">#include &lt;vector&gt;</span>
+
+<span class="k">using</span> <span class="k">namespace</span> <span class="n">std</span><span class="p">;</span>
+
+<span class="n">DEFINE_bool</span><span class="p">(</span><span class="n">benchmark</span><span class="p">,</span> <span class="kc">false</span><span class="p">,</span> <span class="s">&quot;Run benchmarks.&quot;</span><span class="p">);</span>
+<span class="n">DEFINE_bool</span><span class="p">(</span><span class="n">json</span><span class="p">,</span> <span class="kc">false</span><span class="p">,</span> <span class="s">&quot;Output in JSON format.&quot;</span><span class="p">);</span>
+
+<span class="k">namespace</span> <span class="n">folly</span> <span class="p">{</span>
+
+<span class="n">BenchmarkSuspender</span><span class="o">::</span><span class="n">NanosecondsSpent</span> <span class="n">BenchmarkSuspender</span><span class="o">::</span><span class="n">nsSpent</span><span class="p">;</span>
+
+<span class="k">typedef</span> <span class="n">function</span><span class="o">&lt;</span><span class="n">uint64_t</span><span class="p">(</span><span class="kt">unsigned</span> <span class="kt">int</span><span class="p">)</span><span class="o">&gt;</span> <span class="n">BenchmarkFun</span><span class="p">;</span>
+<span class="k">static</span> <span class="n">vector</span><span class="o">&lt;</span><span class="n">tuple</span><span class="o">&lt;</span><span class="k">const</span> <span class="kt">char</span><span class="o">*</span><span class="p">,</span> <span class="k">const</span> <span class="kt">char</span><span class="o">*</span><span class="p">,</span> <span class="n">BenchmarkFun</span><span class="o">&gt;&gt;</span> <span class="n">benchmarks</span><span class="p">;</span></pre></div></td></tr>
+
+
+<tr id="section-3"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-3">&#182;</a></div><p>Add the global baseline</p></td><td class="code"><div class="highlight"><pre><span class="n">BENCHMARK</span><span class="p">(</span><span class="n">globalBenchmarkBaseline</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">asm</span> <span class="k">volatile</span><span class="p">(</span><span class="s">&quot;&quot;</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="kt">void</span> <span class="n">detail</span><span class="o">::</span><span class="n">addBenchmarkImpl</span><span class="p">(</span><span class="k">const</span> <span class="kt">char</span><span class="o">*</span> <span class="n">file</span><span class="p">,</span> <span class="k">const</span> <span class="kt">char</span><span class="o">*</span> <span class="n">name</span><span class="p">,</span>
+                              <span class="n">BenchmarkFun</span> <span class="n">fun</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">benchmarks</span><span class="p">.</span><span class="n">emplace_back</span><span class="p">(</span><span class="n">file</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">std</span><span class="o">::</span><span class="n">move</span><span class="p">(</span><span class="n">fun</span><span class="p">));</span>
+<span class="p">}</span>
+
+<span class="cm">/**</span>
+<span class="cm"> * Given a point, gives density at that point as a number 0.0 &lt; x &lt;=</span>
+<span class="cm"> * 1.0. The result is 1.0 if all samples are equal to where, and</span>
+<span class="cm"> * decreases near 0 if all points are far away from it. The density is</span>
+<span class="cm"> * computed with the help of a radial basis function.</span>
+<span class="cm"> */</span>
+<span class="k">static</span> <span class="kt">double</span> <span class="n">density</span><span class="p">(</span><span class="k">const</span> <span class="kt">double</span> <span class="o">*</span> <span class="n">begin</span><span class="p">,</span> <span class="k">const</span> <span class="kt">double</span> <span class="o">*</span><span class="k">const</span> <span class="n">end</span><span class="p">,</span>
+                      <span class="k">const</span> <span class="kt">double</span> <span class="n">where</span><span class="p">,</span> <span class="k">const</span> <span class="kt">double</span> <span class="n">bandwidth</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">assert</span><span class="p">(</span><span class="n">begin</span> <span class="o">&lt;</span> <span class="n">end</span><span class="p">);</span>
+  <span class="n">assert</span><span class="p">(</span><span class="n">bandwidth</span> <span class="o">&gt;</span> <span class="mf">0.0</span><span class="p">);</span>
+  <span class="kt">double</span> <span class="n">sum</span> <span class="o">=</span> <span class="mf">0.0</span><span class="p">;</span>
+  <span class="n">FOR_EACH_RANGE</span> <span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="n">begin</span><span class="p">,</span> <span class="n">end</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">auto</span> <span class="n">d</span> <span class="o">=</span> <span class="p">(</span><span class="o">*</span><span class="n">i</span> <span class="o">-</span> <span class="n">where</span><span class="p">)</span> <span class="o">/</span> <span class="n">bandwidth</span><span class="p">;</span>
+    <span class="n">sum</span> <span class="o">+=</span> <span class="n">exp</span><span class="p">(</span><span class="o">-</span> <span class="n">d</span> <span class="o">*</span> <span class="n">d</span><span class="p">);</span>
+  <span class="p">}</span>
+  <span class="k">return</span> <span class="n">sum</span> <span class="o">/</span> <span class="p">(</span><span class="n">end</span> <span class="o">-</span> <span class="n">begin</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="cm">/**</span>
+<span class="cm"> * Computes mean and variance for a bunch of data points. Note that</span>
+<span class="cm"> * mean is currently not being used.</span>
+<span class="cm"> */</span>
+<span class="k">static</span> <span class="n">pair</span><span class="o">&lt;</span><span class="kt">double</span><span class="p">,</span> <span class="kt">double</span><span class="o">&gt;</span>
+<span class="n">meanVariance</span><span class="p">(</span><span class="k">const</span> <span class="kt">double</span> <span class="o">*</span> <span class="n">begin</span><span class="p">,</span> <span class="k">const</span> <span class="kt">double</span> <span class="o">*</span><span class="k">const</span> <span class="n">end</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">assert</span><span class="p">(</span><span class="n">begin</span> <span class="o">&lt;</span> <span class="n">end</span><span class="p">);</span>
+  <span class="kt">double</span> <span class="n">sum</span> <span class="o">=</span> <span class="mf">0.0</span><span class="p">,</span> <span class="n">sum2</span> <span class="o">=</span> <span class="mf">0.0</span><span class="p">;</span>
+  <span class="n">FOR_EACH_RANGE</span> <span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="n">begin</span><span class="p">,</span> <span class="n">end</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">sum</span> <span class="o">+=</span> <span class="o">*</span><span class="n">i</span><span class="p">;</span>
+    <span class="n">sum2</span> <span class="o">+=</span> <span class="o">*</span><span class="n">i</span> <span class="o">*</span> <span class="o">*</span><span class="n">i</span><span class="p">;</span>
+  <span class="p">}</span>
+  <span class="k">auto</span> <span class="k">const</span> <span class="n">n</span> <span class="o">=</span> <span class="n">end</span> <span class="o">-</span> <span class="n">begin</span><span class="p">;</span>
+  <span class="k">return</span> <span class="n">make_pair</span><span class="p">(</span><span class="n">sum</span> <span class="o">/</span> <span class="n">n</span><span class="p">,</span> <span class="n">sqrt</span><span class="p">((</span><span class="n">sum2</span> <span class="o">-</span> <span class="n">sum</span> <span class="o">*</span> <span class="n">sum</span> <span class="o">/</span> <span class="n">n</span><span class="p">)</span> <span class="o">/</span> <span class="n">n</span><span class="p">));</span>
+<span class="p">}</span>
+
+<span class="cm">/**</span>
+<span class="cm"> * Computes the mode of a sample set through brute force. Assumes</span>
+<span class="cm"> * input is sorted.</span>
+<span class="cm"> */</span>
+<span class="k">static</span> <span class="kt">double</span> <span class="n">mode</span><span class="p">(</span><span class="k">const</span> <span class="kt">double</span> <span class="o">*</span> <span class="n">begin</span><span class="p">,</span> <span class="k">const</span> <span class="kt">double</span> <span class="o">*</span><span class="k">const</span> <span class="n">end</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">assert</span><span class="p">(</span><span class="n">begin</span> <span class="o">&lt;</span> <span class="n">end</span><span class="p">);</span></pre></div></td></tr>
+
+
+<tr id="section-4"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-4">&#182;</a></div><p>Lower bound and upper bound for result and their respective
+densities.</p></td><td class="code"><div class="highlight"><pre>  <span class="k">auto</span>
+    <span class="n">result</span> <span class="o">=</span> <span class="mf">0.0</span><span class="p">,</span>
+    <span class="n">bestDensity</span> <span class="o">=</span> <span class="mf">0.0</span><span class="p">;</span></pre></div></td></tr>
+
+
+<tr id="section-5"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-5">&#182;</a></div><p>Get the variance so we pass it down to density()</p></td><td class="code"><div class="highlight"><pre>  <span class="k">auto</span> <span class="k">const</span> <span class="n">sigma</span> <span class="o">=</span> <span class="n">meanVariance</span><span class="p">(</span><span class="n">begin</span><span class="p">,</span> <span class="n">end</span><span class="p">).</span><span class="n">second</span><span class="p">;</span>
+  <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">sigma</span><span class="p">)</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-6"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-6">&#182;</a></div><p>No variance means constant signal</p></td><td class="code"><div class="highlight"><pre>    <span class="k">return</span> <span class="o">*</span><span class="n">begin</span><span class="p">;</span>
+  <span class="p">}</span>
+
+  <span class="n">FOR_EACH_RANGE</span> <span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="n">begin</span><span class="p">,</span> <span class="n">end</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">assert</span><span class="p">(</span><span class="n">i</span> <span class="o">==</span> <span class="n">begin</span> <span class="o">||</span> <span class="o">*</span><span class="n">i</span> <span class="o">&gt;=</span> <span class="n">i</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]);</span>
+    <span class="k">auto</span> <span class="n">candidate</span> <span class="o">=</span> <span class="n">density</span><span class="p">(</span><span class="n">begin</span><span class="p">,</span> <span class="n">end</span><span class="p">,</span> <span class="o">*</span><span class="n">i</span><span class="p">,</span> <span class="n">sigma</span> <span class="o">*</span> <span class="n">sqrt</span><span class="p">(</span><span class="mf">2.0</span><span class="p">));</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">candidate</span> <span class="o">&gt;</span> <span class="n">bestDensity</span><span class="p">)</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-7"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-7">&#182;</a></div><p>Found a new best</p></td><td class="code"><div class="highlight"><pre>      <span class="n">bestDensity</span> <span class="o">=</span> <span class="n">candidate</span><span class="p">;</span>
+      <span class="n">result</span> <span class="o">=</span> <span class="o">*</span><span class="n">i</span><span class="p">;</span>
+    <span class="p">}</span> <span class="k">else</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-8"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-8">&#182;</a></div><p>Density is decreasing... we could break here if we definitely
+knew this is unimodal.</p></td><td class="code"><div class="highlight"><pre>    <span class="p">}</span>
+  <span class="p">}</span>
+
+  <span class="k">return</span> <span class="n">result</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="cm">/**</span>
+<span class="cm"> * Given a bunch of benchmark samples, estimate the actual run time.</span>
+<span class="cm"> */</span>
+<span class="k">static</span> <span class="kt">double</span> <span class="n">estimateTime</span><span class="p">(</span><span class="kt">double</span> <span class="o">*</span> <span class="n">begin</span><span class="p">,</span> <span class="kt">double</span> <span class="o">*</span> <span class="n">end</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">assert</span><span class="p">(</span><span class="n">begin</span> <span class="o">&lt;</span> <span class="n">end</span><span class="p">);</span></pre></div></td></tr>
+
+
+<tr id="section-9"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-9">&#182;</a></div><p>Current state of the art: get the minimum. After some
+experimentation, it seems taking the minimum is the best.</p></td><td class="code"><div class="highlight"><pre>  <span class="k">return</span> <span class="o">*</span><span class="n">min_element</span><span class="p">(</span><span class="n">begin</span><span class="p">,</span> <span class="n">end</span><span class="p">);</span></pre></div></td></tr>
+
+
+<tr id="section-10"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-10">&#182;</a></div><p>What follows after estimates the time as the mode of the
+distribution.</p></td><td class="code"><div class="highlight"><pre></pre></div></td></tr>
+
+
+<tr id="section-11"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-11">&#182;</a></div><p>Select the awesomest (i.e. most frequent) result. We do this by
+sorting and then computing the longest run length.</p></td><td class="code"><div class="highlight"><pre>  <span class="n">sort</span><span class="p">(</span><span class="n">begin</span><span class="p">,</span> <span class="n">end</span><span class="p">);</span></pre></div></td></tr>
+
+
+<tr id="section-12"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-12">&#182;</a></div><p>Eliminate outliers. A time much larger than the minimum time is
+considered an outlier.</p></td><td class="code"><div class="highlight"><pre>  <span class="k">while</span> <span class="p">(</span><span class="n">end</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">&gt;</span> <span class="mf">2.0</span> <span class="o">*</span> <span class="o">*</span><span class="n">begin</span><span class="p">)</span> <span class="p">{</span>
+    <span class="o">--</span><span class="n">end</span><span class="p">;</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">begin</span> <span class="o">==</span> <span class="n">end</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">LOG</span><span class="p">(</span><span class="n">INFO</span><span class="p">)</span> <span class="o">&lt;&lt;</span> <span class="o">*</span><span class="n">begin</span><span class="p">;</span>
+    <span class="p">}</span>
+    <span class="n">assert</span><span class="p">(</span><span class="n">begin</span> <span class="o">&lt;</span> <span class="n">end</span><span class="p">);</span>
+  <span class="p">}</span>
+
+  <span class="kt">double</span> <span class="n">result</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+
+  <span class="cm">/* Code used just for comparison purposes */</span> <span class="p">{</span>
+    <span class="kt">unsigned</span> <span class="n">bestFrequency</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+    <span class="kt">unsigned</span> <span class="n">candidateFrequency</span> <span class="o">=</span> <span class="mi">1</span><span class="p">;</span>
+    <span class="kt">double</span> <span class="n">candidateValue</span> <span class="o">=</span> <span class="o">*</span><span class="n">begin</span><span class="p">;</span>
+    <span class="k">for</span> <span class="p">(</span><span class="k">auto</span> <span class="n">current</span> <span class="o">=</span> <span class="n">begin</span> <span class="o">+</span> <span class="mi">1</span><span class="p">;</span> <span class="p">;</span> <span class="o">++</span><span class="n">current</span><span class="p">)</span> <span class="p">{</span>
+      <span class="k">if</span> <span class="p">(</span><span class="n">current</span> <span class="o">==</span> <span class="n">end</span> <span class="o">||</span> <span class="o">*</span><span class="n">current</span> <span class="o">!=</span> <span class="n">candidateValue</span><span class="p">)</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-13"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-13">&#182;</a></div><p>Done with the current run, see if it was best</p></td><td class="code"><div class="highlight"><pre>        <span class="k">if</span> <span class="p">(</span><span class="n">candidateFrequency</span> <span class="o">&gt;</span> <span class="n">bestFrequency</span><span class="p">)</span> <span class="p">{</span>
+          <span class="n">bestFrequency</span> <span class="o">=</span> <span class="n">candidateFrequency</span><span class="p">;</span>
+          <span class="n">result</span> <span class="o">=</span> <span class="n">candidateValue</span><span class="p">;</span>
+        <span class="p">}</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">current</span> <span class="o">==</span> <span class="n">end</span><span class="p">)</span> <span class="p">{</span>
+          <span class="k">break</span><span class="p">;</span>
+        <span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-14"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-14">&#182;</a></div><p>Start a new run</p></td><td class="code"><div class="highlight"><pre>        <span class="n">candidateValue</span> <span class="o">=</span> <span class="o">*</span><span class="n">current</span><span class="p">;</span>
+        <span class="n">candidateFrequency</span> <span class="o">=</span> <span class="mi">1</span><span class="p">;</span>
+      <span class="p">}</span> <span class="k">else</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-15"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-15">&#182;</a></div><p>Cool, inside a run, increase the frequency</p></td><td class="code"><div class="highlight"><pre>        <span class="o">++</span><span class="n">candidateFrequency</span><span class="p">;</span>
+      <span class="p">}</span>
+    <span class="p">}</span>
+  <span class="p">}</span>
+
+  <span class="n">result</span> <span class="o">=</span> <span class="n">mode</span><span class="p">(</span><span class="n">begin</span><span class="p">,</span> <span class="n">end</span><span class="p">);</span>
+
+  <span class="k">return</span> <span class="n">result</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="k">static</span> <span class="kt">double</span> <span class="n">runBenchmarkGetNSPerIteration</span><span class="p">(</span><span class="k">const</span> <span class="n">BenchmarkFun</span><span class="o">&amp;</span> <span class="n">fun</span><span class="p">,</span>
+                                            <span class="k">const</span> <span class="kt">double</span> <span class="n">globalBaseline</span><span class="p">)</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-16"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-16">&#182;</a></div><p>They key here is accuracy; too low numbers means the accuracy was
+coarse. We up the ante until we get to at least minNanoseconds
+timings.</p></td><td class="code"><div class="highlight"><pre>  <span class="k">static</span> <span class="n">uint64_t</span> <span class="n">resolutionInNs</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span> <span class="n">coarseResolutionInNs</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+  <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">resolutionInNs</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">timespec</span> <span class="n">ts</span><span class="p">;</span>
+    <span class="n">CHECK_EQ</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">clock_getres</span><span class="p">(</span><span class="n">detail</span><span class="o">::</span><span class="n">DEFAULT_CLOCK_ID</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">ts</span><span class="p">));</span>
+    <span class="n">CHECK_EQ</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">ts</span><span class="p">.</span><span class="n">tv_sec</span><span class="p">)</span> <span class="o">&lt;&lt;</span> <span class="s">&quot;Clock sucks.&quot;</span><span class="p">;</span>
+    <span class="n">CHECK_LT</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">ts</span><span class="p">.</span><span class="n">tv_nsec</span><span class="p">)</span> <span class="o">&lt;&lt;</span> <span class="s">&quot;Clock too fast for its own good.&quot;</span><span class="p">;</span>
+    <span class="n">CHECK_EQ</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">ts</span><span class="p">.</span><span class="n">tv_nsec</span><span class="p">)</span> <span class="o">&lt;&lt;</span> <span class="s">&quot;Clock too coarse, upgrade your kernel.&quot;</span><span class="p">;</span>
+    <span class="n">resolutionInNs</span> <span class="o">=</span> <span class="n">ts</span><span class="p">.</span><span class="n">tv_nsec</span><span class="p">;</span>
+  <span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-17"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-17">&#182;</a></div><p>Whe choose a minimum minimum (sic) of 10,000 nanoseconds, but if
+the clock resolution is worse than that, it will be larger. In
+essence we're aiming at making the quantization noise 0.01%.</p></td><td class="code"><div class="highlight"><pre>  <span class="k">static</span> <span class="k">const</span> <span class="k">auto</span> <span class="n">minNanoseconds</span> <span class="o">=</span> <span class="n">min</span><span class="p">(</span><span class="n">resolutionInNs</span> <span class="o">*</span> <span class="mi">100000</span><span class="p">,</span> <span class="mi">1000000000UL</span><span class="p">);</span></pre></div></td></tr>
+
+
+<tr id="section-18"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-18">&#182;</a></div><p>We do measurements in several epochs and take the minimum, to
+account for jitter.</p></td><td class="code"><div class="highlight"><pre>  <span class="k">static</span> <span class="k">const</span> <span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">epochs</span> <span class="o">=</span> <span class="mi">1000</span><span class="p">;</span></pre></div></td></tr>
+
+
+<tr id="section-19"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-19">&#182;</a></div><p>We establish a total time budget as we don't want a measurement
+to take too long. This will curtail the number of actual epochs.</p></td><td class="code"><div class="highlight"><pre>  <span class="k">static</span> <span class="k">const</span> <span class="n">uint64_t</span> <span class="n">timeBudgetInNs</span> <span class="o">=</span> <span class="mi">1000000000</span><span class="p">;</span>
+  <span class="n">timespec</span> <span class="n">global</span><span class="p">;</span>
+  <span class="n">CHECK_EQ</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">clock_gettime</span><span class="p">(</span><span class="n">CLOCK_REALTIME</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">global</span><span class="p">));</span>
+
+  <span class="kt">double</span> <span class="n">epochResults</span><span class="p">[</span><span class="n">epochs</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span> <span class="mi">0</span> <span class="p">};</span>
+  <span class="n">size_t</span> <span class="n">actualEpochs</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+
+  <span class="k">for</span> <span class="p">(;</span> <span class="n">actualEpochs</span> <span class="o">&lt;</span> <span class="n">epochs</span><span class="p">;</span> <span class="o">++</span><span class="n">actualEpochs</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">for</span> <span class="p">(</span><span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">n</span> <span class="o">=</span> <span class="mi">1</span><span class="p">;</span> <span class="n">n</span> <span class="o">&lt;</span> <span class="p">(</span><span class="mi">1U</span> <span class="o">&lt;&lt;</span> <span class="mi">30</span><span class="p">);</span> <span class="n">n</span> <span class="o">*=</span> <span class="mi">2</span><span class="p">)</span> <span class="p">{</span>
+      <span class="k">auto</span> <span class="k">const</span> <span class="n">nsecs</span> <span class="o">=</span> <span class="n">fun</span><span class="p">(</span><span class="n">n</span><span class="p">);</span>
+      <span class="k">if</span> <span class="p">(</span><span class="n">nsecs</span> <span class="o">&lt;</span> <span class="n">minNanoseconds</span><span class="p">)</span> <span class="p">{</span>
+        <span class="k">continue</span><span class="p">;</span>
+      <span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-20"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-20">&#182;</a></div><p>We got an accurate enough timing, done. But only save if
+smaller than the current result.</p></td><td class="code"><div class="highlight"><pre>      <span class="n">epochResults</span><span class="p">[</span><span class="n">actualEpochs</span><span class="p">]</span> <span class="o">=</span> <span class="n">max</span><span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="kt">double</span><span class="p">(</span><span class="n">nsecs</span><span class="p">)</span> <span class="o">/</span> <span class="n">n</span> <span class="o">-</span> <span class="n">globalBaseline</span><span class="p">);</span></pre></div></td></tr>
+
+
+<tr id="section-21"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-21">&#182;</a></div><p>Done with the current epoch, we got a meaningful timing.</p></td><td class="code"><div class="highlight"><pre>      <span class="k">break</span><span class="p">;</span>
+    <span class="p">}</span>
+    <span class="n">timespec</span> <span class="n">now</span><span class="p">;</span>
+    <span class="n">CHECK_EQ</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">clock_gettime</span><span class="p">(</span><span class="n">CLOCK_REALTIME</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">now</span><span class="p">));</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">detail</span><span class="o">::</span><span class="n">timespecDiff</span><span class="p">(</span><span class="n">now</span><span class="p">,</span> <span class="n">global</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="n">timeBudgetInNs</span><span class="p">)</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-22"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-22">&#182;</a></div><p>No more time budget available.</p></td><td class="code"><div class="highlight"><pre>      <span class="o">++</span><span class="n">actualEpochs</span><span class="p">;</span>
+      <span class="k">break</span><span class="p">;</span>
+    <span class="p">}</span>
+  <span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-23"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-23">&#182;</a></div><p>If the benchmark was basically drowned in baseline noise, it's
+possible it became negative.</p></td><td class="code"><div class="highlight"><pre>  <span class="k">return</span> <span class="n">max</span><span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">estimateTime</span><span class="p">(</span><span class="n">epochResults</span><span class="p">,</span> <span class="n">epochResults</span> <span class="o">+</span> <span class="n">actualEpochs</span><span class="p">));</span>
+<span class="p">}</span>
+
+<span class="k">static</span> <span class="n">string</span> <span class="n">humanReadable</span><span class="p">(</span><span class="kt">double</span> <span class="n">n</span><span class="p">,</span> <span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">decimals</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">auto</span> <span class="n">a</span> <span class="o">=</span> <span class="n">fabs</span><span class="p">(</span><span class="n">n</span><span class="p">);</span>
+  <span class="kt">char</span> <span class="n">suffix</span> <span class="o">=</span> <span class="sc">&#39; &#39;</span><span class="p">;</span>
+
+  <span class="k">if</span> <span class="p">(</span><span class="n">a</span> <span class="o">&gt;=</span> <span class="mf">1E21</span><span class="p">)</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-24"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-24">&#182;</a></div><p>Too big to be comprehended by the puny human brain</p></td><td class="code"><div class="highlight"><pre>    <span class="n">suffix</span> <span class="o">=</span> <span class="sc">&#39;!&#39;</span><span class="p">;</span>
+    <span class="n">n</span> <span class="o">/=</span> <span class="mf">1E21</span><span class="p">;</span>
+  <span class="p">}</span> <span class="k">else</span> <span class="k">if</span> <span class="p">(</span><span class="n">a</span> <span class="o">&gt;=</span> <span class="mf">1E18</span><span class="p">)</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-25"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-25">&#182;</a></div><p>"EXA" written with suffix 'X' so as to not create confusion
+with scientific notation.</p></td><td class="code"><div class="highlight"><pre>    <span class="n">suffix</span> <span class="o">=</span> <span class="sc">&#39;X&#39;</span><span class="p">;</span>
+    <span class="n">n</span> <span class="o">/=</span> <span class="mf">1E18</span><span class="p">;</span>
+  <span class="p">}</span> <span class="k">else</span> <span class="k">if</span> <span class="p">(</span><span class="n">a</span> <span class="o">&gt;=</span> <span class="mf">1E15</span><span class="p">)</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-26"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-26">&#182;</a></div><p>"PETA"</p></td><td class="code"><div class="highlight"><pre>    <span class="n">suffix</span> <span class="o">=</span> <span class="sc">&#39;P&#39;</span><span class="p">;</span>
+    <span class="n">n</span> <span class="o">/=</span> <span class="mf">1E15</span><span class="p">;</span>
+  <span class="p">}</span> <span class="k">else</span> <span class="k">if</span> <span class="p">(</span><span class="n">a</span> <span class="o">&gt;=</span> <span class="mf">1E12</span><span class="p">)</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-27"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-27">&#182;</a></div><p>"TERA"</p></td><td class="code"><div class="highlight"><pre>    <span class="n">suffix</span> <span class="o">=</span> <span class="sc">&#39;T&#39;</span><span class="p">;</span>
+    <span class="n">n</span> <span class="o">/=</span> <span class="mf">1E12</span><span class="p">;</span>
+  <span class="p">}</span> <span class="k">else</span> <span class="k">if</span> <span class="p">(</span><span class="n">a</span> <span class="o">&gt;=</span> <span class="mf">1E9</span><span class="p">)</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-28"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-28">&#182;</a></div><p>"GIGA"</p></td><td class="code"><div class="highlight"><pre>    <span class="n">suffix</span> <span class="o">=</span> <span class="sc">&#39;G&#39;</span><span class="p">;</span>
+    <span class="n">n</span> <span class="o">/=</span> <span class="mf">1E9</span><span class="p">;</span>
+  <span class="p">}</span> <span class="k">else</span> <span class="k">if</span> <span class="p">(</span><span class="n">a</span> <span class="o">&gt;=</span> <span class="mf">1E6</span><span class="p">)</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-29"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-29">&#182;</a></div><p>"MEGA"</p></td><td class="code"><div class="highlight"><pre>    <span class="n">suffix</span> <span class="o">=</span> <span class="sc">&#39;M&#39;</span><span class="p">;</span>
+    <span class="n">n</span> <span class="o">/=</span> <span class="mf">1E6</span><span class="p">;</span>
+  <span class="p">}</span> <span class="k">else</span> <span class="k">if</span> <span class="p">(</span><span class="n">a</span> <span class="o">&gt;=</span> <span class="mf">1E3</span><span class="p">)</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-30"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-30">&#182;</a></div><p>"KILO"</p></td><td class="code"><div class="highlight"><pre>    <span class="n">suffix</span> <span class="o">=</span> <span class="sc">&#39;K&#39;</span><span class="p">;</span>
+    <span class="n">n</span> <span class="o">/=</span> <span class="mf">1E3</span><span class="p">;</span>
+  <span class="p">}</span> <span class="k">else</span> <span class="k">if</span> <span class="p">(</span><span class="n">a</span> <span class="o">==</span> <span class="mf">0.0</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">suffix</span> <span class="o">=</span> <span class="sc">&#39; &#39;</span><span class="p">;</span>
+  <span class="p">}</span> <span class="k">else</span> <span class="k">if</span> <span class="p">(</span><span class="n">a</span> <span class="o">&lt;</span> <span class="mf">1E-15</span><span class="p">)</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-31"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-31">&#182;</a></div><p>too small</p></td><td class="code"><div class="highlight"><pre>    <span class="n">suffix</span> <span class="o">=</span> <span class="sc">&#39;?&#39;</span><span class="p">;</span>
+    <span class="n">n</span> <span class="o">*=</span> <span class="mf">1E18</span><span class="p">;</span>
+  <span class="p">}</span> <span class="k">else</span> <span class="k">if</span> <span class="p">(</span><span class="n">a</span> <span class="o">&lt;</span> <span class="mf">1E-12</span><span class="p">)</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-32"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-32">&#182;</a></div><p>"femto"</p></td><td class="code"><div class="highlight"><pre>    <span class="n">suffix</span> <span class="o">=</span> <span class="sc">&#39;f&#39;</span><span class="p">;</span>
+    <span class="n">n</span> <span class="o">*=</span> <span class="mf">1E15</span><span class="p">;</span>
+  <span class="p">}</span> <span class="k">else</span> <span class="k">if</span> <span class="p">(</span><span class="n">a</span> <span class="o">&lt;</span> <span class="mf">1E-9</span><span class="p">)</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-33"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-33">&#182;</a></div><p>"pico"</p></td><td class="code"><div class="highlight"><pre>    <span class="n">suffix</span> <span class="o">=</span> <span class="sc">&#39;p&#39;</span><span class="p">;</span>
+    <span class="n">n</span> <span class="o">*=</span> <span class="mf">1E12</span><span class="p">;</span>
+  <span class="p">}</span> <span class="k">else</span> <span class="k">if</span> <span class="p">(</span><span class="n">a</span> <span class="o">&lt;</span> <span class="mf">1E-6</span><span class="p">)</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-34"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-34">&#182;</a></div><p>"nano"</p></td><td class="code"><div class="highlight"><pre>    <span class="n">suffix</span> <span class="o">=</span> <span class="sc">&#39;n&#39;</span><span class="p">;</span>
+    <span class="n">n</span> <span class="o">*=</span> <span class="mf">1E9</span><span class="p">;</span>
+  <span class="p">}</span> <span class="k">else</span> <span class="k">if</span> <span class="p">(</span><span class="n">a</span> <span class="o">&lt;</span> <span class="mf">1E-3</span><span class="p">)</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-35"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-35">&#182;</a></div><p>"micro"</p></td><td class="code"><div class="highlight"><pre>    <span class="n">suffix</span> <span class="o">=</span> <span class="sc">&#39;u&#39;</span><span class="p">;</span>
+    <span class="n">n</span> <span class="o">*=</span> <span class="mf">1E6</span><span class="p">;</span>
+  <span class="p">}</span> <span class="k">else</span> <span class="k">if</span> <span class="p">(</span><span class="n">a</span> <span class="o">&lt;</span> <span class="mi">1</span><span class="p">)</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-36"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-36">&#182;</a></div><p>"mili"</p></td><td class="code"><div class="highlight"><pre>    <span class="n">suffix</span> <span class="o">=</span> <span class="sc">&#39;m&#39;</span><span class="p">;</span>
+    <span class="n">n</span> <span class="o">*=</span> <span class="mf">1E3</span><span class="p">;</span>
+  <span class="p">}</span>
+
+  <span class="k">return</span> <span class="n">stringPrintf</span><span class="p">(</span><span class="s">&quot;%*.*f%c&quot;</span><span class="p">,</span> <span class="n">decimals</span> <span class="o">+</span> <span class="mi">3</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="n">decimals</span><span class="p">,</span> <span class="n">n</span><span class="p">,</span> <span class="n">suffix</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="k">static</span> <span class="kt">void</span> <span class="n">printBenchmarkResultsAsTable</span><span class="p">(</span>
+  <span class="k">const</span> <span class="n">vector</span><span class="o">&lt;</span><span class="n">tuple</span><span class="o">&lt;</span><span class="k">const</span> <span class="kt">char</span><span class="o">*</span><span class="p">,</span> <span class="k">const</span> <span class="kt">char</span><span class="o">*</span><span class="p">,</span> <span class="kt">double</span><span class="o">&gt;</span> <span class="o">&gt;&amp;</span> <span class="n">data</span><span class="p">)</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-37"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-37">&#182;</a></div><p>Width available</p></td><td class="code"><div class="highlight"><pre>  <span class="k">static</span> <span class="k">const</span> <span class="n">uint</span> <span class="n">columns</span> <span class="o">=</span> <span class="mi">76</span><span class="p">;</span></pre></div></td></tr>
+
+
+<tr id="section-38"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-38">&#182;</a></div><p>Compute the longest benchmark name</p></td><td class="code"><div class="highlight"><pre>  <span class="n">size_t</span> <span class="n">longestName</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+  <span class="n">FOR_EACH_RANGE</span> <span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">benchmarks</span><span class="p">.</span><span class="n">size</span><span class="p">())</span> <span class="p">{</span>
+    <span class="n">longestName</span> <span class="o">=</span> <span class="n">max</span><span class="p">(</span><span class="n">longestName</span><span class="p">,</span> <span class="n">strlen</span><span class="p">(</span><span class="n">get</span><span class="o">&lt;</span><span class="mi">1</span><span class="o">&gt;</span><span class="p">(</span><span class="n">benchmarks</span><span class="p">[</span><span class="n">i</span><span class="p">])));</span>
+  <span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-39"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-39">&#182;</a></div><p>Print a horizontal rule</p></td><td class="code"><div class="highlight"><pre>  <span class="k">auto</span> <span class="n">separator</span> <span class="o">=</span> <span class="p">[</span><span class="o">&amp;</span><span class="p">](</span><span class="kt">char</span> <span class="n">pad</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">puts</span><span class="p">(</span><span class="n">string</span><span class="p">(</span><span class="n">columns</span><span class="p">,</span> <span class="n">pad</span><span class="p">).</span><span class="n">c_str</span><span class="p">());</span>
+  <span class="p">};</span></pre></div></td></tr>
+
+
+<tr id="section-40"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-40">&#182;</a></div><p>Print header for a file</p></td><td class="code"><div class="highlight"><pre>  <span class="k">auto</span> <span class="n">header</span> <span class="o">=</span> <span class="p">[</span><span class="o">&amp;</span><span class="p">](</span><span class="k">const</span> <span class="kt">char</span><span class="o">*</span> <span class="n">file</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">separator</span><span class="p">(</span><span class="sc">&#39;=&#39;</span><span class="p">);</span>
+    <span class="n">printf</span><span class="p">(</span><span class="s">&quot;%-*srelative  ns/iter  iters/s</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">,</span>
+           <span class="n">columns</span> <span class="o">-</span> <span class="mi">26</span><span class="p">,</span> <span class="n">file</span><span class="p">);</span>
+    <span class="n">separator</span><span class="p">(</span><span class="sc">&#39;=&#39;</span><span class="p">);</span>
+  <span class="p">};</span>
+
+  <span class="kt">double</span> <span class="n">baselineNsPerIter</span> <span class="o">=</span> <span class="n">numeric_limits</span><span class="o">&lt;</span><span class="kt">double</span><span class="o">&gt;::</span><span class="n">max</span><span class="p">();</span>
+  <span class="k">const</span> <span class="kt">char</span><span class="o">*</span> <span class="n">lastFile</span> <span class="o">=</span> <span class="s">&quot;&quot;</span><span class="p">;</span>
+
+  <span class="k">for</span> <span class="p">(</span><span class="k">auto</span><span class="o">&amp;</span> <span class="n">datum</span> <span class="o">:</span> <span class="n">data</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">auto</span> <span class="n">file</span> <span class="o">=</span> <span class="n">get</span><span class="o">&lt;</span><span class="mi">0</span><span class="o">&gt;</span><span class="p">(</span><span class="n">datum</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">strcmp</span><span class="p">(</span><span class="n">file</span><span class="p">,</span> <span class="n">lastFile</span><span class="p">))</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-41"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-41">&#182;</a></div><p>New file starting</p></td><td class="code"><div class="highlight"><pre>      <span class="n">header</span><span class="p">(</span><span class="n">file</span><span class="p">);</span>
+      <span class="n">lastFile</span> <span class="o">=</span> <span class="n">file</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="n">string</span> <span class="n">s</span> <span class="o">=</span> <span class="n">get</span><span class="o">&lt;</span><span class="mi">1</span><span class="o">&gt;</span><span class="p">(</span><span class="n">datum</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">s</span> <span class="o">==</span> <span class="s">&quot;-&quot;</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">separator</span><span class="p">(</span><span class="sc">&#39;-&#39;</span><span class="p">);</span>
+      <span class="k">continue</span><span class="p">;</span>
+    <span class="p">}</span>
+    <span class="kt">bool</span> <span class="n">useBaseline</span> <span class="cm">/* = void */</span><span class="p">;</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">s</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="sc">&#39;%&#39;</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">s</span><span class="p">.</span><span class="n">erase</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">);</span>
+      <span class="n">useBaseline</span> <span class="o">=</span> <span class="kc">true</span><span class="p">;</span>
+    <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+      <span class="n">baselineNsPerIter</span> <span class="o">=</span> <span class="n">get</span><span class="o">&lt;</span><span class="mi">2</span><span class="o">&gt;</span><span class="p">(</span><span class="n">datum</span><span class="p">);</span>
+      <span class="n">useBaseline</span> <span class="o">=</span> <span class="kc">false</span><span class="p">;</span>
+    <span class="p">}</span>
+    <span class="n">s</span><span class="p">.</span><span class="n">resize</span><span class="p">(</span><span class="n">columns</span> <span class="o">-</span> <span class="mi">27</span><span class="p">,</span> <span class="sc">&#39; &#39;</span><span class="p">);</span>
+    <span class="k">auto</span> <span class="n">nsPerIter</span> <span class="o">=</span> <span class="n">get</span><span class="o">&lt;</span><span class="mi">2</span><span class="o">&gt;</span><span class="p">(</span><span class="n">datum</span><span class="p">);</span>
+    <span class="k">auto</span> <span class="n">itersPerSec</span> <span class="o">=</span> <span class="mf">1E9</span> <span class="o">/</span> <span class="n">nsPerIter</span><span class="p">;</span>
+    <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">useBaseline</span><span class="p">)</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-42"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-42">&#182;</a></div><p>Print without baseline</p></td><td class="code"><div class="highlight"><pre>      <span class="n">printf</span><span class="p">(</span><span class="s">&quot;%*s           %s  %s</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">,</span>
+             <span class="k">static_cast</span><span class="o">&lt;</span><span class="kt">int</span><span class="o">&gt;</span><span class="p">(</span><span class="n">s</span><span class="p">.</span><span class="n">size</span><span class="p">()),</span> <span class="n">s</span><span class="p">.</span><span class="n">c_str</span><span class="p">(),</span>
+             <span class="n">humanReadable</span><span class="p">(</span><span class="n">nsPerIter</span><span class="p">,</span> <span class="mi">2</span><span class="p">).</span><span class="n">c_str</span><span class="p">(),</span>
+             <span class="n">humanReadable</span><span class="p">(</span><span class="n">itersPerSec</span><span class="p">,</span> <span class="mi">2</span><span class="p">).</span><span class="n">c_str</span><span class="p">());</span>
+    <span class="p">}</span> <span class="k">else</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-43"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-43">&#182;</a></div><p>Print with baseline</p></td><td class="code"><div class="highlight"><pre>      <span class="k">auto</span> <span class="n">rel</span> <span class="o">=</span> <span class="n">baselineNsPerIter</span> <span class="o">/</span> <span class="n">nsPerIter</span> <span class="o">*</span> <span class="mf">100.0</span><span class="p">;</span>
+      <span class="n">printf</span><span class="p">(</span><span class="s">&quot;%*s %7.2f%%  %s  %s</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">,</span>
+             <span class="k">static_cast</span><span class="o">&lt;</span><span class="kt">int</span><span class="o">&gt;</span><span class="p">(</span><span class="n">s</span><span class="p">.</span><span class="n">size</span><span class="p">()),</span> <span class="n">s</span><span class="p">.</span><span class="n">c_str</span><span class="p">(),</span>
+             <span class="n">rel</span><span class="p">,</span>
+             <span class="n">humanReadable</span><span class="p">(</span><span class="n">nsPerIter</span><span class="p">,</span> <span class="mi">2</span><span class="p">).</span><span class="n">c_str</span><span class="p">(),</span>
+             <span class="n">humanReadable</span><span class="p">(</span><span class="n">itersPerSec</span><span class="p">,</span> <span class="mi">2</span><span class="p">).</span><span class="n">c_str</span><span class="p">());</span>
+    <span class="p">}</span>
+  <span class="p">}</span>
+  <span class="n">separator</span><span class="p">(</span><span class="sc">&#39;=&#39;</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="k">static</span> <span class="kt">void</span> <span class="n">printBenchmarkResultsAsJson</span><span class="p">(</span>
+  <span class="k">const</span> <span class="n">vector</span><span class="o">&lt;</span><span class="n">tuple</span><span class="o">&lt;</span><span class="k">const</span> <span class="kt">char</span><span class="o">*</span><span class="p">,</span> <span class="k">const</span> <span class="kt">char</span><span class="o">*</span><span class="p">,</span> <span class="kt">double</span><span class="o">&gt;</span> <span class="o">&gt;&amp;</span> <span class="n">data</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">dynamic</span> <span class="n">d</span> <span class="o">=</span> <span class="n">dynamic</span><span class="o">::</span><span class="n">object</span><span class="p">;</span>
+  <span class="k">for</span> <span class="p">(</span><span class="k">auto</span><span class="o">&amp;</span> <span class="nl">datum:</span> <span class="n">data</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">d</span><span class="p">[</span><span class="n">std</span><span class="o">::</span><span class="n">get</span><span class="o">&lt;</span><span class="mi">1</span><span class="o">&gt;</span><span class="p">(</span><span class="n">datum</span><span class="p">)]</span> <span class="o">=</span> <span class="n">std</span><span class="o">::</span><span class="n">get</span><span class="o">&lt;</span><span class="mi">2</span><span class="o">&gt;</span><span class="p">(</span><span class="n">datum</span><span class="p">)</span> <span class="o">*</span> <span class="mf">1000.</span><span class="p">;</span>
+  <span class="p">}</span>
+
+  <span class="n">printf</span><span class="p">(</span><span class="s">&quot;%s</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">toPrettyJson</span><span class="p">(</span><span class="n">d</span><span class="p">).</span><span class="n">c_str</span><span class="p">());</span>
+<span class="p">}</span>
+
+<span class="k">static</span> <span class="kt">void</span> <span class="n">printBenchmarkResults</span><span class="p">(</span>
+  <span class="k">const</span> <span class="n">vector</span><span class="o">&lt;</span><span class="n">tuple</span><span class="o">&lt;</span><span class="k">const</span> <span class="kt">char</span><span class="o">*</span><span class="p">,</span> <span class="k">const</span> <span class="kt">char</span><span class="o">*</span><span class="p">,</span> <span class="kt">double</span><span class="o">&gt;</span> <span class="o">&gt;&amp;</span> <span class="n">data</span><span class="p">)</span> <span class="p">{</span>
+
+  <span class="k">if</span> <span class="p">(</span><span class="n">FLAGS_json</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">printBenchmarkResultsAsJson</span><span class="p">(</span><span class="n">data</span><span class="p">);</span>
+  <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+    <span class="n">printBenchmarkResultsAsTable</span><span class="p">(</span><span class="n">data</span><span class="p">);</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="kt">void</span> <span class="n">runBenchmarks</span><span class="p">()</span> <span class="p">{</span>
+  <span class="n">CHECK</span><span class="p">(</span><span class="o">!</span><span class="n">benchmarks</span><span class="p">.</span><span class="n">empty</span><span class="p">());</span>
+
+  <span class="n">vector</span><span class="o">&lt;</span><span class="n">tuple</span><span class="o">&lt;</span><span class="k">const</span> <span class="kt">char</span><span class="o">*</span><span class="p">,</span> <span class="k">const</span> <span class="kt">char</span><span class="o">*</span><span class="p">,</span> <span class="kt">double</span><span class="o">&gt;&gt;</span> <span class="n">results</span><span class="p">;</span>
+  <span class="n">results</span><span class="p">.</span><span class="n">reserve</span><span class="p">(</span><span class="n">benchmarks</span><span class="p">.</span><span class="n">size</span><span class="p">()</span> <span class="o">-</span> <span class="mi">1</span><span class="p">);</span></pre></div></td></tr>
+
+
+<tr id="section-44"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-44">&#182;</a></div><p>PLEASE KEEP QUIET. MEASUREMENTS IN PROGRESS.</p></td><td class="code"><div class="highlight"><pre>  <span class="k">auto</span> <span class="k">const</span> <span class="n">globalBaseline</span> <span class="o">=</span> <span class="n">runBenchmarkGetNSPerIteration</span><span class="p">(</span>
+    <span class="n">get</span><span class="o">&lt;</span><span class="mi">2</span><span class="o">&gt;</span><span class="p">(</span><span class="n">benchmarks</span><span class="p">.</span><span class="n">front</span><span class="p">()),</span> <span class="mi">0</span><span class="p">);</span>
+  <span class="n">FOR_EACH_RANGE</span> <span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">benchmarks</span><span class="p">.</span><span class="n">size</span><span class="p">())</span> <span class="p">{</span>
+    <span class="k">auto</span> <span class="n">elapsed</span> <span class="o">=</span> <span class="n">strcmp</span><span class="p">(</span><span class="n">get</span><span class="o">&lt;</span><span class="mi">1</span><span class="o">&gt;</span><span class="p">(</span><span class="n">benchmarks</span><span class="p">[</span><span class="n">i</span><span class="p">]),</span> <span class="s">&quot;-&quot;</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span>
+      <span class="o">?</span> <span class="mf">0.0</span> <span class="c1">// skip the separators</span>
+      <span class="o">:</span> <span class="n">runBenchmarkGetNSPerIteration</span><span class="p">(</span><span class="n">get</span><span class="o">&lt;</span><span class="mi">2</span><span class="o">&gt;</span><span class="p">(</span><span class="n">benchmarks</span><span class="p">[</span><span class="n">i</span><span class="p">]),</span>
+                                      <span class="n">globalBaseline</span><span class="p">);</span>
+    <span class="n">results</span><span class="p">.</span><span class="n">emplace_back</span><span class="p">(</span><span class="n">get</span><span class="o">&lt;</span><span class="mi">0</span><span class="o">&gt;</span><span class="p">(</span><span class="n">benchmarks</span><span class="p">[</span><span class="n">i</span><span class="p">]),</span>
+                         <span class="n">get</span><span class="o">&lt;</span><span class="mi">1</span><span class="o">&gt;</span><span class="p">(</span><span class="n">benchmarks</span><span class="p">[</span><span class="n">i</span><span class="p">]),</span> <span class="n">elapsed</span><span class="p">);</span>
+  <span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-45"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-45">&#182;</a></div><p>PLEASE MAKE NOISE. MEASUREMENTS DONE.</p></td><td class="code"><div class="highlight"><pre>  <span class="n">printBenchmarkResults</span><span class="p">(</span><span class="n">results</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="p">}</span> <span class="c1">// namespace folly</span>
+
+</pre></div></td></tr>
+
+</tbody>
+</table>
+</div>
+
+</body>
+<script>docas={repo:"joekychen/folly",depth:1}</script>
+<script>document.write('<script src=' + ('__proto__' in {} ? 'http://cdnjs.cloudflare.com/ajax/libs/zepto/1.0rc1/zepto.min.js' : 'https://ajax.googleapis.com/ajax/libs/jquery/1.7.2/jquery.min.js')+'><\\/script>')</script>
+<script src="http://baoshan.github.com/moment/min/moment.min.js"></script>
+<script src="../javascript/docco.min.js"></script>
+</html>

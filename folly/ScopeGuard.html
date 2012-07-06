@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html><head><title>joekychen/folly » folly › ScopeGuard.h
+
+</title>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+<meta name="generator" content="Docco">
+<link rel="stylesheet" media="all" href="../stylesheets/docco.min.css" />
+
+
+</head>
+<body>
+<div id="container">
+<div id="background"></div>
+<table cellpadding="0" cellspacing="0">
+<thead><tr><th class="docs"><a id="home" href="../index.html"></a><h1>ScopeGuard.h</h1></th><th class="code"></th></tr></thead>
+<tbody>
+
+
+<tr id="section-1"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-1">&#182;</a></div></td><td class="code"><div class="highlight"><pre><span class="cm">/*</span>
+<span class="cm"> * Copyright 2012 Facebook, Inc.</span>
+<span class="cm"> *</span>
+<span class="cm"> * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span class="cm"> * you may not use this file except in compliance with the License.</span>
+<span class="cm"> * You may obtain a copy of the License at</span>
+<span class="cm"> *</span>
+<span class="cm"> *   http://www.apache.org/licenses/LICENSE-2.0</span>
+<span class="cm"> *</span>
+<span class="cm"> * Unless required by applicable law or agreed to in writing, software</span>
+<span class="cm"> * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span class="cm"> * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span class="cm"> * See the License for the specific language governing permissions and</span>
+<span class="cm"> * limitations under the License.</span>
+<span class="cm"> */</span>
+
+<span class="cp">#ifndef FOLLY_SCOPEGUARD_H_</span>
+<span class="cp">#define FOLLY_SCOPEGUARD_H_</span>
+
+<span class="cp">#include &lt;cstddef&gt;</span>
+<span class="cp">#include &lt;functional&gt;</span>
+<span class="cp">#include &lt;new&gt;</span>
+<span class="cp">#include &lt;glog/logging.h&gt;</span>
+
+<span class="cp">#include &quot;folly/Preprocessor.h&quot;</span>
+
+<span class="n">namespace</span> <span class="n">folly</span> <span class="p">{</span>
+
+<span class="cm">/**</span>
+<span class="cm"> * ScopeGuard is a general implementation of the &quot;Initilization is</span>
+<span class="cm"> * Resource Acquisition&quot; idiom.  Basically, it guarantees that a function</span>
+<span class="cm"> * is executed upon leaving the currrent scope unless otherwise told.</span>
+<span class="cm"> *</span>
+<span class="cm"> * The makeGuard() function is used to create a new ScopeGuard object.</span>
+<span class="cm"> * It can be instantiated with a lambda function, a std::function&lt;void()&gt;,</span>
+<span class="cm"> * a functor, or a void(*)() function pointer.</span>
+<span class="cm"> *</span>
+<span class="cm"> *</span>
+<span class="cm"> * Usage example: Add a friend to memory iff it is also added to the db.</span>
+<span class="cm"> *</span>
+<span class="cm"> * void User::addFriend(User&amp; newFriend) {</span>
+<span class="cm"> *   // add the friend to memory</span>
+<span class="cm"> *   friends_.push_back(&amp;newFriend);</span>
+<span class="cm"> *</span>
+<span class="cm"> *   // If the db insertion that follows fails, we should</span>
+<span class="cm"> *   // remove it from memory.</span>
+<span class="cm"> *   // (You could also declare this as &quot;auto guard = makeGuard(...)&quot;)</span>
+<span class="cm"> *   ScopeGuard guard = makeGuard([&amp;] { friends_.pop_back(); });</span>
+<span class="cm"> *</span>
+<span class="cm"> *   // this will throw an exception upon error, which</span>
+<span class="cm"> *   // makes the ScopeGuard execute UserCont::pop_back()</span>
+<span class="cm"> *   // once the Guard&#39;s destructor is called.</span>
+<span class="cm"> *   db_-&gt;addFriend(GetName(), newFriend.GetName());</span>
+<span class="cm"> *</span>
+<span class="cm"> *   // an exception was not thrown, so don&#39;t execute</span>
+<span class="cm"> *   // the Guard.</span>
+<span class="cm"> *   guard.dismiss();</span>
+<span class="cm"> * }</span>
+<span class="cm"> *</span>
+<span class="cm"> * Examine ScopeGuardTest.cpp for some more sample usage.</span>
+<span class="cm"> *</span>
+<span class="cm"> * Stolen from:</span>
+<span class="cm"> *   Andrei&#39;s and Petru Marginean&#39;s CUJ article:</span>
+<span class="cm"> *     http://drdobbs.com/184403758</span>
+<span class="cm"> *   and the loki library:</span>
+<span class="cm"> *     http://loki-lib.sourceforge.net/index.php?n=Idioms.ScopeGuardPointer</span>
+<span class="cm"> *   and triendl.kj article:</span>
+<span class="cm"> *     http://www.codeproject.com/KB/cpp/scope_guard.aspx</span>
+<span class="cm"> */</span>
+<span class="n">class</span> <span class="n">ScopeGuardImplBase</span> <span class="p">{</span>
+ <span class="nl">public:</span>
+  <span class="kt">void</span> <span class="n">dismiss</span><span class="p">()</span> <span class="n">noexcept</span> <span class="p">{</span>
+    <span class="n">dismissed_</span> <span class="o">=</span> <span class="nb">true</span><span class="p">;</span>
+  <span class="p">}</span>
+
+ <span class="nl">protected:</span>
+  <span class="n">ScopeGuardImplBase</span><span class="p">()</span>
+    <span class="o">:</span> <span class="n">dismissed_</span><span class="p">(</span><span class="nb">false</span><span class="p">)</span> <span class="p">{}</span>
+
+  <span class="n">ScopeGuardImplBase</span><span class="p">(</span><span class="n">ScopeGuardImplBase</span><span class="o">&amp;&amp;</span> <span class="n">other</span><span class="p">)</span>
+    <span class="o">:</span> <span class="n">dismissed_</span><span class="p">(</span><span class="n">other</span><span class="p">.</span><span class="n">dismissed_</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">other</span><span class="p">.</span><span class="n">dismissed_</span> <span class="o">=</span> <span class="nb">true</span><span class="p">;</span>
+  <span class="p">}</span>
+
+  <span class="n">bool</span> <span class="n">dismissed_</span><span class="p">;</span>
+<span class="p">};</span>
+
+<span class="n">template</span><span class="o">&lt;</span><span class="kr">typename</span> <span class="n">FunctionType</span><span class="o">&gt;</span>
+<span class="n">class</span> <span class="n">ScopeGuardImpl</span> <span class="o">:</span> <span class="n">public</span> <span class="n">ScopeGuardImplBase</span> <span class="p">{</span>
+ <span class="nl">public:</span>
+  <span class="n">explicit</span> <span class="n">ScopeGuardImpl</span><span class="p">(</span><span class="k">const</span> <span class="n">FunctionType</span><span class="o">&amp;</span> <span class="n">fn</span><span class="p">)</span>
+    <span class="o">:</span> <span class="n">function_</span><span class="p">(</span><span class="n">fn</span><span class="p">)</span> <span class="p">{}</span>
+
+  <span class="n">explicit</span> <span class="n">ScopeGuardImpl</span><span class="p">(</span><span class="n">FunctionType</span><span class="o">&amp;&amp;</span> <span class="n">fn</span><span class="p">)</span>
+    <span class="o">:</span> <span class="n">function_</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">move</span><span class="p">(</span><span class="n">fn</span><span class="p">))</span> <span class="p">{}</span>
+
+  <span class="n">ScopeGuardImpl</span><span class="p">(</span><span class="n">ScopeGuardImpl</span><span class="o">&amp;&amp;</span> <span class="n">other</span><span class="p">)</span>
+    <span class="o">:</span> <span class="n">ScopeGuardImplBase</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">move</span><span class="p">(</span><span class="n">other</span><span class="p">)),</span>
+      <span class="n">function_</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">move</span><span class="p">(</span><span class="n">other</span><span class="p">.</span><span class="n">function_</span><span class="p">))</span> <span class="p">{</span>
+  <span class="p">}</span>
+
+  <span class="o">~</span><span class="n">ScopeGuardImpl</span><span class="p">()</span> <span class="n">noexcept</span> <span class="p">{</span>
+    <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">dismissed_</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">execute</span><span class="p">();</span>
+    <span class="p">}</span>
+  <span class="p">}</span>
+
+<span class="nl">private:</span>
+  <span class="kt">void</span><span class="o">*</span> <span class="n">operator</span> <span class="n">new</span><span class="p">(</span><span class="kt">size_t</span><span class="p">)</span> <span class="o">=</span> <span class="n">delete</span><span class="p">;</span>
+
+  <span class="kt">void</span> <span class="n">execute</span><span class="p">()</span> <span class="n">noexcept</span> <span class="p">{</span>
+    <span class="n">try</span> <span class="p">{</span>
+      <span class="n">function_</span><span class="p">();</span>
+    <span class="p">}</span> <span class="n">catch</span> <span class="p">(</span><span class="k">const</span> <span class="n">std</span><span class="o">::</span><span class="n">exception</span><span class="o">&amp;</span> <span class="n">ex</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">LOG</span><span class="p">(</span><span class="n">FATAL</span><span class="p">)</span> <span class="o">&lt;&lt;</span> <span class="s">&quot;ScopeGuard cleanup function threw a &quot;</span> <span class="o">&lt;&lt;</span>
+        <span class="n">typeid</span><span class="p">(</span><span class="n">ex</span><span class="p">).</span><span class="n">name</span><span class="p">()</span> <span class="o">&lt;&lt;</span> <span class="s">&quot;exception: &quot;</span> <span class="o">&lt;&lt;</span> <span class="n">ex</span><span class="p">.</span><span class="n">what</span><span class="p">();</span>
+    <span class="p">}</span> <span class="n">catch</span> <span class="p">(...)</span> <span class="p">{</span>
+      <span class="n">LOG</span><span class="p">(</span><span class="n">FATAL</span><span class="p">)</span> <span class="o">&lt;&lt;</span> <span class="s">&quot;ScopeGuard cleanup function threw a non-exception object&quot;</span><span class="p">;</span>
+    <span class="p">}</span>
+  <span class="p">}</span>
+
+  <span class="n">FunctionType</span> <span class="n">function_</span><span class="p">;</span>
+<span class="p">};</span>
+
+<span class="n">template</span><span class="o">&lt;</span><span class="kr">typename</span> <span class="n">FunctionType</span><span class="o">&gt;</span>
+<span class="n">ScopeGuardImpl</span><span class="o">&lt;</span><span class="kr">typename</span> <span class="n">std</span><span class="o">::</span><span class="n">decay</span><span class="o">&lt;</span><span class="n">FunctionType</span><span class="o">&gt;::</span><span class="n">type</span><span class="o">&gt;</span>
+<span class="n">makeGuard</span><span class="p">(</span><span class="n">FunctionType</span><span class="o">&amp;&amp;</span> <span class="n">fn</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">return</span> <span class="n">ScopeGuardImpl</span><span class="o">&lt;</span><span class="kr">typename</span> <span class="n">std</span><span class="o">::</span><span class="n">decay</span><span class="o">&lt;</span><span class="n">FunctionType</span><span class="o">&gt;::</span><span class="n">type</span><span class="o">&gt;</span><span class="p">(</span>
+      <span class="n">std</span><span class="o">::</span><span class="n">forward</span><span class="o">&lt;</span><span class="n">FunctionType</span><span class="o">&gt;</span><span class="p">(</span><span class="n">fn</span><span class="p">));</span>
+<span class="p">}</span>
+
+<span class="cm">/**</span>
+<span class="cm"> * This is largely unneeded if you just use auto for your guards.</span>
+<span class="cm"> */</span>
+<span class="k">typedef</span> <span class="n">ScopeGuardImplBase</span><span class="o">&amp;&amp;</span> <span class="n">ScopeGuard</span><span class="p">;</span>
+
+<span class="n">namespace</span> <span class="n">detail</span> <span class="p">{</span>
+<span class="cm">/**</span>
+<span class="cm"> * Internal use for the macro SCOPE_EXIT below</span>
+<span class="cm"> */</span>
+<span class="k">enum</span> <span class="n">class</span> <span class="n">ScopeGuardOnExit</span> <span class="p">{};</span>
+
+<span class="n">template</span> <span class="o">&lt;</span><span class="kr">typename</span> <span class="n">FunctionType</span><span class="o">&gt;</span>
+<span class="n">ScopeGuardImpl</span><span class="o">&lt;</span><span class="kr">typename</span> <span class="n">std</span><span class="o">::</span><span class="n">decay</span><span class="o">&lt;</span><span class="n">FunctionType</span><span class="o">&gt;::</span><span class="n">type</span><span class="o">&gt;</span>
+<span class="n">operator</span><span class="o">+</span><span class="p">(</span><span class="n">detail</span><span class="o">::</span><span class="n">ScopeGuardOnExit</span><span class="p">,</span> <span class="n">FunctionType</span><span class="o">&amp;&amp;</span> <span class="n">fn</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">return</span> <span class="n">ScopeGuardImpl</span><span class="o">&lt;</span><span class="kr">typename</span> <span class="n">std</span><span class="o">::</span><span class="n">decay</span><span class="o">&lt;</span><span class="n">FunctionType</span><span class="o">&gt;::</span><span class="n">type</span><span class="o">&gt;</span><span class="p">(</span>
+      <span class="n">std</span><span class="o">::</span><span class="n">forward</span><span class="o">&lt;</span><span class="n">FunctionType</span><span class="o">&gt;</span><span class="p">(</span><span class="n">fn</span><span class="p">));</span>
+<span class="p">}</span>
+<span class="p">}</span> <span class="c1">// namespace detail</span>
+
+<span class="p">}</span> <span class="c1">// folly</span>
+
+<span class="cp">#define SCOPE_EXIT \</span>
+<span class="cp">  auto FB_ANONYMOUS_VARIABLE(SCOPE_EXIT_STATE) \</span>
+<span class="cp">  = ::folly::detail::ScopeGuardOnExit() + [&amp;]</span>
+
+<span class="cp">#endif </span><span class="c1">// FOLLY_SCOPEGUARD_H_</span>
+
+</pre></div></td></tr>
+
+</tbody>
+</table>
+</div>
+
+</body>
+<script>docas={repo:"joekychen/folly",depth:1}</script>
+<script>document.write('<script src=' + ('__proto__' in {} ? 'http://cdnjs.cloudflare.com/ajax/libs/zepto/1.0rc1/zepto.min.js' : 'https://ajax.googleapis.com/ajax/libs/jquery/1.7.2/jquery.min.js')+'><\\/script>')</script>
+<script src="http://baoshan.github.com/moment/min/moment.min.js"></script>
+<script src="../javascript/docco.min.js"></script>
+</html>

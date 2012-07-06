@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html><head><title>joekychen/folly » folly › IntrusiveList.h
+
+</title>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+<meta name="generator" content="Docco">
+<link rel="stylesheet" media="all" href="../stylesheets/docco.min.css" />
+
+
+</head>
+<body>
+<div id="container">
+<div id="background"></div>
+<table cellpadding="0" cellspacing="0">
+<thead><tr><th class="docs"><a id="home" href="../index.html"></a><h1>IntrusiveList.h</h1></th><th class="code"></th></tr></thead>
+<tbody>
+
+
+<tr id="section-1"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-1">&#182;</a></div></td><td class="code"><div class="highlight"><pre><span class="cm">/*</span>
+<span class="cm"> * Copyright 2012 Facebook, Inc.</span>
+<span class="cm"> *</span>
+<span class="cm"> * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span class="cm"> * you may not use this file except in compliance with the License.</span>
+<span class="cm"> * You may obtain a copy of the License at</span>
+<span class="cm"> *</span>
+<span class="cm"> *   http://www.apache.org/licenses/LICENSE-2.0</span>
+<span class="cm"> *</span>
+<span class="cm"> * Unless required by applicable law or agreed to in writing, software</span>
+<span class="cm"> * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span class="cm"> * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span class="cm"> * See the License for the specific language governing permissions and</span>
+<span class="cm"> * limitations under the License.</span>
+<span class="cm"> */</span>
+
+<span class="cp">#ifndef FOLLY_INTRUSIVELIST_H_</span>
+<span class="cp">#define FOLLY_INTRUSIVELIST_H_</span>
+
+<span class="cm">/*</span>
+<span class="cm"> * This file contains convenience typedefs that make boost::intrusive::list</span>
+<span class="cm"> * easier to use.</span>
+<span class="cm"> */</span>
+
+<span class="cp">#include &lt;boost/intrusive/list.hpp&gt;</span>
+
+<span class="n">namespace</span> <span class="n">folly</span> <span class="p">{</span>
+
+<span class="cm">/**</span>
+<span class="cm"> * An auto-unlink intrusive list hook.</span>
+<span class="cm"> */</span>
+<span class="k">typedef</span> <span class="n">boost</span><span class="o">::</span><span class="n">intrusive</span><span class="o">::</span><span class="n">list_member_hook</span><span class="o">&lt;</span>
+      <span class="n">boost</span><span class="o">::</span><span class="n">intrusive</span><span class="o">::</span><span class="n">link_mode</span><span class="o">&lt;</span><span class="n">boost</span><span class="o">::</span><span class="n">intrusive</span><span class="o">::</span><span class="n">auto_unlink</span><span class="o">&gt;</span> <span class="o">&gt;</span>
+        <span class="n">IntrusiveListHook</span><span class="p">;</span>
+
+<span class="cm">/**</span>
+<span class="cm"> * An intrusive list.</span>
+<span class="cm"> *</span>
+<span class="cm"> * An IntrusiveList always uses an auto-unlink hook.</span>
+<span class="cm"> * Beware that IntrusiveList::size() is an O(n) operation, since it has to walk</span>
+<span class="cm"> * the entire list.</span>
+<span class="cm"> *</span>
+<span class="cm"> * Example usage:</span>
+<span class="cm"> *</span>
+<span class="cm"> *   class Foo {</span>
+<span class="cm"> *     // Note that the listHook member variable needs to be visible</span>
+<span class="cm"> *     // to the code that defines the IntrusiveList instantiation.</span>
+<span class="cm"> *     // The list hook can be made public, or you can make the other class a</span>
+<span class="cm"> *     // friend.</span>
+<span class="cm"> *     IntrusiveListHook listHook;</span>
+<span class="cm"> *   };</span>
+<span class="cm"> *</span>
+<span class="cm"> *   typedef IntrusiveList&lt;Foo, &amp;Foo::listHook&gt; FooList;</span>
+<span class="cm"> *</span>
+<span class="cm"> *   Foo *foo = new Foo();</span>
+<span class="cm"> *   FooList myList;</span>
+<span class="cm"> *   myList.push_back(*foo);</span>
+<span class="cm"> *</span>
+<span class="cm"> * Note that each IntrusiveListHook can only be part of a single list at any</span>
+<span class="cm"> * given time.  If you need the same object to be stored in two lists at once,</span>
+<span class="cm"> * you need to use two different IntrusiveListHook member variables.</span>
+<span class="cm"> *</span>
+<span class="cm"> * The elements stored in the list must contain an IntrusiveListHook member</span>
+<span class="cm"> * variable.</span>
+<span class="cm"> *</span>
+<span class="cm"> * TODO: This should really be a template alias.  However, gcc doesn&#39;t support</span>
+<span class="cm"> * template aliases yet.  A subclass is a reasonable workaround for now.  This</span>
+<span class="cm"> * subclass only supports the default constructor, but we could add other</span>
+<span class="cm"> * constructors if necessary.</span>
+<span class="cm"> */</span>
+<span class="n">template</span><span class="o">&lt;</span><span class="kr">typename</span> <span class="n">T</span><span class="p">,</span> <span class="n">IntrusiveListHook</span> <span class="n">T</span><span class="o">::*</span> <span class="n">PtrToMember</span><span class="o">&gt;</span>
+<span class="n">class</span> <span class="n">IntrusiveList</span> <span class="o">:</span> <span class="n">public</span> <span class="n">boost</span><span class="o">::</span><span class="n">intrusive</span><span class="o">::</span><span class="n">list</span><span class="o">&lt;</span>
+    <span class="n">T</span><span class="p">,</span>
+    <span class="n">boost</span><span class="o">::</span><span class="n">intrusive</span><span class="o">::</span><span class="n">member_hook</span><span class="o">&lt;</span><span class="n">T</span><span class="p">,</span> <span class="n">IntrusiveListHook</span><span class="p">,</span> <span class="n">PtrToMember</span><span class="o">&gt;</span><span class="p">,</span>
+    <span class="n">boost</span><span class="o">::</span><span class="n">intrusive</span><span class="o">::</span><span class="n">constant_time_size</span><span class="o">&lt;</span><span class="nb">false</span><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="p">{</span>
+<span class="p">};</span>
+
+<span class="cm">/**</span>
+<span class="cm"> * A safe-link intrusive list hook.</span>
+<span class="cm"> */</span>
+<span class="k">typedef</span> <span class="n">boost</span><span class="o">::</span><span class="n">intrusive</span><span class="o">::</span><span class="n">list_member_hook</span><span class="o">&lt;</span>
+      <span class="n">boost</span><span class="o">::</span><span class="n">intrusive</span><span class="o">::</span><span class="n">link_mode</span><span class="o">&lt;</span><span class="n">boost</span><span class="o">::</span><span class="n">intrusive</span><span class="o">::</span><span class="n">safe_link</span><span class="o">&gt;</span> <span class="o">&gt;</span>
+        <span class="n">SafeIntrusiveListHook</span><span class="p">;</span>
+
+<span class="cm">/**</span>
+<span class="cm"> * An intrusive list with const-time size() method.</span>
+<span class="cm"> *</span>
+<span class="cm"> * A CountedIntrusiveList always uses a safe-link hook.</span>
+<span class="cm"> * CountedIntrusiveList::size() is an O(1) operation. Users of this type</span>
+<span class="cm"> * of lists need to remove a member from a list by calling one of the</span>
+<span class="cm"> * methods on the list (e.g., erase(), pop_front(), etc.), rather than</span>
+<span class="cm"> * calling unlink on the member&#39;s list hook. Given references to a</span>
+<span class="cm"> * list and a member, a constant-time removal operation can be</span>
+<span class="cm"> * accomplished by list.erase(list.iterator_to(member)). Also, when a</span>
+<span class="cm"> * member is destroyed, it is NOT automatically removed from the list.</span>
+<span class="cm"> *</span>
+<span class="cm"> * Example usage:</span>
+<span class="cm"> *</span>
+<span class="cm"> *   class Foo {</span>
+<span class="cm"> *     // Note that the listHook member variable needs to be visible</span>
+<span class="cm"> *     // to the code that defines the CountedIntrusiveList instantiation.</span>
+<span class="cm"> *     // The list hook can be made public, or you can make the other class a</span>
+<span class="cm"> *     // friend.</span>
+<span class="cm"> *     SafeIntrusiveListHook listHook;</span>
+<span class="cm"> *   };</span>
+<span class="cm"> *</span>
+<span class="cm"> *   typedef CountedIntrusiveList&lt;Foo, &amp;Foo::listHook&gt; FooList;</span>
+<span class="cm"> *</span>
+<span class="cm"> *   Foo *foo = new Foo();</span>
+<span class="cm"> *   FooList myList;</span>
+<span class="cm"> *   myList.push_back(*foo);</span>
+<span class="cm"> *   myList.pop_front();</span>
+<span class="cm"> *</span>
+<span class="cm"> * Note that each SafeIntrusiveListHook can only be part of a single list at any</span>
+<span class="cm"> * given time.  If you need the same object to be stored in two lists at once,</span>
+<span class="cm"> * you need to use two different SafeIntrusiveListHook member variables.</span>
+<span class="cm"> *</span>
+<span class="cm"> * The elements stored in the list must contain an SafeIntrusiveListHook member</span>
+<span class="cm"> * variable.</span>
+<span class="cm"> *</span>
+<span class="cm"> * TODO: This should really be a template alias.  However, gcc doesn&#39;t support</span>
+<span class="cm"> * template aliases yet.  A subclass is a reasonable workaround for now.  This</span>
+<span class="cm"> * subclass only supports the default constructor, but we could add other</span>
+<span class="cm"> * constructors if necessary.</span>
+<span class="cm"> */</span>
+<span class="n">template</span><span class="o">&lt;</span><span class="kr">typename</span> <span class="n">T</span><span class="p">,</span> <span class="n">SafeIntrusiveListHook</span> <span class="n">T</span><span class="o">::*</span> <span class="n">PtrToMember</span><span class="o">&gt;</span>
+<span class="n">class</span> <span class="n">CountedIntrusiveList</span> <span class="o">:</span> <span class="n">public</span> <span class="n">boost</span><span class="o">::</span><span class="n">intrusive</span><span class="o">::</span><span class="n">list</span><span class="o">&lt;</span>
+    <span class="n">T</span><span class="p">,</span>
+    <span class="n">boost</span><span class="o">::</span><span class="n">intrusive</span><span class="o">::</span><span class="n">member_hook</span><span class="o">&lt;</span><span class="n">T</span><span class="p">,</span> <span class="n">SafeIntrusiveListHook</span><span class="p">,</span> <span class="n">PtrToMember</span><span class="o">&gt;</span><span class="p">,</span>
+    <span class="n">boost</span><span class="o">::</span><span class="n">intrusive</span><span class="o">::</span><span class="n">constant_time_size</span><span class="o">&lt;</span><span class="nb">true</span><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="p">{</span>
+<span class="p">};</span>
+
+<span class="p">}</span> <span class="c1">// folly</span>
+
+<span class="cp">#endif </span><span class="c1">// FOLLY_INTRUSIVELIST_H_</span>
+
+</pre></div></td></tr>
+
+</tbody>
+</table>
+</div>
+
+</body>
+<script>docas={repo:"joekychen/folly",depth:1}</script>
+<script>document.write('<script src=' + ('__proto__' in {} ? 'http://cdnjs.cloudflare.com/ajax/libs/zepto/1.0rc1/zepto.min.js' : 'https://ajax.googleapis.com/ajax/libs/jquery/1.7.2/jquery.min.js')+'><\\/script>')</script>
+<script src="http://baoshan.github.com/moment/min/moment.min.js"></script>
+<script src="../javascript/docco.min.js"></script>
+</html>

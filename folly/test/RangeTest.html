@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html><head><title>joekychen/folly » folly › test › RangeTest.cpp
+
+</title>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+<meta name="generator" content="Docco">
+<link rel="stylesheet" media="all" href="../../stylesheets/docco.min.css" />
+
+
+</head>
+<body>
+<div id="container">
+<div id="background"></div>
+<table cellpadding="0" cellspacing="0">
+<thead><tr><th class="docs"><a id="home" href="../../index.html"></a><h1>RangeTest.cpp</h1></th><th class="code"></th></tr></thead>
+<tbody>
+
+
+<tr id="section-1"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-1">&#182;</a></div></td><td class="code"><div class="highlight"><pre><span class="cm">/*</span>
+<span class="cm"> * Copyright 2012 Facebook, Inc.</span>
+<span class="cm"> *</span>
+<span class="cm"> * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span class="cm"> * you may not use this file except in compliance with the License.</span>
+<span class="cm"> * You may obtain a copy of the License at</span>
+<span class="cm"> *</span>
+<span class="cm"> *   http://www.apache.org/licenses/LICENSE-2.0</span>
+<span class="cm"> *</span>
+<span class="cm"> * Unless required by applicable law or agreed to in writing, software</span>
+<span class="cm"> * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span class="cm"> * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span class="cm"> * See the License for the specific language governing permissions and</span>
+<span class="cm"> * limitations under the License.</span>
+<span class="cm"> */</span></pre></div></td></tr>
+
+
+<tr id="section-2"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-2">&#182;</a></div><p>@author Kristina Holst (kholst@fb.com)
+@author Andrei Alexandrescu (andrei.alexandrescu@fb.com)</p></td><td class="code"><div class="highlight"><pre><span class="cp">#include &lt;boost/range/concepts.hpp&gt;</span>
+<span class="cp">#include &lt;gtest/gtest.h&gt;</span>
+<span class="cp">#include &quot;folly/Range.h&quot;</span>
+
+<span class="k">using</span> <span class="k">namespace</span> <span class="n">folly</span><span class="p">;</span>
+<span class="k">using</span> <span class="k">namespace</span> <span class="n">std</span><span class="p">;</span>
+
+<span class="n">BOOST_CONCEPT_ASSERT</span><span class="p">((</span><span class="n">boost</span><span class="o">::</span><span class="n">RandomAccessRangeConcept</span><span class="o">&lt;</span><span class="n">StringPiece</span><span class="o">&gt;</span><span class="p">));</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">StringPiece</span><span class="p">,</span> <span class="n">All</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">const</span> <span class="kt">char</span><span class="o">*</span> <span class="n">foo</span> <span class="o">=</span> <span class="s">&quot;foo&quot;</span><span class="p">;</span>
+  <span class="k">const</span> <span class="kt">char</span><span class="o">*</span> <span class="n">foo2</span> <span class="o">=</span> <span class="s">&quot;foo&quot;</span><span class="p">;</span>
+  <span class="n">string</span> <span class="n">fooStr</span><span class="p">(</span><span class="n">foo</span><span class="p">);</span>
+  <span class="n">string</span> <span class="n">foo2Str</span><span class="p">(</span><span class="n">foo2</span><span class="p">);</span></pre></div></td></tr>
+
+
+<tr id="section-3"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-3">&#182;</a></div><p>we expect the compiler to optimize things so that there's only one copy
+of the string literal "foo", even though we've got it in multiple places</p></td><td class="code"><div class="highlight"><pre>  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">foo</span><span class="p">,</span> <span class="n">foo2</span><span class="p">);</span>  <span class="c1">// remember, this uses ==, not strcmp, so it&#39;s a ptr</span></pre></div></td></tr>
+
+
+<tr id="section-4"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-4">&#182;</a></div><p>comparison rather than lexical</p></td><td class="code"><div class="highlight"><pre></pre></div></td></tr>
+
+
+<tr id="section-5"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-5">&#182;</a></div><p>the string object creates copies though, so the c_str of these should be
+distinct</p></td><td class="code"><div class="highlight"><pre>  <span class="n">EXPECT_NE</span><span class="p">(</span><span class="n">fooStr</span><span class="p">.</span><span class="n">c_str</span><span class="p">(),</span> <span class="n">foo2Str</span><span class="p">.</span><span class="n">c_str</span><span class="p">());</span></pre></div></td></tr>
+
+
+<tr id="section-6"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-6">&#182;</a></div><p>test the basic StringPiece functionality</p></td><td class="code"><div class="highlight"><pre>  <span class="n">StringPiece</span> <span class="n">s</span><span class="p">(</span><span class="n">foo</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">s</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="mi">3</span><span class="p">);</span>
+
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">s</span><span class="p">.</span><span class="n">start</span><span class="p">(),</span> <span class="n">foo</span><span class="p">);</span>              <span class="c1">// ptr comparison</span>
+  <span class="n">EXPECT_NE</span><span class="p">(</span><span class="n">s</span><span class="p">.</span><span class="n">start</span><span class="p">(),</span> <span class="n">fooStr</span><span class="p">.</span><span class="n">c_str</span><span class="p">());</span>   <span class="c1">// ptr comparison</span>
+  <span class="n">EXPECT_NE</span><span class="p">(</span><span class="n">s</span><span class="p">.</span><span class="n">start</span><span class="p">(),</span> <span class="n">foo2Str</span><span class="p">.</span><span class="n">c_str</span><span class="p">());</span>  <span class="c1">// ptr comparison</span>
+
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">s</span><span class="p">.</span><span class="n">toString</span><span class="p">(),</span> <span class="n">foo</span><span class="p">);</span>              <span class="c1">// lexical comparison</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">s</span><span class="p">.</span><span class="n">toString</span><span class="p">(),</span> <span class="n">fooStr</span><span class="p">.</span><span class="n">c_str</span><span class="p">());</span>   <span class="c1">// lexical comparison</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">s</span><span class="p">.</span><span class="n">toString</span><span class="p">(),</span> <span class="n">foo2Str</span><span class="p">.</span><span class="n">c_str</span><span class="p">());</span>  <span class="c1">// lexical comparison</span>
+
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">s</span><span class="p">,</span> <span class="n">foo</span><span class="p">);</span>                      <span class="c1">// lexical comparison</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">s</span><span class="p">,</span> <span class="n">fooStr</span><span class="p">);</span>                   <span class="c1">// lexical comparison</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">s</span><span class="p">,</span> <span class="n">foo2Str</span><span class="p">);</span>                  <span class="c1">// lexical comparison</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">foo</span><span class="p">,</span> <span class="n">s</span><span class="p">);</span></pre></div></td></tr>
+
+
+<tr id="section-7"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-7">&#182;</a></div><p>check using StringPiece to reference substrings</p></td><td class="code"><div class="highlight"><pre>  <span class="k">const</span> <span class="kt">char</span><span class="o">*</span> <span class="n">foobarbaz</span> <span class="o">=</span> <span class="s">&quot;foobarbaz&quot;</span><span class="p">;</span></pre></div></td></tr>
+
+
+<tr id="section-8"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-8">&#182;</a></div><p>the full "foobarbaz"</p></td><td class="code"><div class="highlight"><pre>  <span class="n">s</span><span class="p">.</span><span class="n">reset</span><span class="p">(</span><span class="n">foobarbaz</span><span class="p">,</span> <span class="n">strlen</span><span class="p">(</span><span class="n">foobarbaz</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">s</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="mi">9</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">s</span><span class="p">.</span><span class="n">start</span><span class="p">(),</span> <span class="n">foobarbaz</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">s</span><span class="p">,</span> <span class="s">&quot;foobarbaz&quot;</span><span class="p">);</span></pre></div></td></tr>
+
+
+<tr id="section-9"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-9">&#182;</a></div><p>only the 'foo'</p></td><td class="code"><div class="highlight"><pre>  <span class="n">s</span><span class="p">.</span><span class="n">assign</span><span class="p">(</span><span class="n">foobarbaz</span><span class="p">,</span> <span class="n">foobarbaz</span> <span class="o">+</span> <span class="mi">3</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">s</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="mi">3</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">s</span><span class="p">.</span><span class="n">start</span><span class="p">(),</span> <span class="n">foobarbaz</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">s</span><span class="p">,</span> <span class="s">&quot;foo&quot;</span><span class="p">);</span></pre></div></td></tr>
+
+
+<tr id="section-10"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-10">&#182;</a></div><p>find</p></td><td class="code"><div class="highlight"><pre>  <span class="n">s</span><span class="p">.</span><span class="n">reset</span><span class="p">(</span><span class="n">foobarbaz</span><span class="p">,</span> <span class="n">strlen</span><span class="p">(</span><span class="n">foobarbaz</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">s</span><span class="p">.</span><span class="n">find</span><span class="p">(</span><span class="s">&quot;bar&quot;</span><span class="p">),</span> <span class="mi">3</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">s</span><span class="p">.</span><span class="n">find</span><span class="p">(</span><span class="s">&quot;ba&quot;</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span> <span class="mi">3</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">s</span><span class="p">.</span><span class="n">find</span><span class="p">(</span><span class="s">&quot;ba&quot;</span><span class="p">,</span> <span class="mi">4</span><span class="p">),</span> <span class="mi">6</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">s</span><span class="p">.</span><span class="n">find</span><span class="p">(</span><span class="s">&quot;notfound&quot;</span><span class="p">),</span> <span class="n">StringPiece</span><span class="o">::</span><span class="n">npos</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">s</span><span class="p">.</span><span class="n">find</span><span class="p">(</span><span class="s">&quot;notfound&quot;</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="n">StringPiece</span><span class="o">::</span><span class="n">npos</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">s</span><span class="p">.</span><span class="n">find</span><span class="p">(</span><span class="s">&quot;bar&quot;</span><span class="p">,</span> <span class="mi">4</span><span class="p">),</span> <span class="n">StringPiece</span><span class="o">::</span><span class="n">npos</span><span class="p">);</span>  <span class="c1">// starting position too far</span></pre></div></td></tr>
+
+
+<tr id="section-11"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-11">&#182;</a></div><p>starting pos that is obviously past the end -- This works for std::string</p></td><td class="code"><div class="highlight"><pre>  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">s</span><span class="p">.</span><span class="n">toString</span><span class="p">().</span><span class="n">find</span><span class="p">(</span><span class="s">&quot;notfound&quot;</span><span class="p">,</span> <span class="mi">55</span><span class="p">),</span> <span class="n">StringPiece</span><span class="o">::</span><span class="n">npos</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">s</span><span class="p">.</span><span class="n">find</span><span class="p">(</span><span class="s">&quot;z&quot;</span><span class="p">,</span> <span class="n">s</span><span class="p">.</span><span class="n">size</span><span class="p">()),</span> <span class="n">StringPiece</span><span class="o">::</span><span class="n">npos</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">s</span><span class="p">.</span><span class="n">find</span><span class="p">(</span><span class="s">&quot;z&quot;</span><span class="p">,</span> <span class="mi">55</span><span class="p">),</span> <span class="n">StringPiece</span><span class="o">::</span><span class="n">npos</span><span class="p">);</span></pre></div></td></tr>
+
+
+<tr id="section-12"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-12">&#182;</a></div><p>just "barbaz"</p></td><td class="code"><div class="highlight"><pre>  <span class="n">s</span><span class="p">.</span><span class="n">reset</span><span class="p">(</span><span class="n">foobarbaz</span> <span class="o">+</span> <span class="mi">3</span><span class="p">,</span> <span class="n">strlen</span><span class="p">(</span><span class="n">foobarbaz</span> <span class="o">+</span> <span class="mi">3</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">s</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="mi">6</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">s</span><span class="p">.</span><span class="n">start</span><span class="p">(),</span> <span class="n">foobarbaz</span> <span class="o">+</span> <span class="mi">3</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">s</span><span class="p">,</span> <span class="s">&quot;barbaz&quot;</span><span class="p">);</span></pre></div></td></tr>
+
+
+<tr id="section-13"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-13">&#182;</a></div><p>just "bar"</p></td><td class="code"><div class="highlight"><pre>  <span class="n">s</span><span class="p">.</span><span class="n">reset</span><span class="p">(</span><span class="n">foobarbaz</span> <span class="o">+</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">s</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="mi">3</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">s</span><span class="p">,</span> <span class="s">&quot;bar&quot;</span><span class="p">);</span></pre></div></td></tr>
+
+
+<tr id="section-14"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-14">&#182;</a></div><p>clear</p></td><td class="code"><div class="highlight"><pre>  <span class="n">s</span><span class="p">.</span><span class="n">clear</span><span class="p">();</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">s</span><span class="p">.</span><span class="n">toString</span><span class="p">(),</span> <span class="s">&quot;&quot;</span><span class="p">);</span></pre></div></td></tr>
+
+
+<tr id="section-15"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-15">&#182;</a></div><p>test an empty StringPiece</p></td><td class="code"><div class="highlight"><pre>  <span class="n">StringPiece</span> <span class="n">s2</span><span class="p">;</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">s2</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="mi">0</span><span class="p">);</span></pre></div></td></tr>
+
+
+<tr id="section-16"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-16">&#182;</a></div><p>Test comparison operators</p></td><td class="code"><div class="highlight"><pre>  <span class="n">foo</span> <span class="o">=</span> <span class="s">&quot;&quot;</span><span class="p">;</span>
+  <span class="n">EXPECT_LE</span><span class="p">(</span><span class="n">s</span><span class="p">,</span> <span class="n">foo</span><span class="p">);</span>
+  <span class="n">EXPECT_LE</span><span class="p">(</span><span class="n">foo</span><span class="p">,</span> <span class="n">s</span><span class="p">);</span>
+  <span class="n">EXPECT_GE</span><span class="p">(</span><span class="n">s</span><span class="p">,</span> <span class="n">foo</span><span class="p">);</span>
+  <span class="n">EXPECT_GE</span><span class="p">(</span><span class="n">foo</span><span class="p">,</span> <span class="n">s</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">s</span><span class="p">,</span> <span class="n">foo</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">foo</span><span class="p">,</span> <span class="n">s</span><span class="p">);</span>
+
+  <span class="n">foo</span> <span class="o">=</span> <span class="s">&quot;abc&quot;</span><span class="p">;</span>
+  <span class="n">EXPECT_LE</span><span class="p">(</span><span class="n">s</span><span class="p">,</span> <span class="n">foo</span><span class="p">);</span>
+  <span class="n">EXPECT_LT</span><span class="p">(</span><span class="n">s</span><span class="p">,</span> <span class="n">foo</span><span class="p">);</span>
+  <span class="n">EXPECT_GE</span><span class="p">(</span><span class="n">foo</span><span class="p">,</span> <span class="n">s</span><span class="p">);</span>
+  <span class="n">EXPECT_GT</span><span class="p">(</span><span class="n">foo</span><span class="p">,</span> <span class="n">s</span><span class="p">);</span>
+  <span class="n">EXPECT_NE</span><span class="p">(</span><span class="n">s</span><span class="p">,</span> <span class="n">foo</span><span class="p">);</span>
+
+  <span class="n">EXPECT_LE</span><span class="p">(</span><span class="n">s</span><span class="p">,</span> <span class="n">s</span><span class="p">);</span>
+  <span class="n">EXPECT_LE</span><span class="p">(</span><span class="n">s</span><span class="p">,</span> <span class="n">s</span><span class="p">);</span>
+  <span class="n">EXPECT_GE</span><span class="p">(</span><span class="n">s</span><span class="p">,</span> <span class="n">s</span><span class="p">);</span>
+  <span class="n">EXPECT_GE</span><span class="p">(</span><span class="n">s</span><span class="p">,</span> <span class="n">s</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">s</span><span class="p">,</span> <span class="n">s</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">s</span><span class="p">,</span> <span class="n">s</span><span class="p">);</span>
+
+  <span class="n">s</span> <span class="o">=</span> <span class="s">&quot;abc&quot;</span><span class="p">;</span>
+  <span class="n">s2</span> <span class="o">=</span> <span class="s">&quot;abc&quot;</span><span class="p">;</span>
+  <span class="n">EXPECT_LE</span><span class="p">(</span><span class="n">s</span><span class="p">,</span> <span class="n">s2</span><span class="p">);</span>
+  <span class="n">EXPECT_LE</span><span class="p">(</span><span class="n">s2</span><span class="p">,</span> <span class="n">s</span><span class="p">);</span>
+  <span class="n">EXPECT_GE</span><span class="p">(</span><span class="n">s</span><span class="p">,</span> <span class="n">s2</span><span class="p">);</span>
+  <span class="n">EXPECT_GE</span><span class="p">(</span><span class="n">s2</span><span class="p">,</span> <span class="n">s</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">s</span><span class="p">,</span> <span class="n">s2</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">s2</span><span class="p">,</span> <span class="n">s</span><span class="p">);</span>
+<span class="p">}</span>
+
+</pre></div></td></tr>
+
+</tbody>
+</table>
+</div>
+
+</body>
+<script>docas={repo:"joekychen/folly",depth:2}</script>
+<script>document.write('<script src=' + ('__proto__' in {} ? 'http://cdnjs.cloudflare.com/ajax/libs/zepto/1.0rc1/zepto.min.js' : 'https://ajax.googleapis.com/ajax/libs/jquery/1.7.2/jquery.min.js')+'><\\/script>')</script>
+<script src="http://baoshan.github.com/moment/min/moment.min.js"></script>
+<script src="../../javascript/docco.min.js"></script>
+</html>

@@ -1,0 +1,227 @@
+<h2><code>folly/Conv.h</code></h2>
+
+<p><code>folly/Conv.h</code> is a one-stop-shop for converting values across
+types. Its main features are simplicity of the API (only the
+names <code>to</code> and <code>toAppend</code> must be memorized), speed
+(folly is significantly faster, sometimes by an order of magnitude,
+than comparable APIs), and correctness.</p>
+
+<h3>Synopsis</h3>
+
+<hr />
+
+<p>All examples below are assume to have included <code>folly/Conv.h</code>
+and issued <code>using namespace folly;</code> You will need:</p>
+
+<p>``` Cpp
+    // To format as text and append to a string, use toAppend.
+    fbstring str;
+    toAppend(2.5, &amp;str);
+    CHECK_EQ(str, "2.5");</p>
+
+<pre><code>// Multiple arguments are okay, too. Just put the pointer to string at the end.
+toAppend(" is ", 2, " point ", 5, &amp;str);
+CHECK_EQ(str, "2.5 is 2 point 5");
+
+// You don't need to use fbstring (although it's much faster for conversions and in general).
+std::string stdStr;
+toAppend("Pi is about ", 22.0 / 7, &amp;stdStr);
+// In general, just use to&lt;TargetType&gt;(sourceValue). It returns its result by value.
+stdStr = to&lt;std::string&gt;("Variadic ", "arguments also accepted.");
+
+// to&lt;fbstring&gt; is 2.5x faster than to&lt;std::string&gt; for typical workloads.
+str = to&lt;fbstring&gt;("Variadic ", "arguments also accepted.");
+</code></pre>
+
+<p>```</p>
+
+<h3>Integral-to-integral conversion</h3>
+
+<hr />
+
+<p>Using <code>to&lt;Target&gt;(value)</code> to convert one integral type to another
+will behave as follows:</p>
+
+<ul>
+<li>If the target type can accommodate all possible values of the
+source value, the value is implicitly converted. No further
+action is taken. Example:</li>
+</ul>
+
+<p><code>Cpp
+        short x;
+        unsigned short y;
+        ...
+        auto a = to&lt;int&gt;(x); // zero overhead conversion
+        auto b = to&lt;int&gt;(y); // zero overhead conversion
+</code></p>
+
+<ul>
+<li>Otherwise, <code>to</code> inserts bounds checks and throws
+<code>std::range_error</code> if the target type cannot accommodate the
+source value. Example:</li>
+</ul>
+
+<p><code>Cpp
+    short x;
+    unsigned short y;
+    long z;
+    ...
+    x = 123;
+    auto a = to&lt;unsigned short&gt;(x); // fine
+    x = -1;
+    a = to&lt;unsigned short&gt;(x); // THROWS
+    z = 2000000000;
+    auto b = to&lt;int&gt;(z); // fine
+    z += 1000000000;
+    b = to&lt;int&gt;(z); // THROWS
+    auto b = to&lt;unsigned int&gt;(z); // fine
+</code></p>
+
+<h3>Anything-to-string conversion</h3>
+
+<hr />
+
+<p>As mentioned, there are two primitives for converting anything to
+string: <code>to</code> and <code>toAppend</code>. They support the same set of source
+types, literally by definition (<code>to</code> is implemented in terms of
+<code>toAppend</code> for all types). The call <code>toAppend(value, &amp;str)</code>
+formats and appends <code>value</code> to <code>str</code> whereas
+<code>to&lt;StringType&gt;(value)</code> formats <code>value</code> as a <code>StringType</code> and
+returns the result by value. Currently, the supported
+<code>StringType</code>s are <code>std::string</code> and <code>fbstring</code></p>
+
+<p>Both <code>toAppend</code> and <code>to</code> with a string type as a target support
+variadic arguments. Each argument is converted in turn. For
+<code>toAppend</code> the last argument in a variadic list must be the
+address of a supported string type (no need to specify the string
+type as a template argument).</p>
+
+<h4>Integral-to-string conversion</h4>
+
+<p>Nothing special here - integrals are converted to strings in
+decimal format, with a '-' prefix for negative values. Example:</p>
+
+<p><code>Cpp
+    auto a = to&lt;fbstring&gt;(123);
+    assert(a == "123");
+    a = to&lt;fbstring&gt;(-456);
+    assert(a == "-456");
+</code></p>
+
+<p>The conversion implementation is aggressively optimized. It
+converts two digits at a time assisted by fixed-size tables.
+Converting a <code>long</code> to an <code>fbstring</code> is 3.6x faster than using
+<code>boost::lexical_cast</code> and 2.5x faster than using <code>sprintf</code> even
+though the latter is used in conjunction with a stack-allocated
+constant-size buffer.</p>
+
+<p>Note that converting integral types to <code>fbstring</code> has a
+particular advantage compared to converting to <code>std::string</code>
+No integral type (&lt;= 64 bits) has more than 20 decimal digits
+including sign. Since <code>fbstring</code> employs the small string
+optimization for up to 23 characters, converting an integral
+to <code>fbstring</code> is guaranteed to not allocate memory, resulting
+in significant speed and memory locality gains. Benchmarks
+reveal a 2x gain on a typical workload.</p>
+
+<h4><code>char</code> to string conversion</h4>
+
+<p>Although <code>char</code> is technically an integral type, most of the time
+you want the string representation of <code>'a'</code> to be <code>"a"</code>, not <code>96</code>
+That's why <code>folly/Conv.h</code> handles <code>char</code> as a special case that
+does the expected thing. Note that <code>signed char</code> and <code>unsigned
+char</code> are still considered integral types.</p>
+
+<h4>Floating point to string conversion</h4>
+
+<p><code>folly/Conv.h</code> uses <a href="http://code.google.com/p/double-conversion/">V8's double conversion</a>
+routines. They are accurate and fast; on typical workloads,
+<code>to&lt;fbstring&gt;(doubleValue)</code> is 1.9x faster than <code>sprintf</code> and
+5.5x faster than <code>boost::lexical_cast</code> (It is also 1.3x faster
+than <code>to&lt;std::string&gt;(doubleValue)</code></p>
+
+<h4><code>const char*</code> to string conversion</h4>
+
+<p>For completeness, <code>folly/Conv.h</code> supports <code>const char*</code> including
+i.e. string literals. The "conversion" consists, of course, of
+the string itself. Example:</p>
+
+<p><code>Cpp
+    auto s = to&lt;fbstring&gt;("Hello, world");
+    assert(s == "Hello, world");
+</code></p>
+
+<h4>Anything from string conversion (i.e. parsing)</h4>
+
+<hr />
+
+<p><code>folly/Conv.h</code> includes three kinds of parsing routines:</p>
+
+<ul>
+<li><code>to&lt;Type&gt;(const char* begin, const char* end)</code> rigidly
+converts the range [begin, end) to <code>Type</code> These routines have
+drastic restrictions (e.g. allow no leading or trailing
+whitespace) and are intended as an efficient back-end for more
+tolerant routines.</li>
+<li><code>to&lt;Type&gt;(stringy)</code> converts <code>stringy</code> to <code>Type</code> Value
+<code>stringy</code> may be of type <code>const char*</code>, <code>StringPiece</code>,
+<code>std::string</code>, or <code>fbstring</code> (Technically, the requirement is
+that <code>stringy</code> implicitly converts to a <code>StringPiece</code></li>
+<li><code>to&lt;Type&gt;(&amp;stringPiece)</code> parses with progress information:
+given <code>stringPiece</code> of type <code>StringPiece</code> it parses as much
+as possible from it as type <code>Type</code> and alters <code>stringPiece</code>
+to remove the munched characters. This is easiest clarified
+by an example:</li>
+</ul>
+
+<p><code>Cpp
+    fbstring s = " 1234 angels on a pin";
+    StringPiece pc(s);
+    auto x = to&lt;int&gt;(&amp;pc);
+    assert(x == 1234);
+    assert(pc == " angels on a pin";
+</code></p>
+
+<p>Note how the routine ate the leading space but not the trailing one.</p>
+
+<h4>Parsing integral types</h4>
+
+<p>Parsing integral types is unremarkable - decimal format is
+expected, optional <code>'+'</code> or <code>'-'</code> sign for signed types, but no
+optional <code>'+'</code> is allowed for unsigned types. The one remarkable
+element is speed - parsing typical <code>long</code> values is 6x faster than
+<code>sscanf</code>. <code>folly/Conv.h</code> uses aggressive loop unrolling and
+table-assisted SIMD-style code arrangement that avoids integral
+division (slow) and data dependencies across operations
+(ILP-unfriendly). Example:</p>
+
+<p><code>Cpp
+    fbstring str = "  12345  ";
+    assert(to&lt;int&gt;(str) == 12345);
+    str = "  12345six seven eight";
+    StringPiece pc(str);
+    assert(to&lt;int&gt;(&amp;pc) == 12345);
+    assert(str == "six seven eight");
+</code></p>
+
+<h4>Parsing floating-point types</h4>
+
+<p><code>folly/Conv.h</code> uses, again, <a href="http://code.google.com/p/double-conversion/">V8's double-conversion</a>
+routines as back-end. The speed is 3x faster than <code>sscanf</code> and
+1.7x faster than in-home routines such as <code>parse&lt;double&gt;</code> But
+the more important detail is accuracy - even if you do code a
+routine that works faster than <code>to&lt;double&gt;</code> chances are it is
+incorrect and will fail in a variety of corner cases. Using
+<code>to&lt;double&gt;</code> is strongly recommended.</p>
+
+<p>Note that if an unparsable string is passed to <code>to&lt;double&gt;</code> <code>NaN</code>
+is returned, which can be tested for as follows:</p>
+
+<p><code>Cpp
+    fbstring str = "not a double";
+    double d = to&lt;double&gt;(str);
+    if (std::isnan(d)) {
+      // string could not be parsed
+    }
+</code></p>

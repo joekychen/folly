@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html><head><title>joekychen/folly » folly › test › ThreadCachedArenaTest.cpp
+
+</title>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+<meta name="generator" content="Docco">
+<link rel="stylesheet" media="all" href="../../stylesheets/docco.min.css" />
+
+
+</head>
+<body>
+<div id="container">
+<div id="background"></div>
+<table cellpadding="0" cellspacing="0">
+<thead><tr><th class="docs"><a id="home" href="../../index.html"></a><h1>ThreadCachedArenaTest.cpp</h1></th><th class="code"></th></tr></thead>
+<tbody>
+
+
+<tr id="section-1"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-1">&#182;</a></div></td><td class="code"><div class="highlight"><pre><span class="cm">/*</span>
+<span class="cm"> * Copyright 2012 Facebook, Inc.</span>
+<span class="cm"> *</span>
+<span class="cm"> * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span class="cm"> * you may not use this file except in compliance with the License.</span>
+<span class="cm"> * You may obtain a copy of the License at</span>
+<span class="cm"> *</span>
+<span class="cm"> *   http://www.apache.org/licenses/LICENSE-2.0</span>
+<span class="cm"> *</span>
+<span class="cm"> * Unless required by applicable law or agreed to in writing, software</span>
+<span class="cm"> * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span class="cm"> * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span class="cm"> * See the License for the specific language governing permissions and</span>
+<span class="cm"> * limitations under the License.</span>
+<span class="cm"> */</span>
+
+<span class="cp">#include &quot;folly/ThreadCachedArena.h&quot;</span>
+<span class="cp">#include &quot;folly/StlAllocator.h&quot;</span>
+
+<span class="cp">#include &lt;mutex&gt;</span>
+<span class="cp">#include &lt;thread&gt;</span>
+<span class="cp">#include &lt;iterator&gt;</span>
+<span class="cp">#include &lt;algorithm&gt;</span>
+<span class="cp">#include &lt;random&gt;</span>
+<span class="cp">#include &lt;unordered_map&gt;</span>
+
+<span class="cp">#include &lt;glog/logging.h&gt;</span>
+<span class="cp">#include &lt;gtest/gtest.h&gt;</span>
+
+<span class="cp">#include &quot;folly/Range.h&quot;</span>
+<span class="cp">#include &quot;folly/Benchmark.h&quot;</span>
+
+<span class="k">using</span> <span class="k">namespace</span> <span class="n">folly</span><span class="p">;</span>
+
+<span class="k">namespace</span> <span class="p">{</span>
+
+<span class="k">class</span> <span class="nc">ArenaTester</span> <span class="p">{</span>
+ <span class="k">public</span><span class="o">:</span>
+  <span class="k">explicit</span> <span class="n">ArenaTester</span><span class="p">(</span><span class="n">ThreadCachedArena</span><span class="o">&amp;</span> <span class="n">arena</span><span class="p">)</span> <span class="o">:</span> <span class="n">arena_</span><span class="p">(</span><span class="o">&amp;</span><span class="n">arena</span><span class="p">)</span> <span class="p">{</span> <span class="p">}</span>
+
+  <span class="kt">void</span> <span class="n">allocate</span><span class="p">(</span><span class="n">size_t</span> <span class="n">count</span><span class="p">,</span> <span class="n">size_t</span> <span class="n">maxSize</span><span class="p">);</span>
+  <span class="kt">void</span> <span class="n">verify</span><span class="p">();</span>
+  <span class="kt">void</span> <span class="n">merge</span><span class="p">(</span><span class="n">ArenaTester</span><span class="o">&amp;&amp;</span> <span class="n">other</span><span class="p">);</span>
+
+ <span class="k">private</span><span class="o">:</span>
+  <span class="n">std</span><span class="o">::</span><span class="n">mutex</span> <span class="n">mergeMutex_</span><span class="p">;</span>
+  <span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">pair</span><span class="o">&lt;</span><span class="n">uint8_t</span><span class="p">,</span> <span class="n">Range</span><span class="o">&lt;</span><span class="n">uint8_t</span><span class="o">*&gt;&gt;&gt;</span> <span class="n">areas_</span><span class="p">;</span>
+  <span class="n">ThreadCachedArena</span><span class="o">*</span> <span class="n">arena_</span><span class="p">;</span>
+<span class="p">};</span>
+
+<span class="kt">void</span> <span class="n">ArenaTester</span><span class="o">::</span><span class="n">allocate</span><span class="p">(</span><span class="n">size_t</span> <span class="n">count</span><span class="p">,</span> <span class="n">size_t</span> <span class="n">maxSize</span><span class="p">)</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-2"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-2">&#182;</a></div><p>Allocate chunks of memory of random sizes</p></td><td class="code"><div class="highlight"><pre>  <span class="n">std</span><span class="o">::</span><span class="n">mt19937</span> <span class="n">rnd</span><span class="p">;</span>
+  <span class="n">std</span><span class="o">::</span><span class="n">uniform_int_distribution</span><span class="o">&lt;</span><span class="n">uint32_t</span><span class="o">&gt;</span> <span class="n">sizeDist</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">maxSize</span> <span class="o">-</span> <span class="mi">1</span><span class="p">);</span>
+  <span class="n">areas_</span><span class="p">.</span><span class="n">clear</span><span class="p">();</span>
+  <span class="n">areas_</span><span class="p">.</span><span class="n">reserve</span><span class="p">(</span><span class="n">count</span><span class="p">);</span>
+  <span class="k">for</span> <span class="p">(</span><span class="n">size_t</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">count</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">size_t</span> <span class="n">size</span> <span class="o">=</span> <span class="n">sizeDist</span><span class="p">(</span><span class="n">rnd</span><span class="p">);</span>
+    <span class="n">uint8_t</span><span class="o">*</span> <span class="n">p</span> <span class="o">=</span> <span class="k">static_cast</span><span class="o">&lt;</span><span class="n">uint8_t</span><span class="o">*&gt;</span><span class="p">(</span><span class="n">arena_</span><span class="o">-&gt;</span><span class="n">allocate</span><span class="p">(</span><span class="n">size</span><span class="p">));</span>
+    <span class="n">areas_</span><span class="p">.</span><span class="n">emplace_back</span><span class="p">(</span><span class="n">rnd</span><span class="p">()</span> <span class="o">&amp;</span> <span class="mh">0xff</span><span class="p">,</span> <span class="n">Range</span><span class="o">&lt;</span><span class="n">uint8_t</span><span class="o">*&gt;</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="n">size</span><span class="p">));</span>
+  <span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-3"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-3">&#182;</a></div><p>Fill each area with a different value, to prove that they don't overlap
+Fill in random order.</p></td><td class="code"><div class="highlight"><pre>  <span class="n">std</span><span class="o">::</span><span class="n">random_shuffle</span><span class="p">(</span>
+      <span class="n">areas_</span><span class="p">.</span><span class="n">begin</span><span class="p">(),</span> <span class="n">areas_</span><span class="p">.</span><span class="n">end</span><span class="p">(),</span>
+      <span class="p">[</span><span class="o">&amp;</span><span class="n">rnd</span><span class="p">]</span> <span class="p">(</span><span class="kt">int</span> <span class="n">n</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kt">int</span> <span class="p">{</span>
+        <span class="k">return</span> <span class="n">std</span><span class="o">::</span><span class="n">uniform_int_distribution</span><span class="o">&lt;</span><span class="n">uint32_t</span><span class="o">&gt;</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">n</span><span class="o">-</span><span class="mi">1</span><span class="p">)(</span><span class="n">rnd</span><span class="p">);</span>
+      <span class="p">});</span>
+
+  <span class="k">for</span> <span class="p">(</span><span class="k">auto</span><span class="o">&amp;</span> <span class="n">p</span> <span class="o">:</span> <span class="n">areas_</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">std</span><span class="o">::</span><span class="n">fill</span><span class="p">(</span><span class="n">p</span><span class="p">.</span><span class="n">second</span><span class="p">.</span><span class="n">begin</span><span class="p">(),</span> <span class="n">p</span><span class="p">.</span><span class="n">second</span><span class="p">.</span><span class="n">end</span><span class="p">(),</span> <span class="n">p</span><span class="p">.</span><span class="n">first</span><span class="p">);</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="kt">void</span> <span class="n">ArenaTester</span><span class="o">::</span><span class="n">verify</span><span class="p">()</span> <span class="p">{</span>
+  <span class="k">for</span> <span class="p">(</span><span class="k">auto</span><span class="o">&amp;</span> <span class="n">p</span> <span class="o">:</span> <span class="n">areas_</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">for</span> <span class="p">(</span><span class="k">auto</span> <span class="n">v</span> <span class="o">:</span> <span class="n">p</span><span class="p">.</span><span class="n">second</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">p</span><span class="p">.</span><span class="n">first</span><span class="p">,</span> <span class="n">v</span><span class="p">);</span>
+    <span class="p">}</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="kt">void</span> <span class="n">ArenaTester</span><span class="o">::</span><span class="n">merge</span><span class="p">(</span><span class="n">ArenaTester</span><span class="o">&amp;&amp;</span> <span class="n">other</span><span class="p">)</span> <span class="p">{</span>
+  <span class="p">{</span>
+    <span class="n">std</span><span class="o">::</span><span class="n">lock_guard</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">mutex</span><span class="o">&gt;</span> <span class="n">lock</span><span class="p">(</span><span class="n">mergeMutex_</span><span class="p">);</span>
+    <span class="n">std</span><span class="o">::</span><span class="n">move</span><span class="p">(</span><span class="n">other</span><span class="p">.</span><span class="n">areas_</span><span class="p">.</span><span class="n">begin</span><span class="p">(),</span> <span class="n">other</span><span class="p">.</span><span class="n">areas_</span><span class="p">.</span><span class="n">end</span><span class="p">(),</span>
+              <span class="n">std</span><span class="o">::</span><span class="n">back_inserter</span><span class="p">(</span><span class="n">areas_</span><span class="p">));</span>
+  <span class="p">}</span>
+  <span class="n">other</span><span class="p">.</span><span class="n">areas_</span><span class="p">.</span><span class="n">clear</span><span class="p">();</span>
+<span class="p">}</span>
+
+<span class="p">}</span>  <span class="c1">// namespace</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">ThreadCachedArena</span><span class="p">,</span> <span class="n">BlockSize</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">struct</span> <span class="n">Align</span> <span class="p">{</span> <span class="kt">char</span> <span class="n">c</span><span class="p">;</span> <span class="p">}</span> <span class="n">__attribute__</span><span class="p">((</span><span class="n">aligned</span><span class="p">));</span>
+  <span class="k">static</span> <span class="k">const</span> <span class="n">size_t</span> <span class="n">alignment</span> <span class="o">=</span> <span class="n">alignof</span><span class="p">(</span><span class="n">Align</span><span class="p">);</span>
+  <span class="k">static</span> <span class="k">const</span> <span class="n">size_t</span> <span class="n">requestedBlockSize</span> <span class="o">=</span> <span class="mi">64</span><span class="p">;</span>
+
+  <span class="n">ThreadCachedArena</span> <span class="n">arena</span><span class="p">(</span><span class="n">requestedBlockSize</span><span class="p">);</span>
+  <span class="n">size_t</span> <span class="n">blockSize</span> <span class="o">=</span> <span class="n">alignment</span><span class="p">;</span>
+  <span class="n">uint8_t</span><span class="o">*</span> <span class="n">prev</span> <span class="o">=</span> <span class="k">static_cast</span><span class="o">&lt;</span><span class="n">uint8_t</span><span class="o">*&gt;</span><span class="p">(</span><span class="n">arena</span><span class="p">.</span><span class="n">allocate</span><span class="p">(</span><span class="mi">1</span><span class="p">));</span></pre></div></td></tr>
+
+
+<tr id="section-4"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-4">&#182;</a></div><p>Keep allocating until we're no longer one single alignment away from the
+previous allocation -- that's when we've gotten to the next block.</p></td><td class="code"><div class="highlight"><pre>  <span class="n">uint8_t</span><span class="o">*</span> <span class="n">p</span><span class="p">;</span>
+  <span class="k">while</span> <span class="p">((</span><span class="n">p</span> <span class="o">=</span> <span class="k">static_cast</span><span class="o">&lt;</span><span class="n">uint8_t</span><span class="o">*&gt;</span><span class="p">(</span><span class="n">arena</span><span class="p">.</span><span class="n">allocate</span><span class="p">(</span><span class="mi">1</span><span class="p">)))</span> <span class="o">==</span>
+         <span class="n">prev</span> <span class="o">+</span> <span class="n">alignment</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">prev</span> <span class="o">=</span> <span class="n">p</span><span class="p">;</span>
+    <span class="n">blockSize</span> <span class="o">+=</span> <span class="n">alignment</span><span class="p">;</span>
+  <span class="p">}</span>
+
+  <span class="n">VLOG</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span> <span class="o">&lt;&lt;</span> <span class="s">&quot;Requested block size: &quot;</span> <span class="o">&lt;&lt;</span> <span class="n">requestedBlockSize</span> <span class="o">&lt;&lt;</span> <span class="s">&quot;, actual: &quot;</span>
+          <span class="o">&lt;&lt;</span> <span class="n">blockSize</span><span class="p">;</span>
+  <span class="n">EXPECT_LE</span><span class="p">(</span><span class="n">requestedBlockSize</span><span class="p">,</span> <span class="n">blockSize</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">ThreadCachedArena</span><span class="p">,</span> <span class="n">SingleThreaded</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">static</span> <span class="k">const</span> <span class="n">size_t</span> <span class="n">requestedBlockSize</span> <span class="o">=</span> <span class="mi">64</span><span class="p">;</span>
+  <span class="n">ThreadCachedArena</span> <span class="n">arena</span><span class="p">(</span><span class="n">requestedBlockSize</span><span class="p">);</span>
+  <span class="n">ArenaTester</span> <span class="n">tester</span><span class="p">(</span><span class="n">arena</span><span class="p">);</span>
+  <span class="n">tester</span><span class="p">.</span><span class="n">allocate</span><span class="p">(</span><span class="mi">100</span><span class="p">,</span> <span class="mi">100</span> <span class="o">&lt;&lt;</span> <span class="mi">10</span><span class="p">);</span>
+  <span class="n">tester</span><span class="p">.</span><span class="n">verify</span><span class="p">();</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">ThreadCachedArena</span><span class="p">,</span> <span class="n">MultiThreaded</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">static</span> <span class="k">const</span> <span class="n">size_t</span> <span class="n">requestedBlockSize</span> <span class="o">=</span> <span class="mi">64</span><span class="p">;</span>
+  <span class="n">ThreadCachedArena</span> <span class="n">arena</span><span class="p">(</span><span class="n">requestedBlockSize</span><span class="p">);</span>
+  <span class="n">ArenaTester</span> <span class="n">mainTester</span><span class="p">(</span><span class="n">arena</span><span class="p">);</span></pre></div></td></tr>
+
+
+<tr id="section-5"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-5">&#182;</a></div><p>Do this twice, to catch the possibility that memory from the first
+round gets freed</p></td><td class="code"><div class="highlight"><pre>  <span class="k">static</span> <span class="k">const</span> <span class="n">size_t</span> <span class="n">numThreads</span> <span class="o">=</span> <span class="mi">20</span><span class="p">;</span>
+  <span class="k">for</span> <span class="p">(</span><span class="n">size_t</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="mi">2</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="kr">thread</span><span class="o">&gt;</span> <span class="n">threads</span><span class="p">;</span>
+    <span class="n">threads</span><span class="p">.</span><span class="n">reserve</span><span class="p">(</span><span class="n">numThreads</span><span class="p">);</span>
+    <span class="k">for</span> <span class="p">(</span><span class="n">size_t</span> <span class="n">j</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">j</span> <span class="o">&lt;</span> <span class="n">numThreads</span><span class="p">;</span> <span class="n">j</span><span class="o">++</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">threads</span><span class="p">.</span><span class="n">emplace_back</span><span class="p">(</span>
+          <span class="p">[</span><span class="o">&amp;</span><span class="n">arena</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">mainTester</span><span class="p">]</span> <span class="p">()</span> <span class="p">{</span>
+            <span class="n">ArenaTester</span> <span class="n">tester</span><span class="p">(</span><span class="n">arena</span><span class="p">);</span>
+            <span class="n">tester</span><span class="p">.</span><span class="n">allocate</span><span class="p">(</span><span class="mi">500</span><span class="p">,</span> <span class="mi">1</span> <span class="o">&lt;&lt;</span> <span class="mi">10</span><span class="p">);</span>
+            <span class="n">tester</span><span class="p">.</span><span class="n">verify</span><span class="p">();</span>
+            <span class="n">mainTester</span><span class="p">.</span><span class="n">merge</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">move</span><span class="p">(</span><span class="n">tester</span><span class="p">));</span>
+          <span class="p">});</span>
+    <span class="p">}</span>
+    <span class="k">for</span> <span class="p">(</span><span class="k">auto</span><span class="o">&amp;</span> <span class="n">t</span> <span class="o">:</span> <span class="n">threads</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">t</span><span class="p">.</span><span class="n">join</span><span class="p">();</span>
+    <span class="p">}</span>
+  <span class="p">}</span>
+
+  <span class="n">mainTester</span><span class="p">.</span><span class="n">verify</span><span class="p">();</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">ThreadCachedArena</span><span class="p">,</span> <span class="n">StlAllocator</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">typedef</span> <span class="n">std</span><span class="o">::</span><span class="n">unordered_map</span><span class="o">&lt;</span>
+    <span class="kt">int</span><span class="p">,</span> <span class="kt">int</span><span class="p">,</span> <span class="n">std</span><span class="o">::</span><span class="n">hash</span><span class="o">&lt;</span><span class="kt">int</span><span class="o">&gt;</span><span class="p">,</span> <span class="n">std</span><span class="o">::</span><span class="n">equal_to</span><span class="o">&lt;</span><span class="kt">int</span><span class="o">&gt;</span><span class="p">,</span>
+    <span class="n">StlAllocator</span><span class="o">&lt;</span><span class="n">ThreadCachedArena</span><span class="p">,</span> <span class="n">std</span><span class="o">::</span><span class="n">pair</span><span class="o">&lt;</span><span class="k">const</span> <span class="kt">int</span><span class="p">,</span> <span class="kt">int</span><span class="o">&gt;&gt;&gt;</span> <span class="n">Map</span><span class="p">;</span>
+
+  <span class="k">static</span> <span class="k">const</span> <span class="n">size_t</span> <span class="n">requestedBlockSize</span> <span class="o">=</span> <span class="mi">64</span><span class="p">;</span>
+  <span class="n">ThreadCachedArena</span> <span class="n">arena</span><span class="p">(</span><span class="n">requestedBlockSize</span><span class="p">);</span>
+
+  <span class="n">Map</span> <span class="n">map</span> <span class="p">{</span><span class="mi">0</span><span class="p">,</span> <span class="n">std</span><span class="o">::</span><span class="n">hash</span><span class="o">&lt;</span><span class="kt">int</span><span class="o">&gt;</span><span class="p">(),</span> <span class="n">std</span><span class="o">::</span><span class="n">equal_to</span><span class="o">&lt;</span><span class="kt">int</span><span class="o">&gt;</span><span class="p">(),</span>
+           <span class="n">StlAllocator</span><span class="o">&lt;</span><span class="n">ThreadCachedArena</span><span class="p">,</span> <span class="n">std</span><span class="o">::</span><span class="n">pair</span><span class="o">&lt;</span><span class="k">const</span> <span class="kt">int</span><span class="p">,</span> <span class="kt">int</span><span class="o">&gt;&gt;</span><span class="p">(</span><span class="o">&amp;</span><span class="n">arena</span><span class="p">)};</span>
+
+  <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="mi">1000</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">map</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">i</span><span class="p">;</span>
+  <span class="p">}</span>
+
+  <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="mi">1000</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="n">map</span><span class="p">[</span><span class="n">i</span><span class="p">]);</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="k">namespace</span> <span class="p">{</span>
+
+<span class="k">static</span> <span class="k">const</span> <span class="kt">int</span> <span class="n">kNumValues</span> <span class="o">=</span> <span class="mi">10000</span><span class="p">;</span>
+
+<span class="n">BENCHMARK</span><span class="p">(</span><span class="n">bmUMStandard</span><span class="p">,</span> <span class="n">iters</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">typedef</span> <span class="n">std</span><span class="o">::</span><span class="n">unordered_map</span><span class="o">&lt;</span><span class="kt">int</span><span class="p">,</span> <span class="kt">int</span><span class="o">&gt;</span> <span class="n">Map</span><span class="p">;</span>
+
+  <span class="k">while</span> <span class="p">(</span><span class="n">iters</span><span class="o">--</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">Map</span> <span class="n">map</span> <span class="p">{</span><span class="mi">0</span><span class="p">};</span>
+    <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">kNumValues</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">map</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">i</span><span class="p">;</span>
+    <span class="p">}</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="n">BENCHMARK</span><span class="p">(</span><span class="n">bmUMArena</span><span class="p">,</span> <span class="n">iters</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">typedef</span> <span class="n">std</span><span class="o">::</span><span class="n">unordered_map</span><span class="o">&lt;</span>
+    <span class="kt">int</span><span class="p">,</span> <span class="kt">int</span><span class="p">,</span> <span class="n">std</span><span class="o">::</span><span class="n">hash</span><span class="o">&lt;</span><span class="kt">int</span><span class="o">&gt;</span><span class="p">,</span> <span class="n">std</span><span class="o">::</span><span class="n">equal_to</span><span class="o">&lt;</span><span class="kt">int</span><span class="o">&gt;</span><span class="p">,</span>
+    <span class="n">StlAllocator</span><span class="o">&lt;</span><span class="n">ThreadCachedArena</span><span class="p">,</span> <span class="n">std</span><span class="o">::</span><span class="n">pair</span><span class="o">&lt;</span><span class="k">const</span> <span class="kt">int</span><span class="p">,</span> <span class="kt">int</span><span class="o">&gt;&gt;&gt;</span> <span class="n">Map</span><span class="p">;</span>
+
+  <span class="k">while</span> <span class="p">(</span><span class="n">iters</span><span class="o">--</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">ThreadCachedArena</span> <span class="n">arena</span><span class="p">;</span>
+
+    <span class="n">Map</span> <span class="n">map</span> <span class="p">{</span><span class="mi">0</span><span class="p">,</span> <span class="n">std</span><span class="o">::</span><span class="n">hash</span><span class="o">&lt;</span><span class="kt">int</span><span class="o">&gt;</span><span class="p">(),</span> <span class="n">std</span><span class="o">::</span><span class="n">equal_to</span><span class="o">&lt;</span><span class="kt">int</span><span class="o">&gt;</span><span class="p">(),</span>
+             <span class="n">StlAllocator</span><span class="o">&lt;</span><span class="n">ThreadCachedArena</span><span class="p">,</span> <span class="n">std</span><span class="o">::</span><span class="n">pair</span><span class="o">&lt;</span><span class="k">const</span> <span class="kt">int</span><span class="p">,</span> <span class="kt">int</span><span class="o">&gt;&gt;</span><span class="p">(</span>
+                 <span class="o">&amp;</span><span class="n">arena</span><span class="p">)};</span>
+
+    <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">kNumValues</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">map</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">i</span><span class="p">;</span>
+    <span class="p">}</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="n">BENCHMARK_DRAW_LINE</span><span class="p">()</span>
+
+<span class="n">BENCHMARK</span><span class="p">(</span><span class="n">bmMStandard</span><span class="p">,</span> <span class="n">iters</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">typedef</span> <span class="n">std</span><span class="o">::</span><span class="n">map</span><span class="o">&lt;</span><span class="kt">int</span><span class="p">,</span> <span class="kt">int</span><span class="o">&gt;</span> <span class="n">Map</span><span class="p">;</span>
+
+  <span class="k">while</span> <span class="p">(</span><span class="n">iters</span><span class="o">--</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">Map</span> <span class="n">map</span><span class="p">;</span>
+    <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">kNumValues</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">map</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">i</span><span class="p">;</span>
+    <span class="p">}</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="n">BENCHMARK_DRAW_LINE</span><span class="p">()</span>
+
+<span class="n">BENCHMARK</span><span class="p">(</span><span class="n">bmMArena</span><span class="p">,</span> <span class="n">iters</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">typedef</span> <span class="n">std</span><span class="o">::</span><span class="n">map</span><span class="o">&lt;</span>
+    <span class="kt">int</span><span class="p">,</span> <span class="kt">int</span><span class="p">,</span> <span class="n">std</span><span class="o">::</span><span class="n">less</span><span class="o">&lt;</span><span class="kt">int</span><span class="o">&gt;</span><span class="p">,</span>
+    <span class="n">StlAllocator</span><span class="o">&lt;</span><span class="n">ThreadCachedArena</span><span class="p">,</span> <span class="n">std</span><span class="o">::</span><span class="n">pair</span><span class="o">&lt;</span><span class="k">const</span> <span class="kt">int</span><span class="p">,</span> <span class="kt">int</span><span class="o">&gt;&gt;&gt;</span> <span class="n">Map</span><span class="p">;</span>
+
+  <span class="k">while</span> <span class="p">(</span><span class="n">iters</span><span class="o">--</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">ThreadCachedArena</span> <span class="n">arena</span><span class="p">;</span>
+
+    <span class="n">Map</span> <span class="n">map</span> <span class="p">{</span><span class="n">std</span><span class="o">::</span><span class="n">less</span><span class="o">&lt;</span><span class="kt">int</span><span class="o">&gt;</span><span class="p">(),</span>
+             <span class="n">StlAllocator</span><span class="o">&lt;</span><span class="n">ThreadCachedArena</span><span class="p">,</span> <span class="n">std</span><span class="o">::</span><span class="n">pair</span><span class="o">&lt;</span><span class="k">const</span> <span class="kt">int</span><span class="p">,</span> <span class="kt">int</span><span class="o">&gt;&gt;</span><span class="p">(</span>
+                 <span class="o">&amp;</span><span class="n">arena</span><span class="p">)};</span>
+
+    <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">kNumValues</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">map</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">i</span><span class="p">;</span>
+    <span class="p">}</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="n">BENCHMARK_DRAW_LINE</span><span class="p">()</span>
+
+<span class="p">}</span>  <span class="c1">// namespace</span></pre></div></td></tr>
+
+
+<tr id="section-6"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-6">&#182;</a></div><h2>Benchmark                               Iters   Total t    t/iter iter/sec</h2>
+
+<p>Comparing benchmarks: bmUMStandard,bmUMArena
+ + 143% bmUMStandard                     1570  2.005 s   1.277 ms  782.9</p>
+
+<h2>*       bmUMArena                        3817  2.003 s   524.7 us  1.861 k</h2>
+
+<p>Comparing benchmarks: bmMStandard,bmMArena
+ +79.0% bmMStandard                      1197  2.009 s   1.678 ms  595.8</p>
+
+<h2>*       bmMArena                         2135  2.002 s   937.6 us  1.042 k</h2></td><td class="code"><div class="highlight"><pre><span class="kt">int</span> <span class="n">main</span><span class="p">(</span><span class="kt">int</span> <span class="n">argc</span><span class="p">,</span> <span class="kt">char</span> <span class="o">*</span><span class="n">argv</span><span class="p">[])</span> <span class="p">{</span>
+  <span class="n">testing</span><span class="o">::</span><span class="n">InitGoogleTest</span><span class="p">(</span><span class="o">&amp;</span><span class="n">argc</span><span class="p">,</span> <span class="n">argv</span><span class="p">);</span>
+  <span class="n">google</span><span class="o">::</span><span class="n">ParseCommandLineFlags</span><span class="p">(</span><span class="o">&amp;</span><span class="n">argc</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">argv</span><span class="p">,</span> <span class="kc">true</span><span class="p">);</span>
+  <span class="k">auto</span> <span class="n">ret</span> <span class="o">=</span> <span class="n">RUN_ALL_TESTS</span><span class="p">();</span>
+  <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">ret</span> <span class="o">&amp;&amp;</span> <span class="n">FLAGS_benchmark</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">folly</span><span class="o">::</span><span class="n">runBenchmarks</span><span class="p">();</span>
+  <span class="p">}</span>
+  <span class="k">return</span> <span class="n">ret</span><span class="p">;</span>
+<span class="p">}</span>
+
+</pre></div></td></tr>
+
+</tbody>
+</table>
+</div>
+
+</body>
+<script>docas={repo:"joekychen/folly",depth:2}</script>
+<script>document.write('<script src=' + ('__proto__' in {} ? 'http://cdnjs.cloudflare.com/ajax/libs/zepto/1.0rc1/zepto.min.js' : 'https://ajax.googleapis.com/ajax/libs/jquery/1.7.2/jquery.min.js')+'><\\/script>')</script>
+<script src="http://baoshan.github.com/moment/min/moment.min.js"></script>
+<script src="../../javascript/docco.min.js"></script>
+</html>

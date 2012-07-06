@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html><head><title>joekychen/folly » folly › test › EndianTest.cpp
+
+</title>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+<meta name="generator" content="Docco">
+<link rel="stylesheet" media="all" href="../../stylesheets/docco.min.css" />
+
+
+</head>
+<body>
+<div id="container">
+<div id="background"></div>
+<table cellpadding="0" cellspacing="0">
+<thead><tr><th class="docs"><a id="home" href="../../index.html"></a><h1>EndianTest.cpp</h1></th><th class="code"></th></tr></thead>
+<tbody>
+
+
+<tr id="section-1"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-1">&#182;</a></div></td><td class="code"><div class="highlight"><pre><span class="cm">/*</span>
+<span class="cm"> * Copyright 2012 Facebook, Inc.</span>
+<span class="cm"> *</span>
+<span class="cm"> * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span class="cm"> * you may not use this file except in compliance with the License.</span>
+<span class="cm"> * You may obtain a copy of the License at</span>
+<span class="cm"> *</span>
+<span class="cm"> *   http://www.apache.org/licenses/LICENSE-2.0</span>
+<span class="cm"> *</span>
+<span class="cm"> * Unless required by applicable law or agreed to in writing, software</span>
+<span class="cm"> * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span class="cm"> * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span class="cm"> * See the License for the specific language governing permissions and</span>
+<span class="cm"> * limitations under the License.</span>
+<span class="cm"> */</span>
+
+<span class="cp">#include &quot;folly/Bits.h&quot;</span>
+
+<span class="cp">#include &lt;gtest/gtest.h&gt;</span>
+
+<span class="k">using</span> <span class="k">namespace</span> <span class="n">folly</span><span class="p">;</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">Endian</span><span class="p">,</span> <span class="n">Basic</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">uint8_t</span> <span class="n">v8</span> <span class="o">=</span> <span class="mh">0x12</span><span class="p">;</span>
+  <span class="n">uint8_t</span> <span class="n">v8s</span> <span class="o">=</span> <span class="n">v8</span><span class="p">;</span>
+  <span class="n">uint16_t</span> <span class="n">v16</span> <span class="o">=</span> <span class="mh">0x1234</span><span class="p">;</span>
+  <span class="n">uint16_t</span> <span class="n">v16s</span> <span class="o">=</span> <span class="n">bswap_16</span><span class="p">(</span><span class="n">v16</span><span class="p">);</span>
+  <span class="n">uint32_t</span> <span class="n">v32</span> <span class="o">=</span> <span class="mh">0x12345678</span><span class="p">;</span>
+  <span class="n">uint32_t</span> <span class="n">v32s</span> <span class="o">=</span> <span class="n">bswap_32</span><span class="p">(</span><span class="n">v32</span><span class="p">);</span>
+  <span class="n">uint64_t</span> <span class="n">v64</span> <span class="o">=</span> <span class="mh">0x123456789abcdef0ULL</span><span class="p">;</span>
+  <span class="n">uint64_t</span> <span class="n">v64s</span> <span class="o">=</span> <span class="n">bswap_64</span><span class="p">(</span><span class="n">v64</span><span class="p">);</span>
+
+<span class="cp">#if __BYTE_ORDER == __LITTLE_ENDIAN</span>
+
+<span class="cp">#define GEN1(sz) \</span>
+<span class="cp">  EXPECT_EQ(v##sz, Endian::little(v##sz)); \</span>
+<span class="cp">  EXPECT_EQ(v##sz, Endian::little##sz(v##sz)); \</span>
+<span class="cp">  EXPECT_EQ(v##sz##s, Endian::big(v##sz)); \</span>
+<span class="cp">  EXPECT_EQ(v##sz##s, Endian::big##sz(v##sz));</span>
+
+<span class="cp">#elif __BYTE_ORDER == __BIG_ENDIAN</span>
+
+<span class="cp">#define GEN1(sz) \</span>
+<span class="cp">  EXPECT_EQ(v##sz##s, Endian::little(v##sz)); \</span>
+<span class="cp">  EXPECT_EQ(v##sz##s, Endian::little##sz(v##sz)); \</span>
+<span class="cp">  EXPECT_EQ(v##sz, Endian::big(v##sz)); \</span>
+<span class="cp">  EXPECT_EQ(v##sz, Endian::big##sz(v##sz));</span>
+
+<span class="cp">#else</span>
+<span class="cp"># error Your machine uses a weird endianness!</span>
+<span class="cp">#endif  </span><span class="cm">/* __BYTE_ORDER */</span><span class="cp"></span>
+
+<span class="cp">#define GEN(sz) \</span>
+<span class="cp">  EXPECT_EQ(v##sz##s, Endian::swap(v##sz)); \</span>
+<span class="cp">  EXPECT_EQ(v##sz##s, Endian::swap##sz(v##sz)); \</span>
+<span class="cp">  GEN1(sz);</span>
+
+  <span class="n">GEN</span><span class="p">(</span><span class="mi">8</span><span class="p">);</span>
+  <span class="n">GEN</span><span class="p">(</span><span class="mi">16</span><span class="p">)</span>
+  <span class="n">GEN</span><span class="p">(</span><span class="mi">32</span><span class="p">)</span>
+  <span class="n">GEN</span><span class="p">(</span><span class="mi">64</span><span class="p">)</span>
+
+<span class="cp">#undef GEN</span>
+<span class="cp">#undef GEN1</span>
+<span class="p">}</span>
+
+</pre></div></td></tr>
+
+</tbody>
+</table>
+</div>
+
+</body>
+<script>docas={repo:"joekychen/folly",depth:2}</script>
+<script>document.write('<script src=' + ('__proto__' in {} ? 'http://cdnjs.cloudflare.com/ajax/libs/zepto/1.0rc1/zepto.min.js' : 'https://ajax.googleapis.com/ajax/libs/jquery/1.7.2/jquery.min.js')+'><\\/script>')</script>
+<script src="http://baoshan.github.com/moment/min/moment.min.js"></script>
+<script src="../../javascript/docco.min.js"></script>
+</html>

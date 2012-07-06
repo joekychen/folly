@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html><head><title>joekychen/folly » folly › Range.h
+
+</title>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+<meta name="generator" content="Docco">
+<link rel="stylesheet" media="all" href="../stylesheets/docco.min.css" />
+
+
+</head>
+<body>
+<div id="container">
+<div id="background"></div>
+<table cellpadding="0" cellspacing="0">
+<thead><tr><th class="docs"><a id="home" href="../index.html"></a><h1>Range.h</h1></th><th class="code"></th></tr></thead>
+<tbody>
+
+
+<tr id="section-1"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-1">&#182;</a></div></td><td class="code"><div class="highlight"><pre><span class="cm">/*</span>
+<span class="cm"> * Copyright 2012 Facebook, Inc.</span>
+<span class="cm"> *</span>
+<span class="cm"> * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span class="cm"> * you may not use this file except in compliance with the License.</span>
+<span class="cm"> * You may obtain a copy of the License at</span>
+<span class="cm"> *</span>
+<span class="cm"> *   http://www.apache.org/licenses/LICENSE-2.0</span>
+<span class="cm"> *</span>
+<span class="cm"> * Unless required by applicable law or agreed to in writing, software</span>
+<span class="cm"> * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span class="cm"> * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span class="cm"> * See the License for the specific language governing permissions and</span>
+<span class="cm"> * limitations under the License.</span>
+<span class="cm"> */</span></pre></div></td></tr>
+
+
+<tr id="section-2"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-2">&#182;</a></div><p>@author Mark Rabkin (mrabkin@fb.com)
+@author Andrei Alexandrescu (andrei.alexandrescu@fb.com)</p></td><td class="code"><div class="highlight"><pre><span class="cp">#ifndef FOLLY_RANGE_H_</span>
+<span class="cp">#define FOLLY_RANGE_H_</span>
+
+<span class="cp">#include &quot;folly/FBString.h&quot;</span>
+<span class="cp">#include &lt;glog/logging.h&gt;</span>
+<span class="cp">#include &lt;iostream&gt;</span>
+<span class="cp">#include &lt;string&gt;</span>
+<span class="cp">#include &lt;stdexcept&gt;</span>
+<span class="cp">#include &lt;boost/operators.hpp&gt;</span>
+<span class="cp">#include &lt;boost/utility/enable_if.hpp&gt;</span>
+<span class="cp">#include &lt;boost/type_traits.hpp&gt;</span>
+<span class="cp">#include &lt;bits/c++config.h&gt;</span>
+<span class="cp">#include &quot;folly/Traits.h&quot;</span>
+
+<span class="n">namespace</span> <span class="n">folly</span> <span class="p">{</span>
+
+<span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">T</span><span class="o">&gt;</span> <span class="n">class</span> <span class="n">Range</span><span class="p">;</span>
+
+<span class="cm">/**</span>
+<span class="cm">Finds the first occurrence of needle in haystack. The algorithm is on</span>
+<span class="cm">average faster than O(haystack.size() * needle.size()) but not as fast</span>
+<span class="cm">as Boyer-Moore. On the upside, it does not do any upfront</span>
+<span class="cm">preprocessing and does not allocate memory.</span>
+<span class="cm"> */</span>
+<span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">T</span><span class="o">&gt;</span>
+<span class="kr">inline</span> <span class="kt">size_t</span> <span class="n">qfind</span><span class="p">(</span><span class="k">const</span> <span class="n">Range</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;</span> <span class="o">&amp;</span> <span class="n">haystack</span><span class="p">,</span>
+                    <span class="k">const</span> <span class="n">Range</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;</span> <span class="o">&amp;</span> <span class="n">needle</span><span class="p">);</span>
+
+<span class="cm">/**</span>
+<span class="cm">Finds the first occurrence of needle in haystack. The result is the</span>
+<span class="cm">offset reported to the beginning of haystack, or string::npos if</span>
+<span class="cm">needle wasn&#39;t found.</span>
+<span class="cm"> */</span>
+<span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">T</span><span class="o">&gt;</span>
+<span class="kt">size_t</span> <span class="n">qfind</span><span class="p">(</span><span class="k">const</span> <span class="n">Range</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;</span> <span class="o">&amp;</span> <span class="n">haystack</span><span class="p">,</span>
+             <span class="k">const</span> <span class="kr">typename</span> <span class="n">Range</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;::</span><span class="n">value_type</span><span class="o">&amp;</span> <span class="n">needle</span><span class="p">);</span>
+
+<span class="cm">/**</span>
+<span class="cm"> * Small internal helper - returns the value just before an iterator.</span>
+<span class="cm"> */</span>
+<span class="n">namespace</span> <span class="n">detail</span> <span class="p">{</span>
+
+<span class="cm">/**</span>
+<span class="cm"> * For random-access iterators, the value before is simply i[-1].</span>
+<span class="cm"> */</span>
+<span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">Iter</span><span class="o">&gt;</span>
+<span class="kr">typename</span> <span class="n">boost</span><span class="o">::</span><span class="n">enable_if_c</span><span class="o">&lt;</span>
+  <span class="n">boost</span><span class="o">::</span><span class="n">is_same</span><span class="o">&lt;</span><span class="kr">typename</span> <span class="n">std</span><span class="o">::</span><span class="n">iterator_traits</span><span class="o">&lt;</span><span class="n">Iter</span><span class="o">&gt;::</span><span class="n">iterator_category</span><span class="p">,</span>
+                 <span class="n">std</span><span class="o">::</span><span class="n">random_access_iterator_tag</span><span class="o">&gt;::</span><span class="n">value</span><span class="p">,</span>
+  <span class="kr">typename</span> <span class="n">std</span><span class="o">::</span><span class="n">iterator_traits</span><span class="o">&lt;</span><span class="n">Iter</span><span class="o">&gt;::</span><span class="n">reference</span><span class="o">&gt;::</span><span class="n">type</span>
+<span class="n">value_before</span><span class="p">(</span><span class="n">Iter</span> <span class="n">i</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">return</span> <span class="n">i</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">];</span>
+<span class="p">}</span>
+
+<span class="cm">/**</span>
+<span class="cm"> * For all other iterators, we need to use the decrement operator.</span>
+<span class="cm"> */</span>
+<span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">Iter</span><span class="o">&gt;</span>
+<span class="kr">typename</span> <span class="n">boost</span><span class="o">::</span><span class="n">enable_if_c</span><span class="o">&lt;</span>
+  <span class="o">!</span><span class="n">boost</span><span class="o">::</span><span class="n">is_same</span><span class="o">&lt;</span><span class="kr">typename</span> <span class="n">std</span><span class="o">::</span><span class="n">iterator_traits</span><span class="o">&lt;</span><span class="n">Iter</span><span class="o">&gt;::</span><span class="n">iterator_category</span><span class="p">,</span>
+                  <span class="n">std</span><span class="o">::</span><span class="n">random_access_iterator_tag</span><span class="o">&gt;::</span><span class="n">value</span><span class="p">,</span>
+  <span class="kr">typename</span> <span class="n">std</span><span class="o">::</span><span class="n">iterator_traits</span><span class="o">&lt;</span><span class="n">Iter</span><span class="o">&gt;::</span><span class="n">reference</span><span class="o">&gt;::</span><span class="n">type</span>
+<span class="n">value_before</span><span class="p">(</span><span class="n">Iter</span> <span class="n">i</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">return</span> <span class="o">*--</span><span class="n">i</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="p">}</span> <span class="c1">// namespace detail</span>
+
+<span class="cm">/**</span>
+<span class="cm"> * Range abstraction keeping a pair of iterators. We couldn&#39;t use</span>
+<span class="cm"> * boost&#39;s similar range abstraction because we need an API identical</span>
+<span class="cm"> * with the former StringPiece class, which is used by a lot of other</span>
+<span class="cm"> * code. This abstraction does fulfill the needs of boost&#39;s</span>
+<span class="cm"> * range-oriented algorithms though.</span>
+<span class="cm"> *</span>
+<span class="cm"> * (Keep memory lifetime in mind when using this class, since it</span>
+<span class="cm"> * doesn&#39;t manage the data it refers to - just like an iterator</span>
+<span class="cm"> * wouldn&#39;t.)</span>
+<span class="cm"> */</span>
+<span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">Iter</span><span class="o">&gt;</span>
+<span class="n">class</span> <span class="n">Range</span> <span class="o">:</span> <span class="n">private</span> <span class="n">boost</span><span class="o">::</span><span class="n">totally_ordered</span><span class="o">&lt;</span><span class="n">Range</span><span class="o">&lt;</span><span class="n">Iter</span><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="p">{</span>
+<span class="nl">public:</span>
+  <span class="k">typedef</span> <span class="n">std</span><span class="o">::</span><span class="kt">size_t</span> <span class="n">size_type</span><span class="p">;</span>
+  <span class="k">typedef</span> <span class="n">Iter</span> <span class="n">iterator</span><span class="p">;</span>
+  <span class="k">typedef</span> <span class="n">Iter</span> <span class="n">const_iterator</span><span class="p">;</span>
+  <span class="k">typedef</span> <span class="kr">typename</span> <span class="n">boost</span><span class="o">::</span><span class="n">remove_reference</span><span class="o">&lt;</span>
+    <span class="kr">typename</span> <span class="n">std</span><span class="o">::</span><span class="n">iterator_traits</span><span class="o">&lt;</span><span class="n">Iter</span><span class="o">&gt;::</span><span class="n">reference</span><span class="o">&gt;::</span><span class="n">type</span>
+  <span class="n">value_type</span><span class="p">;</span>
+  <span class="k">typedef</span> <span class="kr">typename</span> <span class="n">std</span><span class="o">::</span><span class="n">iterator_traits</span><span class="o">&lt;</span><span class="n">Iter</span><span class="o">&gt;::</span><span class="n">reference</span> <span class="n">reference</span><span class="p">;</span>
+  <span class="k">typedef</span> <span class="n">std</span><span class="o">::</span><span class="n">char_traits</span><span class="o">&lt;</span><span class="n">value_type</span><span class="o">&gt;</span> <span class="n">traits_type</span><span class="p">;</span>
+
+  <span class="k">static</span> <span class="k">const</span> <span class="n">size_type</span> <span class="n">npos</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span><span class="p">;</span></pre></div></td></tr>
+
+
+<tr id="section-3"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-3">&#182;</a></div><p>Works for all iterators</p></td><td class="code"><div class="highlight"><pre>  <span class="n">Range</span><span class="p">()</span> <span class="o">:</span> <span class="n">b_</span><span class="p">(),</span> <span class="n">e_</span><span class="p">()</span> <span class="p">{</span>
+  <span class="p">}</span>
+
+<span class="nl">private:</span>
+  <span class="k">static</span> <span class="n">bool</span> <span class="n">reachable</span><span class="p">(</span><span class="n">Iter</span> <span class="n">b</span><span class="p">,</span> <span class="n">Iter</span> <span class="n">e</span><span class="p">,</span> <span class="n">std</span><span class="o">::</span><span class="n">forward_iterator_tag</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">for</span> <span class="p">(;</span> <span class="n">b</span> <span class="o">!=</span> <span class="n">e</span><span class="p">;</span> <span class="o">++</span><span class="n">b</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">LOG_EVERY_N</span><span class="p">(</span><span class="n">INFO</span><span class="p">,</span> <span class="mi">100000</span><span class="p">)</span> <span class="o">&lt;&lt;</span> <span class="n">__FILE__</span> <span class="s">&quot;:&quot;</span> <span class="o">&lt;&lt;</span> <span class="n">__LINE__</span>
+                                <span class="o">&lt;&lt;</span> <span class="s">&quot; running reachability test (&quot;</span>
+                                <span class="o">&lt;&lt;</span> <span class="n">google</span><span class="o">::</span><span class="n">COUNTER</span> <span class="o">&lt;&lt;</span> <span class="s">&quot; iterations)...&quot;</span><span class="p">;</span>
+    <span class="p">}</span>
+    <span class="k">return</span> <span class="nb">true</span><span class="p">;</span>
+  <span class="p">}</span>
+
+  <span class="k">static</span> <span class="n">bool</span> <span class="n">reachable</span><span class="p">(</span><span class="n">Iter</span> <span class="n">b</span><span class="p">,</span> <span class="n">Iter</span> <span class="n">e</span><span class="p">,</span> <span class="n">std</span><span class="o">::</span><span class="n">random_access_iterator_tag</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">return</span> <span class="n">b</span> <span class="o">&lt;=</span> <span class="n">e</span><span class="p">;</span>
+  <span class="p">}</span>
+
+<span class="nl">public:</span></pre></div></td></tr>
+
+
+<tr id="section-4"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-4">&#182;</a></div><p>Works for all iterators</p></td><td class="code"><div class="highlight"><pre>  <span class="n">Range</span><span class="p">(</span><span class="n">Iter</span> <span class="n">start</span><span class="p">,</span> <span class="n">Iter</span> <span class="n">end</span><span class="p">)</span>
+      <span class="o">:</span> <span class="n">b_</span><span class="p">(</span><span class="n">start</span><span class="p">),</span> <span class="n">e_</span><span class="p">(</span><span class="n">end</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">assert</span><span class="p">(</span><span class="n">reachable</span><span class="p">(</span><span class="n">b_</span><span class="p">,</span> <span class="n">e_</span><span class="p">,</span>
+                     <span class="kr">typename</span> <span class="n">std</span><span class="o">::</span><span class="n">iterator_traits</span><span class="o">&lt;</span><span class="n">Iter</span><span class="o">&gt;::</span><span class="n">iterator_category</span><span class="p">()));</span>
+  <span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-5"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-5">&#182;</a></div><p>Works only for random-access iterators</p></td><td class="code"><div class="highlight"><pre>  <span class="n">Range</span><span class="p">(</span><span class="n">Iter</span> <span class="n">start</span><span class="p">,</span> <span class="kt">size_t</span> <span class="n">size</span><span class="p">)</span>
+      <span class="o">:</span> <span class="n">b_</span><span class="p">(</span><span class="n">start</span><span class="p">),</span> <span class="n">e_</span><span class="p">(</span><span class="n">start</span> <span class="o">+</span> <span class="n">size</span><span class="p">)</span> <span class="p">{</span> <span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-6"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-6">&#182;</a></div><p>Works only for Range<const char*></p></td><td class="code"><div class="highlight"><pre>  <span class="cm">/* implicit */</span> <span class="n">Range</span><span class="p">(</span><span class="n">Iter</span> <span class="n">str</span><span class="p">)</span>
+      <span class="o">:</span> <span class="n">b_</span><span class="p">(</span><span class="n">str</span><span class="p">),</span> <span class="n">e_</span><span class="p">(</span><span class="n">b_</span> <span class="o">+</span> <span class="n">strlen</span><span class="p">(</span><span class="n">str</span><span class="p">))</span> <span class="p">{}</span></pre></div></td></tr>
+
+
+<tr id="section-7"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-7">&#182;</a></div><p>Works only for Range<const char*></p></td><td class="code"><div class="highlight"><pre>  <span class="cm">/* implicit */</span> <span class="n">Range</span><span class="p">(</span><span class="k">const</span> <span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="o">&amp;</span> <span class="n">str</span><span class="p">)</span>
+      <span class="o">:</span> <span class="n">b_</span><span class="p">(</span><span class="n">str</span><span class="p">.</span><span class="n">data</span><span class="p">()),</span> <span class="n">e_</span><span class="p">(</span><span class="n">b_</span> <span class="o">+</span> <span class="n">str</span><span class="p">.</span><span class="n">size</span><span class="p">())</span> <span class="p">{}</span></pre></div></td></tr>
+
+
+<tr id="section-8"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-8">&#182;</a></div><p>Works only for Range<const char*></p></td><td class="code"><div class="highlight"><pre>  <span class="n">Range</span><span class="p">(</span><span class="k">const</span> <span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="o">&amp;</span> <span class="n">str</span><span class="p">,</span> <span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="o">::</span><span class="n">size_type</span> <span class="n">startFrom</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">CHECK_LE</span><span class="p">(</span><span class="n">startFrom</span><span class="p">,</span> <span class="n">str</span><span class="p">.</span><span class="n">size</span><span class="p">());</span>
+    <span class="n">b_</span> <span class="o">=</span> <span class="n">str</span><span class="p">.</span><span class="n">data</span><span class="p">()</span> <span class="o">+</span> <span class="n">startFrom</span><span class="p">;</span>
+    <span class="n">e_</span> <span class="o">=</span> <span class="n">str</span><span class="p">.</span><span class="n">data</span><span class="p">()</span> <span class="o">+</span> <span class="n">str</span><span class="p">.</span><span class="n">size</span><span class="p">();</span>
+  <span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-9"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-9">&#182;</a></div><p>Works only for Range<const char*></p></td><td class="code"><div class="highlight"><pre>  <span class="n">Range</span><span class="p">(</span><span class="k">const</span> <span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="o">&amp;</span> <span class="n">str</span><span class="p">,</span>
+        <span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="o">::</span><span class="n">size_type</span> <span class="n">startFrom</span><span class="p">,</span>
+        <span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="o">::</span><span class="n">size_type</span> <span class="n">size</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">CHECK_LE</span><span class="p">(</span><span class="n">startFrom</span> <span class="o">+</span> <span class="n">size</span><span class="p">,</span> <span class="n">str</span><span class="p">.</span><span class="n">size</span><span class="p">());</span>
+    <span class="n">b_</span> <span class="o">=</span> <span class="n">str</span><span class="p">.</span><span class="n">data</span><span class="p">()</span> <span class="o">+</span> <span class="n">startFrom</span><span class="p">;</span>
+    <span class="n">e_</span> <span class="o">=</span> <span class="n">b_</span> <span class="o">+</span> <span class="n">size</span><span class="p">;</span>
+  <span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-10"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-10">&#182;</a></div><p>Works only for Range<const char*></p></td><td class="code"><div class="highlight"><pre>  <span class="cm">/* implicit */</span> <span class="n">Range</span><span class="p">(</span><span class="k">const</span> <span class="n">fbstring</span><span class="o">&amp;</span> <span class="n">str</span><span class="p">)</span>
+    <span class="o">:</span> <span class="n">b_</span><span class="p">(</span><span class="n">str</span><span class="p">.</span><span class="n">data</span><span class="p">()),</span> <span class="n">e_</span><span class="p">(</span><span class="n">b_</span> <span class="o">+</span> <span class="n">str</span><span class="p">.</span><span class="n">size</span><span class="p">())</span> <span class="p">{</span> <span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-11"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-11">&#182;</a></div><p>Works only for Range<const char*></p></td><td class="code"><div class="highlight"><pre>  <span class="n">Range</span><span class="p">(</span><span class="k">const</span> <span class="n">fbstring</span><span class="o">&amp;</span> <span class="n">str</span><span class="p">,</span> <span class="n">fbstring</span><span class="o">::</span><span class="n">size_type</span> <span class="n">startFrom</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">CHECK_LE</span><span class="p">(</span><span class="n">startFrom</span><span class="p">,</span> <span class="n">str</span><span class="p">.</span><span class="n">size</span><span class="p">());</span>
+    <span class="n">b_</span> <span class="o">=</span> <span class="n">str</span><span class="p">.</span><span class="n">data</span><span class="p">()</span> <span class="o">+</span> <span class="n">startFrom</span><span class="p">;</span>
+    <span class="n">e_</span> <span class="o">=</span> <span class="n">str</span><span class="p">.</span><span class="n">data</span><span class="p">()</span> <span class="o">+</span> <span class="n">str</span><span class="p">.</span><span class="n">size</span><span class="p">();</span>
+  <span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-12"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-12">&#182;</a></div><p>Works only for Range<const char*></p></td><td class="code"><div class="highlight"><pre>  <span class="n">Range</span><span class="p">(</span><span class="k">const</span> <span class="n">fbstring</span><span class="o">&amp;</span> <span class="n">str</span><span class="p">,</span> <span class="n">fbstring</span><span class="o">::</span><span class="n">size_type</span> <span class="n">startFrom</span><span class="p">,</span>
+        <span class="n">fbstring</span><span class="o">::</span><span class="n">size_type</span> <span class="n">size</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">CHECK_LE</span><span class="p">(</span><span class="n">startFrom</span> <span class="o">+</span> <span class="n">size</span><span class="p">,</span> <span class="n">str</span><span class="p">.</span><span class="n">size</span><span class="p">());</span>
+    <span class="n">b_</span> <span class="o">=</span> <span class="n">str</span><span class="p">.</span><span class="n">data</span><span class="p">()</span> <span class="o">+</span> <span class="n">startFrom</span><span class="p">;</span>
+    <span class="n">e_</span> <span class="o">=</span> <span class="n">b_</span> <span class="o">+</span> <span class="n">size</span><span class="p">;</span>
+  <span class="p">}</span>
+
+  <span class="kt">void</span> <span class="n">clear</span><span class="p">()</span> <span class="p">{</span>
+    <span class="n">b_</span> <span class="o">=</span> <span class="n">Iter</span><span class="p">();</span>
+    <span class="n">e_</span> <span class="o">=</span> <span class="n">Iter</span><span class="p">();</span>
+  <span class="p">}</span>
+
+  <span class="kt">void</span> <span class="n">assign</span><span class="p">(</span><span class="n">Iter</span> <span class="n">start</span><span class="p">,</span> <span class="n">Iter</span> <span class="n">end</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">b_</span> <span class="o">=</span> <span class="n">start</span><span class="p">;</span>
+    <span class="n">e_</span> <span class="o">=</span> <span class="n">end</span><span class="p">;</span>
+  <span class="p">}</span>
+
+  <span class="kt">void</span> <span class="n">reset</span><span class="p">(</span><span class="n">Iter</span> <span class="n">start</span><span class="p">,</span> <span class="n">size_type</span> <span class="n">size</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">b_</span> <span class="o">=</span> <span class="n">start</span><span class="p">;</span>
+    <span class="n">e_</span> <span class="o">=</span> <span class="n">start</span> <span class="o">+</span> <span class="n">size</span><span class="p">;</span>
+  <span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-13"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-13">&#182;</a></div><p>Works only for Range<const char*></p></td><td class="code"><div class="highlight"><pre>  <span class="kt">void</span> <span class="n">reset</span><span class="p">(</span><span class="k">const</span> <span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="o">&amp;</span> <span class="n">str</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">reset</span><span class="p">(</span><span class="n">str</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span> <span class="n">str</span><span class="p">.</span><span class="n">size</span><span class="p">());</span>
+  <span class="p">}</span>
+
+  <span class="n">size_type</span> <span class="n">size</span><span class="p">()</span> <span class="k">const</span> <span class="p">{</span>
+    <span class="n">assert</span><span class="p">(</span><span class="n">b_</span> <span class="o">&lt;=</span> <span class="n">e_</span><span class="p">);</span>
+    <span class="k">return</span> <span class="n">e_</span> <span class="o">-</span> <span class="n">b_</span><span class="p">;</span>
+  <span class="p">}</span>
+  <span class="n">size_type</span> <span class="n">walk_size</span><span class="p">()</span> <span class="k">const</span> <span class="p">{</span>
+    <span class="n">assert</span><span class="p">(</span><span class="n">b_</span> <span class="o">&lt;=</span> <span class="n">e_</span><span class="p">);</span>
+    <span class="k">return</span> <span class="n">std</span><span class="o">::</span><span class="n">distance</span><span class="p">(</span><span class="n">b_</span><span class="p">,</span> <span class="n">e_</span><span class="p">);</span>
+  <span class="p">}</span>
+  <span class="n">bool</span> <span class="n">empty</span><span class="p">()</span> <span class="k">const</span> <span class="p">{</span> <span class="k">return</span> <span class="n">b_</span> <span class="o">==</span> <span class="n">e_</span><span class="p">;</span> <span class="p">}</span>
+  <span class="n">Iter</span> <span class="n">data</span><span class="p">()</span> <span class="k">const</span> <span class="p">{</span> <span class="k">return</span> <span class="n">b_</span><span class="p">;</span> <span class="p">}</span>
+  <span class="n">Iter</span> <span class="n">start</span><span class="p">()</span> <span class="k">const</span> <span class="p">{</span> <span class="k">return</span> <span class="n">b_</span><span class="p">;</span> <span class="p">}</span>
+  <span class="n">Iter</span> <span class="n">begin</span><span class="p">()</span> <span class="k">const</span> <span class="p">{</span> <span class="k">return</span> <span class="n">b_</span><span class="p">;</span> <span class="p">}</span>
+  <span class="n">Iter</span> <span class="n">end</span><span class="p">()</span> <span class="k">const</span> <span class="p">{</span> <span class="k">return</span> <span class="n">e_</span><span class="p">;</span> <span class="p">}</span>
+  <span class="n">Iter</span> <span class="n">cbegin</span><span class="p">()</span> <span class="k">const</span> <span class="p">{</span> <span class="k">return</span> <span class="n">b_</span><span class="p">;</span> <span class="p">}</span>
+  <span class="n">Iter</span> <span class="n">cend</span><span class="p">()</span> <span class="k">const</span> <span class="p">{</span> <span class="k">return</span> <span class="n">e_</span><span class="p">;</span> <span class="p">}</span>
+  <span class="n">value_type</span><span class="o">&amp;</span> <span class="n">front</span><span class="p">()</span> <span class="p">{</span>
+    <span class="n">assert</span><span class="p">(</span><span class="n">b_</span> <span class="o">&lt;</span> <span class="n">e_</span><span class="p">);</span>
+    <span class="k">return</span> <span class="o">*</span><span class="n">b_</span><span class="p">;</span>
+  <span class="p">}</span>
+  <span class="n">value_type</span><span class="o">&amp;</span> <span class="n">back</span><span class="p">()</span> <span class="p">{</span>
+    <span class="n">assert</span><span class="p">(</span><span class="n">b_</span> <span class="o">&lt;</span> <span class="n">e_</span><span class="p">);</span>
+    <span class="k">return</span> <span class="n">detail</span><span class="o">::</span><span class="n">value_before</span><span class="p">(</span><span class="n">e_</span><span class="p">);</span>
+  <span class="p">}</span>
+  <span class="k">const</span> <span class="n">value_type</span><span class="o">&amp;</span> <span class="n">front</span><span class="p">()</span> <span class="k">const</span> <span class="p">{</span>
+    <span class="n">assert</span><span class="p">(</span><span class="n">b_</span> <span class="o">&lt;</span> <span class="n">e_</span><span class="p">);</span>
+    <span class="k">return</span> <span class="o">*</span><span class="n">b_</span><span class="p">;</span>
+  <span class="p">}</span>
+  <span class="k">const</span> <span class="n">value_type</span><span class="o">&amp;</span> <span class="n">back</span><span class="p">()</span> <span class="k">const</span> <span class="p">{</span>
+    <span class="n">assert</span><span class="p">(</span><span class="n">b_</span> <span class="o">&lt;</span> <span class="n">e_</span><span class="p">);</span>
+    <span class="k">return</span> <span class="n">detail</span><span class="o">::</span><span class="n">value_before</span><span class="p">(</span><span class="n">e_</span><span class="p">);</span>
+  <span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-14"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-14">&#182;</a></div><p>Works only for Range<const char*></p></td><td class="code"><div class="highlight"><pre>  <span class="n">std</span><span class="o">::</span><span class="n">string</span> <span class="n">str</span><span class="p">()</span> <span class="k">const</span> <span class="p">{</span> <span class="k">return</span> <span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="p">(</span><span class="n">b_</span><span class="p">,</span> <span class="n">size</span><span class="p">());</span> <span class="p">}</span>
+  <span class="n">std</span><span class="o">::</span><span class="n">string</span> <span class="n">toString</span><span class="p">()</span> <span class="k">const</span> <span class="p">{</span> <span class="k">return</span> <span class="n">str</span><span class="p">();</span> <span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-15"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-15">&#182;</a></div><p>Works only for Range<const char*></p></td><td class="code"><div class="highlight"><pre>  <span class="n">fbstring</span> <span class="n">fbstr</span><span class="p">()</span> <span class="k">const</span> <span class="p">{</span> <span class="k">return</span> <span class="n">fbstring</span><span class="p">(</span><span class="n">b_</span><span class="p">,</span> <span class="n">size</span><span class="p">());</span> <span class="p">}</span>
+  <span class="n">fbstring</span> <span class="n">toFbstring</span><span class="p">()</span> <span class="k">const</span> <span class="p">{</span> <span class="k">return</span> <span class="n">fbstr</span><span class="p">();</span> <span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-16"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-16">&#182;</a></div><p>Works only for Range<const char*></p></td><td class="code"><div class="highlight"><pre>  <span class="kt">int</span> <span class="n">compare</span><span class="p">(</span><span class="k">const</span> <span class="n">Range</span><span class="o">&amp;</span> <span class="n">o</span><span class="p">)</span> <span class="k">const</span> <span class="p">{</span>
+    <span class="k">const</span> <span class="n">size_type</span> <span class="n">tsize</span> <span class="o">=</span> <span class="n">this</span><span class="o">-&gt;</span><span class="n">size</span><span class="p">();</span>
+    <span class="k">const</span> <span class="n">size_type</span> <span class="n">osize</span> <span class="o">=</span> <span class="n">o</span><span class="p">.</span><span class="n">size</span><span class="p">();</span>
+    <span class="k">const</span> <span class="n">size_type</span> <span class="n">msize</span> <span class="o">=</span> <span class="n">std</span><span class="o">::</span><span class="n">min</span><span class="p">(</span><span class="n">tsize</span><span class="p">,</span> <span class="n">osize</span><span class="p">);</span>
+    <span class="kt">int</span> <span class="n">r</span> <span class="o">=</span> <span class="n">traits_type</span><span class="o">::</span><span class="n">compare</span><span class="p">(</span><span class="n">data</span><span class="p">(),</span> <span class="n">o</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span> <span class="n">msize</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">r</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span> <span class="n">r</span> <span class="o">=</span> <span class="n">tsize</span> <span class="o">-</span> <span class="n">osize</span><span class="p">;</span>
+    <span class="k">return</span> <span class="n">r</span><span class="p">;</span>
+  <span class="p">}</span>
+
+  <span class="n">value_type</span><span class="o">&amp;</span> <span class="n">operator</span><span class="p">[](</span><span class="kt">size_t</span> <span class="n">i</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">CHECK_GT</span><span class="p">(</span><span class="n">size</span><span class="p">(),</span> <span class="n">i</span><span class="p">);</span>
+    <span class="k">return</span> <span class="n">b_</span><span class="p">[</span><span class="n">i</span><span class="p">];</span>
+  <span class="p">}</span>
+
+  <span class="k">const</span> <span class="n">value_type</span><span class="o">&amp;</span> <span class="n">operator</span><span class="p">[](</span><span class="kt">size_t</span> <span class="n">i</span><span class="p">)</span> <span class="k">const</span> <span class="p">{</span>
+    <span class="n">CHECK_GT</span><span class="p">(</span><span class="n">size</span><span class="p">(),</span> <span class="n">i</span><span class="p">);</span>
+    <span class="k">return</span> <span class="n">b_</span><span class="p">[</span><span class="n">i</span><span class="p">];</span>
+  <span class="p">}</span>
+
+  <span class="n">value_type</span><span class="o">&amp;</span> <span class="n">at</span><span class="p">(</span><span class="kt">size_t</span> <span class="n">i</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">i</span> <span class="o">&gt;=</span> <span class="n">size</span><span class="p">())</span> <span class="n">throw</span> <span class="n">std</span><span class="o">::</span><span class="n">out_of_range</span><span class="p">(</span><span class="s">&quot;index out of range&quot;</span><span class="p">);</span>
+    <span class="k">return</span> <span class="n">b_</span><span class="p">[</span><span class="n">i</span><span class="p">];</span>
+  <span class="p">}</span>
+
+  <span class="k">const</span> <span class="n">value_type</span><span class="o">&amp;</span> <span class="n">at</span><span class="p">(</span><span class="kt">size_t</span> <span class="n">i</span><span class="p">)</span> <span class="k">const</span> <span class="p">{</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">i</span> <span class="o">&gt;=</span> <span class="n">size</span><span class="p">())</span> <span class="n">throw</span> <span class="n">std</span><span class="o">::</span><span class="n">out_of_range</span><span class="p">(</span><span class="s">&quot;index out of range&quot;</span><span class="p">);</span>
+    <span class="k">return</span> <span class="n">b_</span><span class="p">[</span><span class="n">i</span><span class="p">];</span>
+  <span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-17"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-17">&#182;</a></div><p>Works only for Range<const char*></p></td><td class="code"><div class="highlight"><pre>  <span class="kt">uint32_t</span> <span class="n">hash</span><span class="p">()</span> <span class="k">const</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-18"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-18">&#182;</a></div><p>Taken from fbi/nstring.h:
+   Quick and dirty bernstein hash...fine for short ascii strings</p></td><td class="code"><div class="highlight"><pre>    <span class="kt">uint32_t</span> <span class="n">hash</span> <span class="o">=</span> <span class="mi">5381</span><span class="p">;</span>
+    <span class="k">for</span> <span class="p">(</span><span class="kt">size_t</span> <span class="n">ix</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">ix</span> <span class="o">&lt;</span> <span class="n">size</span><span class="p">();</span> <span class="n">ix</span><span class="o">++</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">hash</span> <span class="o">=</span> <span class="p">((</span><span class="n">hash</span> <span class="o">&lt;&lt;</span> <span class="mi">5</span><span class="p">)</span> <span class="o">+</span> <span class="n">hash</span><span class="p">)</span> <span class="o">+</span> <span class="n">b_</span><span class="p">[</span><span class="n">ix</span><span class="p">];</span>
+    <span class="p">}</span>
+    <span class="k">return</span> <span class="n">hash</span><span class="p">;</span>
+  <span class="p">}</span>
+
+  <span class="kt">void</span> <span class="n">advance</span><span class="p">(</span><span class="n">size_type</span> <span class="n">n</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">CHECK_LE</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="n">size</span><span class="p">());</span>
+    <span class="n">b_</span> <span class="o">+=</span> <span class="n">n</span><span class="p">;</span>
+  <span class="p">}</span>
+
+  <span class="kt">void</span> <span class="n">subtract</span><span class="p">(</span><span class="n">size_type</span> <span class="n">n</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">CHECK_LE</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="n">size</span><span class="p">());</span>
+    <span class="n">e_</span> <span class="o">-=</span> <span class="n">n</span><span class="p">;</span>
+  <span class="p">}</span>
+
+  <span class="kt">void</span> <span class="n">pop_front</span><span class="p">()</span> <span class="p">{</span>
+    <span class="n">assert</span><span class="p">(</span><span class="n">b_</span> <span class="o">&lt;</span> <span class="n">e_</span><span class="p">);</span>
+    <span class="o">++</span><span class="n">b_</span><span class="p">;</span>
+  <span class="p">}</span>
+
+  <span class="kt">void</span> <span class="n">pop_back</span><span class="p">()</span> <span class="p">{</span>
+    <span class="n">assert</span><span class="p">(</span><span class="n">b_</span> <span class="o">&lt;</span> <span class="n">e_</span><span class="p">);</span>
+    <span class="o">--</span><span class="n">e_</span><span class="p">;</span>
+  <span class="p">}</span>
+
+  <span class="n">Range</span> <span class="n">subpiece</span><span class="p">(</span><span class="n">size_type</span> <span class="n">first</span><span class="p">,</span>
+                 <span class="n">size_type</span> <span class="n">length</span> <span class="o">=</span> <span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="o">::</span><span class="n">npos</span><span class="p">)</span> <span class="k">const</span> <span class="p">{</span>
+    <span class="n">CHECK_LE</span><span class="p">(</span><span class="n">first</span><span class="p">,</span> <span class="n">size</span><span class="p">());</span>
+    <span class="k">return</span> <span class="n">Range</span><span class="p">(</span><span class="n">b_</span> <span class="o">+</span> <span class="n">first</span><span class="p">,</span>
+                 <span class="n">std</span><span class="o">::</span><span class="n">min</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="o">::</span><span class="n">size_type</span><span class="o">&gt;</span><span class="p">(</span><span class="n">length</span><span class="p">,</span> <span class="n">size</span><span class="p">()</span> <span class="o">-</span> <span class="n">first</span><span class="p">));</span>
+  <span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-19"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-19">&#182;</a></div><p>string work-alike functions</p></td><td class="code"><div class="highlight"><pre>  <span class="n">size_type</span> <span class="n">find</span><span class="p">(</span><span class="n">Range</span> <span class="n">str</span><span class="p">)</span> <span class="k">const</span> <span class="p">{</span>
+    <span class="k">return</span> <span class="n">qfind</span><span class="p">(</span><span class="o">*</span><span class="n">this</span><span class="p">,</span> <span class="n">str</span><span class="p">);</span>
+  <span class="p">}</span>
+
+  <span class="n">size_type</span> <span class="n">find</span><span class="p">(</span><span class="n">Range</span> <span class="n">str</span><span class="p">,</span> <span class="kt">size_t</span> <span class="n">pos</span><span class="p">)</span> <span class="k">const</span> <span class="p">{</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">pos</span> <span class="o">&gt;</span> <span class="n">size</span><span class="p">())</span> <span class="k">return</span> <span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="o">::</span><span class="n">npos</span><span class="p">;</span>
+    <span class="kt">size_t</span> <span class="n">ret</span> <span class="o">=</span> <span class="n">qfind</span><span class="p">(</span><span class="n">subpiece</span><span class="p">(</span><span class="n">pos</span><span class="p">),</span> <span class="n">str</span><span class="p">);</span>
+    <span class="k">return</span> <span class="n">ret</span> <span class="o">==</span> <span class="n">npos</span> <span class="o">?</span> <span class="n">ret</span> <span class="o">:</span> <span class="n">ret</span> <span class="o">+</span> <span class="n">pos</span><span class="p">;</span>
+  <span class="p">}</span>
+
+  <span class="n">size_type</span> <span class="n">find</span><span class="p">(</span><span class="n">Iter</span> <span class="n">s</span><span class="p">,</span> <span class="kt">size_t</span> <span class="n">pos</span><span class="p">,</span> <span class="kt">size_t</span> <span class="n">n</span><span class="p">)</span> <span class="k">const</span> <span class="p">{</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">pos</span> <span class="o">&gt;</span> <span class="n">size</span><span class="p">())</span> <span class="k">return</span> <span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="o">::</span><span class="n">npos</span><span class="p">;</span>
+    <span class="kt">size_t</span> <span class="n">ret</span> <span class="o">=</span> <span class="n">qfind</span><span class="p">(</span><span class="n">pos</span> <span class="o">?</span> <span class="n">subpiece</span><span class="p">(</span><span class="n">pos</span><span class="p">)</span> <span class="o">:</span> <span class="o">*</span><span class="n">this</span><span class="p">,</span> <span class="n">Range</span><span class="p">(</span><span class="n">s</span><span class="p">,</span> <span class="n">n</span><span class="p">));</span>
+    <span class="k">return</span> <span class="n">ret</span> <span class="o">==</span> <span class="n">npos</span> <span class="o">?</span> <span class="n">ret</span> <span class="o">:</span> <span class="n">ret</span> <span class="o">+</span> <span class="n">pos</span><span class="p">;</span>
+  <span class="p">}</span>
+
+  <span class="n">size_type</span> <span class="n">find</span><span class="p">(</span><span class="k">const</span> <span class="n">Iter</span> <span class="n">s</span><span class="p">)</span> <span class="k">const</span> <span class="p">{</span>
+    <span class="k">return</span> <span class="n">qfind</span><span class="p">(</span><span class="o">*</span><span class="n">this</span><span class="p">,</span> <span class="n">Range</span><span class="p">(</span><span class="n">s</span><span class="p">));</span>
+  <span class="p">}</span>
+
+  <span class="n">size_type</span> <span class="n">find</span><span class="p">(</span><span class="k">const</span> <span class="n">Iter</span> <span class="n">s</span><span class="p">,</span> <span class="kt">size_t</span> <span class="n">pos</span><span class="p">)</span> <span class="k">const</span> <span class="p">{</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">pos</span> <span class="o">&gt;</span> <span class="n">size</span><span class="p">())</span> <span class="k">return</span> <span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="o">::</span><span class="n">npos</span><span class="p">;</span>
+    <span class="n">size_type</span> <span class="n">ret</span> <span class="o">=</span> <span class="n">qfind</span><span class="p">(</span><span class="n">subpiece</span><span class="p">(</span><span class="n">pos</span><span class="p">),</span> <span class="n">Range</span><span class="p">(</span><span class="n">s</span><span class="p">));</span>
+    <span class="k">return</span> <span class="n">ret</span> <span class="o">==</span> <span class="n">npos</span> <span class="o">?</span> <span class="n">ret</span> <span class="o">:</span> <span class="n">ret</span> <span class="o">+</span> <span class="n">pos</span><span class="p">;</span>
+  <span class="p">}</span>
+
+  <span class="n">size_type</span> <span class="n">find</span><span class="p">(</span><span class="n">value_type</span> <span class="n">c</span><span class="p">)</span> <span class="k">const</span> <span class="p">{</span>
+    <span class="k">return</span> <span class="n">qfind</span><span class="p">(</span><span class="o">*</span><span class="n">this</span><span class="p">,</span> <span class="n">c</span><span class="p">);</span>
+  <span class="p">}</span>
+
+  <span class="n">size_type</span> <span class="n">find</span><span class="p">(</span><span class="n">value_type</span> <span class="n">c</span><span class="p">,</span> <span class="kt">size_t</span> <span class="n">pos</span><span class="p">)</span> <span class="k">const</span> <span class="p">{</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">pos</span> <span class="o">&gt;</span> <span class="n">size</span><span class="p">())</span> <span class="k">return</span> <span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="o">::</span><span class="n">npos</span><span class="p">;</span>
+    <span class="n">size_type</span> <span class="n">ret</span> <span class="o">=</span> <span class="n">qfind</span><span class="p">(</span><span class="n">subpiece</span><span class="p">(</span><span class="n">pos</span><span class="p">),</span> <span class="n">c</span><span class="p">);</span>
+    <span class="k">return</span> <span class="n">ret</span> <span class="o">==</span> <span class="n">npos</span> <span class="o">?</span> <span class="n">ret</span> <span class="o">:</span> <span class="n">ret</span> <span class="o">+</span> <span class="n">pos</span><span class="p">;</span>
+  <span class="p">}</span>
+
+  <span class="kt">void</span> <span class="n">swap</span><span class="p">(</span><span class="n">Range</span><span class="o">&amp;</span> <span class="n">rhs</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">std</span><span class="o">::</span><span class="n">swap</span><span class="p">(</span><span class="n">b_</span><span class="p">,</span> <span class="n">rhs</span><span class="p">.</span><span class="n">b_</span><span class="p">);</span>
+    <span class="n">std</span><span class="o">::</span><span class="n">swap</span><span class="p">(</span><span class="n">e_</span><span class="p">,</span> <span class="n">rhs</span><span class="p">.</span><span class="n">e_</span><span class="p">);</span>
+  <span class="p">}</span>
+
+<span class="nl">private:</span>
+  <span class="n">Iter</span> <span class="n">b_</span><span class="p">,</span> <span class="n">e_</span><span class="p">;</span>
+<span class="p">};</span>
+
+<span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">Iter</span><span class="o">&gt;</span>
+<span class="k">const</span> <span class="kr">typename</span> <span class="n">Range</span><span class="o">&lt;</span><span class="n">Iter</span><span class="o">&gt;::</span><span class="n">size_type</span> <span class="n">Range</span><span class="o">&lt;</span><span class="n">Iter</span><span class="o">&gt;::</span><span class="n">npos</span><span class="p">;</span>
+
+<span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">T</span><span class="o">&gt;</span>
+<span class="kt">void</span> <span class="n">swap</span><span class="p">(</span><span class="n">Range</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;&amp;</span> <span class="n">lhs</span><span class="p">,</span> <span class="n">Range</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;&amp;</span> <span class="n">rhs</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">lhs</span><span class="p">.</span><span class="n">swap</span><span class="p">(</span><span class="n">rhs</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="cm">/**</span>
+<span class="cm"> * Create a range from two iterators, with type deduction.</span>
+<span class="cm"> */</span>
+<span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">Iter</span><span class="o">&gt;</span>
+<span class="n">Range</span><span class="o">&lt;</span><span class="n">Iter</span><span class="o">&gt;</span> <span class="n">makeRange</span><span class="p">(</span><span class="n">Iter</span> <span class="n">first</span><span class="p">,</span> <span class="n">Iter</span> <span class="n">last</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">return</span> <span class="n">Range</span><span class="o">&lt;</span><span class="n">Iter</span><span class="o">&gt;</span><span class="p">(</span><span class="n">first</span><span class="p">,</span> <span class="n">last</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="k">typedef</span> <span class="n">Range</span><span class="o">&lt;</span><span class="k">const</span> <span class="kt">char</span><span class="o">*&gt;</span> <span class="n">StringPiece</span><span class="p">;</span>
+
+<span class="n">std</span><span class="o">::</span><span class="n">ostream</span><span class="o">&amp;</span> <span class="n">operator</span><span class="o">&lt;&lt;</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">ostream</span><span class="o">&amp;</span> <span class="n">os</span><span class="p">,</span> <span class="k">const</span> <span class="n">StringPiece</span><span class="o">&amp;</span> <span class="n">piece</span><span class="p">);</span>
+
+<span class="cm">/**</span>
+<span class="cm"> * Templated comparison operators</span>
+<span class="cm"> */</span>
+
+<span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">T</span><span class="o">&gt;</span>
+<span class="kr">inline</span> <span class="n">bool</span> <span class="n">operator</span><span class="o">==</span><span class="p">(</span><span class="k">const</span> <span class="n">Range</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;&amp;</span> <span class="n">lhs</span><span class="p">,</span> <span class="k">const</span> <span class="n">Range</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;&amp;</span> <span class="n">rhs</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">return</span> <span class="n">lhs</span><span class="p">.</span><span class="n">size</span><span class="p">()</span> <span class="o">==</span> <span class="n">rhs</span><span class="p">.</span><span class="n">size</span><span class="p">()</span> <span class="o">&amp;&amp;</span> <span class="n">lhs</span><span class="p">.</span><span class="n">compare</span><span class="p">(</span><span class="n">rhs</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">T</span><span class="o">&gt;</span>
+<span class="kr">inline</span> <span class="n">bool</span> <span class="n">operator</span><span class="o">&lt;</span><span class="p">(</span><span class="k">const</span> <span class="n">Range</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;&amp;</span> <span class="n">lhs</span><span class="p">,</span> <span class="k">const</span> <span class="n">Range</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;&amp;</span> <span class="n">rhs</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">return</span> <span class="n">lhs</span><span class="p">.</span><span class="n">compare</span><span class="p">(</span><span class="n">rhs</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="cm">/**</span>
+<span class="cm"> * Specializations of comparison operators for StringPiece</span>
+<span class="cm"> */</span>
+
+<span class="n">namespace</span> <span class="n">detail</span> <span class="p">{</span>
+
+<span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">A</span><span class="p">,</span> <span class="n">class</span> <span class="n">B</span><span class="o">&gt;</span>
+<span class="k">struct</span> <span class="n">ComparableAsStringPiece</span> <span class="p">{</span>
+  <span class="k">enum</span> <span class="p">{</span>
+    <span class="n">value</span> <span class="o">=</span>
+    <span class="p">(</span><span class="n">boost</span><span class="o">::</span><span class="n">is_convertible</span><span class="o">&lt;</span><span class="n">A</span><span class="p">,</span> <span class="n">StringPiece</span><span class="o">&gt;::</span><span class="n">value</span>
+     <span class="o">&amp;&amp;</span> <span class="n">boost</span><span class="o">::</span><span class="n">is_same</span><span class="o">&lt;</span><span class="n">B</span><span class="p">,</span> <span class="n">StringPiece</span><span class="o">&gt;::</span><span class="n">value</span><span class="p">)</span>
+    <span class="o">||</span>
+    <span class="p">(</span><span class="n">boost</span><span class="o">::</span><span class="n">is_convertible</span><span class="o">&lt;</span><span class="n">B</span><span class="p">,</span> <span class="n">StringPiece</span><span class="o">&gt;::</span><span class="n">value</span>
+     <span class="o">&amp;&amp;</span> <span class="n">boost</span><span class="o">::</span><span class="n">is_same</span><span class="o">&lt;</span><span class="n">A</span><span class="p">,</span> <span class="n">StringPiece</span><span class="o">&gt;::</span><span class="n">value</span><span class="p">)</span>
+  <span class="p">};</span>
+<span class="p">};</span>
+
+<span class="p">}</span> <span class="c1">// namespace detail</span>
+
+<span class="cm">/**</span>
+<span class="cm"> * operator== through conversion for Range&lt;const char*&gt;</span>
+<span class="cm"> */</span>
+<span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">T</span><span class="p">,</span> <span class="n">class</span> <span class="n">U</span><span class="o">&gt;</span>
+<span class="kr">typename</span>
+<span class="n">boost</span><span class="o">::</span><span class="n">enable_if_c</span><span class="o">&lt;</span><span class="n">detail</span><span class="o">::</span><span class="n">ComparableAsStringPiece</span><span class="o">&lt;</span><span class="n">T</span><span class="p">,</span> <span class="n">U</span><span class="o">&gt;::</span><span class="n">value</span><span class="p">,</span> <span class="n">bool</span><span class="o">&gt;::</span><span class="n">type</span>
+<span class="n">operator</span><span class="o">==</span><span class="p">(</span><span class="k">const</span> <span class="n">T</span><span class="o">&amp;</span> <span class="n">lhs</span><span class="p">,</span> <span class="k">const</span> <span class="n">U</span><span class="o">&amp;</span> <span class="n">rhs</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">return</span> <span class="n">StringPiece</span><span class="p">(</span><span class="n">lhs</span><span class="p">)</span> <span class="o">==</span> <span class="n">StringPiece</span><span class="p">(</span><span class="n">rhs</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="cm">/**</span>
+<span class="cm"> * operator&lt; through conversion for Range&lt;const char*&gt;</span>
+<span class="cm"> */</span>
+<span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">T</span><span class="p">,</span> <span class="n">class</span> <span class="n">U</span><span class="o">&gt;</span>
+<span class="kr">typename</span>
+<span class="n">boost</span><span class="o">::</span><span class="n">enable_if_c</span><span class="o">&lt;</span><span class="n">detail</span><span class="o">::</span><span class="n">ComparableAsStringPiece</span><span class="o">&lt;</span><span class="n">T</span><span class="p">,</span> <span class="n">U</span><span class="o">&gt;::</span><span class="n">value</span><span class="p">,</span> <span class="n">bool</span><span class="o">&gt;::</span><span class="n">type</span>
+<span class="n">operator</span><span class="o">&lt;</span><span class="p">(</span><span class="k">const</span> <span class="n">T</span><span class="o">&amp;</span> <span class="n">lhs</span><span class="p">,</span> <span class="k">const</span> <span class="n">U</span><span class="o">&amp;</span> <span class="n">rhs</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">return</span> <span class="n">StringPiece</span><span class="p">(</span><span class="n">lhs</span><span class="p">)</span> <span class="o">&lt;</span> <span class="n">StringPiece</span><span class="p">(</span><span class="n">rhs</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="cm">/**</span>
+<span class="cm"> * operator&gt; through conversion for Range&lt;const char*&gt;</span>
+<span class="cm"> */</span>
+<span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">T</span><span class="p">,</span> <span class="n">class</span> <span class="n">U</span><span class="o">&gt;</span>
+<span class="kr">typename</span>
+<span class="n">boost</span><span class="o">::</span><span class="n">enable_if_c</span><span class="o">&lt;</span><span class="n">detail</span><span class="o">::</span><span class="n">ComparableAsStringPiece</span><span class="o">&lt;</span><span class="n">T</span><span class="p">,</span> <span class="n">U</span><span class="o">&gt;::</span><span class="n">value</span><span class="p">,</span> <span class="n">bool</span><span class="o">&gt;::</span><span class="n">type</span>
+<span class="n">operator</span><span class="o">&gt;</span><span class="p">(</span><span class="k">const</span> <span class="n">T</span><span class="o">&amp;</span> <span class="n">lhs</span><span class="p">,</span> <span class="k">const</span> <span class="n">U</span><span class="o">&amp;</span> <span class="n">rhs</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">return</span> <span class="n">StringPiece</span><span class="p">(</span><span class="n">lhs</span><span class="p">)</span> <span class="o">&gt;</span> <span class="n">StringPiece</span><span class="p">(</span><span class="n">rhs</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="cm">/**</span>
+<span class="cm"> * operator&lt; through conversion for Range&lt;const char*&gt;</span>
+<span class="cm"> */</span>
+<span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">T</span><span class="p">,</span> <span class="n">class</span> <span class="n">U</span><span class="o">&gt;</span>
+<span class="kr">typename</span>
+<span class="n">boost</span><span class="o">::</span><span class="n">enable_if_c</span><span class="o">&lt;</span><span class="n">detail</span><span class="o">::</span><span class="n">ComparableAsStringPiece</span><span class="o">&lt;</span><span class="n">T</span><span class="p">,</span> <span class="n">U</span><span class="o">&gt;::</span><span class="n">value</span><span class="p">,</span> <span class="n">bool</span><span class="o">&gt;::</span><span class="n">type</span>
+<span class="n">operator</span><span class="o">&lt;=</span><span class="p">(</span><span class="k">const</span> <span class="n">T</span><span class="o">&amp;</span> <span class="n">lhs</span><span class="p">,</span> <span class="k">const</span> <span class="n">U</span><span class="o">&amp;</span> <span class="n">rhs</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">return</span> <span class="n">StringPiece</span><span class="p">(</span><span class="n">lhs</span><span class="p">)</span> <span class="o">&lt;=</span> <span class="n">StringPiece</span><span class="p">(</span><span class="n">rhs</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="cm">/**</span>
+<span class="cm"> * operator&gt; through conversion for Range&lt;const char*&gt;</span>
+<span class="cm"> */</span>
+<span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">T</span><span class="p">,</span> <span class="n">class</span> <span class="n">U</span><span class="o">&gt;</span>
+<span class="kr">typename</span>
+<span class="n">boost</span><span class="o">::</span><span class="n">enable_if_c</span><span class="o">&lt;</span><span class="n">detail</span><span class="o">::</span><span class="n">ComparableAsStringPiece</span><span class="o">&lt;</span><span class="n">T</span><span class="p">,</span> <span class="n">U</span><span class="o">&gt;::</span><span class="n">value</span><span class="p">,</span> <span class="n">bool</span><span class="o">&gt;::</span><span class="n">type</span>
+<span class="n">operator</span><span class="o">&gt;=</span><span class="p">(</span><span class="k">const</span> <span class="n">T</span><span class="o">&amp;</span> <span class="n">lhs</span><span class="p">,</span> <span class="k">const</span> <span class="n">U</span><span class="o">&amp;</span> <span class="n">rhs</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">return</span> <span class="n">StringPiece</span><span class="p">(</span><span class="n">lhs</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="n">StringPiece</span><span class="p">(</span><span class="n">rhs</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="k">struct</span> <span class="n">StringPieceHash</span> <span class="p">{</span>
+  <span class="n">std</span><span class="o">::</span><span class="kt">size_t</span> <span class="n">operator</span><span class="p">()(</span><span class="k">const</span> <span class="n">StringPiece</span><span class="o">&amp;</span> <span class="n">str</span><span class="p">)</span> <span class="k">const</span> <span class="p">{</span>
+    <span class="k">return</span> <span class="n">static_cast</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="kt">size_t</span><span class="o">&gt;</span><span class="p">(</span><span class="n">str</span><span class="p">.</span><span class="n">hash</span><span class="p">());</span>
+  <span class="p">}</span>
+<span class="p">};</span>
+
+<span class="cm">/**</span>
+<span class="cm"> * Finds substrings faster than brute force by borrowing from Boyer-Moore</span>
+<span class="cm"> */</span>
+<span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">T</span><span class="p">,</span> <span class="n">class</span> <span class="n">Comp</span><span class="o">&gt;</span>
+<span class="kt">size_t</span> <span class="n">qfind</span><span class="p">(</span><span class="k">const</span> <span class="n">Range</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;&amp;</span> <span class="n">haystack</span><span class="p">,</span>
+             <span class="k">const</span> <span class="n">Range</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;&amp;</span> <span class="n">needle</span><span class="p">,</span>
+             <span class="n">Comp</span> <span class="n">eq</span><span class="p">)</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-20"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-20">&#182;</a></div><p>Don't use std::search, use a Boyer-Moore-like trick by comparing
+the last characters first</p></td><td class="code"><div class="highlight"><pre>  <span class="k">auto</span> <span class="k">const</span> <span class="n">nsize</span> <span class="o">=</span> <span class="n">needle</span><span class="p">.</span><span class="n">size</span><span class="p">();</span>
+  <span class="k">if</span> <span class="p">(</span><span class="n">haystack</span><span class="p">.</span><span class="n">size</span><span class="p">()</span> <span class="o">&lt;</span> <span class="n">nsize</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">return</span> <span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="o">::</span><span class="n">npos</span><span class="p">;</span>
+  <span class="p">}</span>
+  <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">nsize</span><span class="p">)</span> <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+  <span class="k">auto</span> <span class="k">const</span> <span class="n">nsize_1</span> <span class="o">=</span> <span class="n">nsize</span> <span class="o">-</span> <span class="mi">1</span><span class="p">;</span>
+  <span class="k">auto</span> <span class="k">const</span> <span class="n">lastNeedle</span> <span class="o">=</span> <span class="n">needle</span><span class="p">[</span><span class="n">nsize_1</span><span class="p">];</span></pre></div></td></tr>
+
+
+<tr id="section-21"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-21">&#182;</a></div><p>Boyer-Moore skip value for the last char in the needle. Zero is
+not a valid value; skip will be computed the first time it's
+needed.</p></td><td class="code"><div class="highlight"><pre>  <span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="o">::</span><span class="n">size_type</span> <span class="n">skip</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+
+  <span class="k">auto</span> <span class="n">i</span> <span class="o">=</span> <span class="n">haystack</span><span class="p">.</span><span class="n">begin</span><span class="p">();</span>
+  <span class="k">auto</span> <span class="n">iEnd</span> <span class="o">=</span> <span class="n">haystack</span><span class="p">.</span><span class="n">end</span><span class="p">()</span> <span class="o">-</span> <span class="n">nsize_1</span><span class="p">;</span>
+
+  <span class="k">while</span> <span class="p">(</span><span class="n">i</span> <span class="o">&lt;</span> <span class="n">iEnd</span><span class="p">)</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-22"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-22">&#182;</a></div><p>Boyer-Moore: match the last element in the needle</p></td><td class="code"><div class="highlight"><pre>    <span class="k">while</span> <span class="p">(</span><span class="o">!</span><span class="n">eq</span><span class="p">(</span><span class="n">i</span><span class="p">[</span><span class="n">nsize_1</span><span class="p">],</span> <span class="n">lastNeedle</span><span class="p">))</span> <span class="p">{</span>
+      <span class="k">if</span> <span class="p">(</span><span class="o">++</span><span class="n">i</span> <span class="o">==</span> <span class="n">iEnd</span><span class="p">)</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-23"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-23">&#182;</a></div><p>not found</p></td><td class="code"><div class="highlight"><pre>        <span class="k">return</span> <span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="o">::</span><span class="n">npos</span><span class="p">;</span>
+      <span class="p">}</span>
+    <span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-24"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-24">&#182;</a></div><p>Here we know that the last char matches
+Continue in pedestrian mode</p></td><td class="code"><div class="highlight"><pre>    <span class="k">for</span> <span class="p">(</span><span class="kt">size_t</span> <span class="n">j</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="p">;</span> <span class="p">)</span> <span class="p">{</span>
+      <span class="n">assert</span><span class="p">(</span><span class="n">j</span> <span class="o">&lt;</span> <span class="n">nsize</span><span class="p">);</span>
+      <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">eq</span><span class="p">(</span><span class="n">i</span><span class="p">[</span><span class="n">j</span><span class="p">],</span> <span class="n">needle</span><span class="p">[</span><span class="n">j</span><span class="p">]))</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-25"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-25">&#182;</a></div><p>Not found, we can skip
+Compute the skip value lazily</p></td><td class="code"><div class="highlight"><pre>        <span class="k">if</span> <span class="p">(</span><span class="n">skip</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+          <span class="n">skip</span> <span class="o">=</span> <span class="mi">1</span><span class="p">;</span>
+          <span class="k">while</span> <span class="p">(</span><span class="n">skip</span> <span class="o">&lt;=</span> <span class="n">nsize_1</span> <span class="o">&amp;&amp;</span> <span class="o">!</span><span class="n">eq</span><span class="p">(</span><span class="n">needle</span><span class="p">[</span><span class="n">nsize_1</span> <span class="o">-</span> <span class="n">skip</span><span class="p">],</span> <span class="n">lastNeedle</span><span class="p">))</span> <span class="p">{</span>
+            <span class="o">++</span><span class="n">skip</span><span class="p">;</span>
+          <span class="p">}</span>
+        <span class="p">}</span>
+        <span class="n">i</span> <span class="o">+=</span> <span class="n">skip</span><span class="p">;</span>
+        <span class="k">break</span><span class="p">;</span>
+      <span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-26"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-26">&#182;</a></div><p>Check if done searching</p></td><td class="code"><div class="highlight"><pre>      <span class="k">if</span> <span class="p">(</span><span class="o">++</span><span class="n">j</span> <span class="o">==</span> <span class="n">nsize</span><span class="p">)</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-27"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-27">&#182;</a></div><p>Yay</p></td><td class="code"><div class="highlight"><pre>        <span class="k">return</span> <span class="n">i</span> <span class="o">-</span> <span class="n">haystack</span><span class="p">.</span><span class="n">begin</span><span class="p">();</span>
+      <span class="p">}</span>
+    <span class="p">}</span>
+  <span class="p">}</span>
+  <span class="k">return</span> <span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="o">::</span><span class="n">npos</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="k">struct</span> <span class="n">AsciiCaseSensitive</span> <span class="p">{</span>
+  <span class="n">bool</span> <span class="n">operator</span><span class="p">()(</span><span class="kt">char</span> <span class="n">lhs</span><span class="p">,</span> <span class="kt">char</span> <span class="n">rhs</span><span class="p">)</span> <span class="k">const</span> <span class="p">{</span>
+    <span class="k">return</span> <span class="n">lhs</span> <span class="o">==</span> <span class="n">rhs</span><span class="p">;</span>
+  <span class="p">}</span>
+<span class="p">};</span>
+
+<span class="k">struct</span> <span class="n">AsciiCaseInsensitive</span> <span class="p">{</span>
+  <span class="n">bool</span> <span class="n">operator</span><span class="p">()(</span><span class="kt">char</span> <span class="n">lhs</span><span class="p">,</span> <span class="kt">char</span> <span class="n">rhs</span><span class="p">)</span> <span class="k">const</span> <span class="p">{</span>
+    <span class="k">return</span> <span class="n">toupper</span><span class="p">(</span><span class="n">lhs</span><span class="p">)</span> <span class="o">==</span> <span class="n">toupper</span><span class="p">(</span><span class="n">rhs</span><span class="p">);</span>
+  <span class="p">}</span>
+<span class="p">};</span>
+
+<span class="k">extern</span> <span class="k">const</span> <span class="n">AsciiCaseSensitive</span> <span class="n">asciiCaseSensitive</span><span class="p">;</span>
+<span class="k">extern</span> <span class="k">const</span> <span class="n">AsciiCaseInsensitive</span> <span class="n">asciiCaseInsensitive</span><span class="p">;</span>
+
+<span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">T</span><span class="o">&gt;</span>
+<span class="kt">size_t</span> <span class="n">qfind</span><span class="p">(</span><span class="k">const</span> <span class="n">Range</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;&amp;</span> <span class="n">haystack</span><span class="p">,</span>
+             <span class="k">const</span> <span class="n">Range</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;&amp;</span> <span class="n">needle</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">return</span> <span class="n">qfind</span><span class="p">(</span><span class="n">haystack</span><span class="p">,</span> <span class="n">needle</span><span class="p">,</span> <span class="n">asciiCaseSensitive</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">T</span><span class="o">&gt;</span>
+<span class="kt">size_t</span> <span class="n">qfind</span><span class="p">(</span><span class="k">const</span> <span class="n">Range</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;&amp;</span> <span class="n">haystack</span><span class="p">,</span>
+             <span class="k">const</span> <span class="kr">typename</span> <span class="n">Range</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;::</span><span class="n">value_type</span><span class="o">&amp;</span> <span class="n">needle</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">return</span> <span class="n">qfind</span><span class="p">(</span><span class="n">haystack</span><span class="p">,</span> <span class="n">makeRange</span><span class="p">(</span><span class="o">&amp;</span><span class="n">needle</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">needle</span> <span class="o">+</span> <span class="mi">1</span><span class="p">));</span>
+<span class="p">}</span>
+
+<span class="p">}</span>  <span class="c1">// !namespace folly</span>
+
+<span class="n">FOLLY_ASSUME_FBVECTOR_COMPATIBLE_1</span><span class="p">(</span><span class="n">folly</span><span class="o">::</span><span class="n">Range</span><span class="p">);</span>
+
+<span class="cp">#endif </span><span class="c1">// FOLLY_RANGE_H_</span>
+
+</pre></div></td></tr>
+
+</tbody>
+</table>
+</div>
+
+</body>
+<script>docas={repo:"joekychen/folly",depth:1}</script>
+<script>document.write('<script src=' + ('__proto__' in {} ? 'http://cdnjs.cloudflare.com/ajax/libs/zepto/1.0rc1/zepto.min.js' : 'https://ajax.googleapis.com/ajax/libs/jquery/1.7.2/jquery.min.js')+'><\\/script>')</script>
+<script src="http://baoshan.github.com/moment/min/moment.min.js"></script>
+<script src="../javascript/docco.min.js"></script>
+</html>

@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html><head><title>joekychen/folly » folly › test › BitIteratorTest.cpp
+
+</title>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+<meta name="generator" content="Docco">
+<link rel="stylesheet" media="all" href="../../stylesheets/docco.min.css" />
+
+
+</head>
+<body>
+<div id="container">
+<div id="background"></div>
+<table cellpadding="0" cellspacing="0">
+<thead><tr><th class="docs"><a id="home" href="../../index.html"></a><h1>BitIteratorTest.cpp</h1></th><th class="code"></th></tr></thead>
+<tbody>
+
+
+<tr id="section-1"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-1">&#182;</a></div></td><td class="code"><div class="highlight"><pre><span class="cm">/*</span>
+<span class="cm"> * Copyright 2012 Facebook, Inc.</span>
+<span class="cm"> *</span>
+<span class="cm"> * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span class="cm"> * you may not use this file except in compliance with the License.</span>
+<span class="cm"> * You may obtain a copy of the License at</span>
+<span class="cm"> *</span>
+<span class="cm"> *   http://www.apache.org/licenses/LICENSE-2.0</span>
+<span class="cm"> *</span>
+<span class="cm"> * Unless required by applicable law or agreed to in writing, software</span>
+<span class="cm"> * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span class="cm"> * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span class="cm"> * See the License for the specific language governing permissions and</span>
+<span class="cm"> * limitations under the License.</span>
+<span class="cm"> */</span>
+
+<span class="cp">#include &quot;folly/Bits.h&quot;</span>
+<span class="cp">#include &quot;folly/Benchmark.h&quot;</span>
+
+<span class="cp">#include &lt;algorithm&gt;</span>
+<span class="cp">#include &lt;type_traits&gt;</span>
+<span class="cp">#include &lt;limits&gt;</span>
+<span class="cp">#include &lt;vector&gt;</span>
+<span class="cp">#include &lt;gtest/gtest.h&gt;</span>
+
+<span class="cp">#include &lt;gflags/gflags.h&gt;</span>
+
+<span class="k">using</span> <span class="k">namespace</span> <span class="n">folly</span><span class="p">;</span>
+<span class="k">using</span> <span class="k">namespace</span> <span class="n">folly</span><span class="o">::</span><span class="n">bititerator_detail</span><span class="p">;</span>
+
+<span class="k">namespace</span> <span class="p">{</span>
+
+<span class="k">template</span> <span class="o">&lt;</span><span class="k">class</span> <span class="nc">INT</span><span class="p">,</span> <span class="k">class</span> <span class="nc">IT</span><span class="o">&gt;</span>
+<span class="kt">void</span> <span class="n">checkIt</span><span class="p">(</span><span class="n">INT</span> <span class="n">exp</span><span class="p">,</span> <span class="n">IT</span><span class="o">&amp;</span> <span class="n">it</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">typedef</span> <span class="k">typename</span> <span class="n">std</span><span class="o">::</span><span class="n">make_unsigned</span><span class="o">&lt;</span><span class="n">INT</span><span class="o">&gt;::</span><span class="n">type</span> <span class="n">utype</span><span class="p">;</span>
+  <span class="n">size_t</span> <span class="n">bits</span> <span class="o">=</span> <span class="n">std</span><span class="o">::</span><span class="n">numeric_limits</span><span class="o">&lt;</span><span class="n">utype</span><span class="o">&gt;::</span><span class="n">digits</span><span class="p">;</span>
+  <span class="n">utype</span> <span class="n">uexp</span> <span class="o">=</span> <span class="n">exp</span><span class="p">;</span>
+  <span class="k">for</span> <span class="p">(</span><span class="n">size_t</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">bits</span><span class="p">;</span> <span class="o">++</span><span class="n">i</span><span class="p">)</span> <span class="p">{</span>
+    <span class="kt">bool</span> <span class="n">e</span> <span class="o">=</span> <span class="n">uexp</span> <span class="o">&amp;</span> <span class="mi">1</span><span class="p">;</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">e</span><span class="p">,</span> <span class="o">*</span><span class="n">it</span><span class="o">++</span><span class="p">);</span>
+    <span class="n">uexp</span> <span class="o">&gt;&gt;=</span> <span class="mi">1</span><span class="p">;</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="k">template</span> <span class="o">&lt;</span><span class="k">class</span> <span class="nc">INT</span><span class="p">,</span> <span class="k">class</span> <span class="nc">IT</span><span class="o">&gt;</span>
+<span class="kt">void</span> <span class="n">checkRange</span><span class="p">(</span><span class="n">INT</span> <span class="n">exp</span><span class="p">,</span> <span class="n">IT</span> <span class="n">begin</span><span class="p">,</span> <span class="n">IT</span> <span class="n">end</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">typedef</span> <span class="k">typename</span> <span class="n">std</span><span class="o">::</span><span class="n">make_unsigned</span><span class="o">&lt;</span><span class="n">INT</span><span class="o">&gt;::</span><span class="n">type</span> <span class="n">utype</span><span class="p">;</span>
+  <span class="n">utype</span> <span class="n">uexp</span> <span class="o">=</span> <span class="n">exp</span><span class="p">;</span>
+  <span class="n">size_t</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+  <span class="k">auto</span> <span class="n">bitEnd</span> <span class="o">=</span> <span class="n">makeBitIterator</span><span class="p">(</span><span class="n">end</span><span class="p">);</span>
+  <span class="k">for</span> <span class="p">(</span><span class="n">BitIterator</span><span class="o">&lt;</span><span class="n">IT</span><span class="o">&gt;</span> <span class="n">it</span> <span class="o">=</span> <span class="n">makeBitIterator</span><span class="p">(</span><span class="n">begin</span><span class="p">);</span> <span class="n">it</span> <span class="o">!=</span> <span class="n">bitEnd</span><span class="p">;</span> <span class="o">++</span><span class="n">it</span><span class="p">,</span> <span class="o">++</span><span class="n">i</span><span class="p">)</span> <span class="p">{</span>
+    <span class="kt">bool</span> <span class="n">e</span> <span class="o">=</span> <span class="n">uexp</span> <span class="o">&amp;</span> <span class="mi">1</span><span class="p">;</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">e</span><span class="p">,</span> <span class="o">*</span><span class="n">it</span><span class="p">);</span>
+    <span class="n">uexp</span> <span class="o">&gt;&gt;=</span> <span class="mi">1</span><span class="p">;</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="p">}</span>  <span class="c1">// namespace</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">BitIterator</span><span class="p">,</span> <span class="n">Simple</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="kt">int</span><span class="o">&gt;</span> <span class="n">v</span><span class="p">;</span>
+  <span class="n">v</span><span class="p">.</span><span class="n">push_back</span><span class="p">(</span><span class="mh">0x10</span><span class="p">);</span>
+  <span class="n">v</span><span class="p">.</span><span class="n">push_back</span><span class="p">(</span><span class="mh">0x42</span><span class="p">);</span>
+  <span class="k">auto</span> <span class="n">bi</span><span class="p">(</span><span class="n">makeBitIterator</span><span class="p">(</span><span class="n">v</span><span class="p">.</span><span class="n">begin</span><span class="p">()));</span>
+  <span class="n">checkIt</span><span class="p">(</span><span class="mh">0x10</span><span class="p">,</span> <span class="n">bi</span><span class="p">);</span>
+  <span class="n">checkIt</span><span class="p">(</span><span class="mh">0x42</span><span class="p">,</span> <span class="n">bi</span><span class="p">);</span>
+  <span class="n">checkRange</span><span class="p">(</span><span class="mh">0x0000004200000010ULL</span><span class="p">,</span> <span class="n">v</span><span class="p">.</span><span class="n">begin</span><span class="p">(),</span> <span class="n">v</span><span class="p">.</span><span class="n">end</span><span class="p">());</span>
+
+  <span class="n">v</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+  <span class="n">bi</span> <span class="o">=</span> <span class="n">v</span><span class="p">.</span><span class="n">begin</span><span class="p">();</span>
+  <span class="o">*</span><span class="n">bi</span><span class="o">++</span> <span class="o">=</span> <span class="kc">true</span><span class="p">;</span>     <span class="c1">// 1</span>
+  <span class="o">*</span><span class="n">bi</span><span class="o">++</span> <span class="o">=</span> <span class="kc">false</span><span class="p">;</span>
+  <span class="o">*</span><span class="n">bi</span><span class="o">++</span> <span class="o">=</span> <span class="kc">true</span><span class="p">;</span>     <span class="c1">// 4</span>
+  <span class="o">*</span><span class="n">bi</span><span class="o">++</span> <span class="o">=</span> <span class="kc">false</span><span class="p">;</span>
+  <span class="o">*</span><span class="n">bi</span><span class="o">++</span> <span class="o">=</span> <span class="kc">false</span><span class="p">;</span>
+  <span class="o">*</span><span class="n">bi</span><span class="o">++</span> <span class="o">=</span> <span class="kc">true</span><span class="p">;</span>     <span class="c1">// 32</span>
+  <span class="o">*++</span><span class="n">bi</span> <span class="o">=</span> <span class="kc">true</span><span class="p">;</span>     <span class="c1">// 128 (note pre-increment)</span>
+
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">165</span><span class="p">,</span> <span class="n">v</span><span class="p">[</span><span class="mi">0</span><span class="p">]);</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">BitIterator</span><span class="p">,</span> <span class="n">Const</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="kt">int</span><span class="o">&gt;</span> <span class="n">v</span><span class="p">;</span>
+  <span class="n">v</span><span class="p">.</span><span class="n">push_back</span><span class="p">(</span><span class="mh">0x10</span><span class="p">);</span>
+  <span class="n">v</span><span class="p">.</span><span class="n">push_back</span><span class="p">(</span><span class="mh">0x42</span><span class="p">);</span>
+  <span class="k">auto</span> <span class="n">bi</span><span class="p">(</span><span class="n">makeBitIterator</span><span class="p">(</span><span class="n">v</span><span class="p">.</span><span class="n">cbegin</span><span class="p">()));</span>
+  <span class="n">checkIt</span><span class="p">(</span><span class="mh">0x10</span><span class="p">,</span> <span class="n">bi</span><span class="p">);</span>
+  <span class="n">checkIt</span><span class="p">(</span><span class="mh">0x42</span><span class="p">,</span> <span class="n">bi</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="k">namespace</span> <span class="p">{</span>
+
+<span class="k">template</span> <span class="o">&lt;</span><span class="k">class</span> <span class="nc">BaseIter</span><span class="o">&gt;</span>
+<span class="n">BitIterator</span><span class="o">&lt;</span><span class="n">BaseIter</span><span class="o">&gt;</span> <span class="n">simpleFFS</span><span class="p">(</span><span class="n">BitIterator</span><span class="o">&lt;</span><span class="n">BaseIter</span><span class="o">&gt;</span> <span class="n">begin</span><span class="p">,</span>
+                                <span class="n">BitIterator</span><span class="o">&lt;</span><span class="n">BaseIter</span><span class="o">&gt;</span> <span class="n">end</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">return</span> <span class="n">std</span><span class="o">::</span><span class="n">find</span><span class="p">(</span><span class="n">begin</span><span class="p">,</span> <span class="n">end</span><span class="p">,</span> <span class="kc">true</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="k">template</span> <span class="o">&lt;</span><span class="k">class</span> <span class="nc">FFS</span><span class="o">&gt;</span>
+<span class="kt">void</span> <span class="n">runFFSTest</span><span class="p">(</span><span class="n">FFS</span> <span class="n">fn</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">static</span> <span class="k">const</span> <span class="n">size_t</span> <span class="n">bpb</span> <span class="o">=</span> <span class="mi">8</span> <span class="o">*</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">uint64_t</span><span class="p">);</span>
+  <span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="n">uint64_t</span><span class="o">&gt;</span> <span class="n">data</span><span class="p">;</span>
+  <span class="k">for</span> <span class="p">(</span><span class="n">size_t</span> <span class="n">nblocks</span> <span class="o">=</span> <span class="mi">1</span><span class="p">;</span> <span class="n">nblocks</span> <span class="o">&lt;=</span> <span class="mi">3</span><span class="p">;</span> <span class="o">++</span><span class="n">nblocks</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">size_t</span> <span class="n">nbits</span> <span class="o">=</span> <span class="n">nblocks</span> <span class="o">*</span> <span class="n">bpb</span><span class="p">;</span>
+    <span class="n">data</span><span class="p">.</span><span class="n">resize</span><span class="p">(</span><span class="n">nblocks</span><span class="p">);</span>
+    <span class="k">auto</span> <span class="n">begin</span> <span class="o">=</span> <span class="n">makeBitIterator</span><span class="p">(</span><span class="n">data</span><span class="p">.</span><span class="n">cbegin</span><span class="p">());</span>
+    <span class="k">auto</span> <span class="n">end</span> <span class="o">=</span> <span class="n">makeBitIterator</span><span class="p">(</span><span class="n">data</span><span class="p">.</span><span class="n">cend</span><span class="p">());</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">nbits</span><span class="p">,</span> <span class="n">end</span> <span class="o">-</span> <span class="n">begin</span><span class="p">);</span>
+    <span class="n">EXPECT_FALSE</span><span class="p">(</span><span class="n">begin</span> <span class="o">==</span> <span class="n">end</span><span class="p">);</span></pre></div></td></tr>
+
+
+<tr id="section-2"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-2">&#182;</a></div><p>Try every possible combination of first bit set (including none),
+start bit, end bit</p></td><td class="code"><div class="highlight"><pre>    <span class="k">for</span> <span class="p">(</span><span class="n">size_t</span> <span class="n">firstSet</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">firstSet</span> <span class="o">&lt;=</span> <span class="n">nbits</span><span class="p">;</span> <span class="o">++</span><span class="n">firstSet</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">data</span><span class="p">.</span><span class="n">assign</span><span class="p">(</span><span class="n">nblocks</span><span class="p">,</span> <span class="mi">0</span><span class="p">);</span>
+      <span class="k">if</span> <span class="p">(</span><span class="n">firstSet</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">size_t</span> <span class="n">b</span> <span class="o">=</span> <span class="n">firstSet</span> <span class="o">-</span> <span class="mi">1</span><span class="p">;</span>
+        <span class="n">data</span><span class="p">[</span><span class="n">b</span> <span class="o">/</span> <span class="n">bpb</span><span class="p">]</span> <span class="o">|=</span> <span class="p">(</span><span class="mi">1ULL</span> <span class="o">&lt;&lt;</span> <span class="p">(</span><span class="n">b</span> <span class="o">%</span> <span class="n">bpb</span><span class="p">));</span>
+      <span class="p">}</span>
+      <span class="k">for</span> <span class="p">(</span><span class="n">size_t</span> <span class="n">startBit</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">startBit</span> <span class="o">&lt;=</span> <span class="n">nbits</span><span class="p">;</span> <span class="o">++</span><span class="n">startBit</span><span class="p">)</span> <span class="p">{</span>
+        <span class="k">for</span> <span class="p">(</span><span class="n">size_t</span> <span class="n">endBit</span> <span class="o">=</span> <span class="n">startBit</span><span class="p">;</span> <span class="n">endBit</span> <span class="o">&lt;=</span> <span class="n">nbits</span><span class="p">;</span> <span class="o">++</span><span class="n">endBit</span><span class="p">)</span> <span class="p">{</span>
+          <span class="k">auto</span> <span class="n">p</span> <span class="o">=</span> <span class="n">begin</span> <span class="o">+</span> <span class="n">startBit</span><span class="p">;</span>
+          <span class="k">auto</span> <span class="n">q</span> <span class="o">=</span> <span class="n">begin</span> <span class="o">+</span> <span class="n">endBit</span><span class="p">;</span>
+          <span class="n">p</span> <span class="o">=</span> <span class="n">fn</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="n">q</span><span class="p">);</span>
+          <span class="k">if</span> <span class="p">(</span><span class="n">firstSet</span> <span class="o">&lt;</span> <span class="n">startBit</span> <span class="o">+</span> <span class="mi">1</span> <span class="o">||</span> <span class="n">firstSet</span> <span class="o">&gt;=</span> <span class="n">endBit</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span> <span class="p">{</span>
+            <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">endBit</span><span class="p">,</span> <span class="n">p</span> <span class="o">-</span> <span class="n">begin</span><span class="p">)</span>
+              <span class="o">&lt;&lt;</span> <span class="s">&quot;  firstSet=&quot;</span> <span class="o">&lt;&lt;</span> <span class="n">firstSet</span> <span class="o">&lt;&lt;</span> <span class="s">&quot; startBit=&quot;</span> <span class="o">&lt;&lt;</span> <span class="n">startBit</span>
+              <span class="o">&lt;&lt;</span> <span class="s">&quot; endBit=&quot;</span> <span class="o">&lt;&lt;</span> <span class="n">endBit</span> <span class="o">&lt;&lt;</span> <span class="s">&quot; nblocks=&quot;</span> <span class="o">&lt;&lt;</span> <span class="n">nblocks</span><span class="p">;</span>
+          <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+            <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">firstSet</span> <span class="o">-</span> <span class="mi">1</span><span class="p">,</span> <span class="n">p</span> <span class="o">-</span> <span class="n">begin</span><span class="p">)</span>
+              <span class="o">&lt;&lt;</span> <span class="s">&quot;  firstSet=&quot;</span> <span class="o">&lt;&lt;</span> <span class="n">firstSet</span> <span class="o">&lt;&lt;</span> <span class="s">&quot; startBit=&quot;</span> <span class="o">&lt;&lt;</span> <span class="n">startBit</span>
+              <span class="o">&lt;&lt;</span> <span class="s">&quot; endBit=&quot;</span> <span class="o">&lt;&lt;</span> <span class="n">endBit</span> <span class="o">&lt;&lt;</span> <span class="s">&quot; nblocks=&quot;</span> <span class="o">&lt;&lt;</span> <span class="n">nblocks</span><span class="p">;</span>
+          <span class="p">}</span>
+        <span class="p">}</span>
+      <span class="p">}</span>
+    <span class="p">}</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="kt">void</span> <span class="n">runSimpleFFSTest</span><span class="p">(</span><span class="kt">int</span> <span class="n">iters</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">auto</span> <span class="n">fn</span> <span class="o">=</span> <span class="n">simpleFFS</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="n">uint64_t</span><span class="o">&gt;::</span><span class="n">const_iterator</span><span class="o">&gt;</span><span class="p">;</span>
+  <span class="k">while</span> <span class="p">(</span><span class="n">iters</span><span class="o">--</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">runFFSTest</span><span class="p">(</span><span class="n">fn</span><span class="p">);</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="kt">void</span> <span class="n">runRealFFSTest</span><span class="p">(</span><span class="kt">int</span> <span class="n">iters</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">auto</span> <span class="n">fn</span> <span class="o">=</span> <span class="n">findFirstSet</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="n">uint64_t</span><span class="o">&gt;::</span><span class="n">const_iterator</span><span class="o">&gt;</span><span class="p">;</span>
+  <span class="k">while</span> <span class="p">(</span><span class="n">iters</span><span class="o">--</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">runFFSTest</span><span class="p">(</span><span class="n">fn</span><span class="p">);</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">BitIterator</span><span class="p">,</span> <span class="n">SimpleFindFirstSet</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">runSimpleFFSTest</span><span class="p">(</span><span class="mi">1</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">BitIterator</span><span class="p">,</span> <span class="n">FindFirstSet</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">runRealFFSTest</span><span class="p">(</span><span class="mi">1</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="n">BENCHMARK</span><span class="p">(</span><span class="n">SimpleFFSTest</span><span class="p">,</span> <span class="n">iters</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">runSimpleFFSTest</span><span class="p">(</span><span class="n">iters</span><span class="p">);</span>
+<span class="p">}</span>
+<span class="n">BENCHMARK</span><span class="p">(</span><span class="n">RealFFSTest</span><span class="p">,</span> <span class="n">iters</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">runRealFFSTest</span><span class="p">(</span><span class="n">iters</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="cm">/* --bm_min_iters=10 --bm_max_iters=100</span>
+
+<span class="cm">Benchmark                               Iters   Total t    t/iter iter/sec</span>
+<span class="cm">------------------------------------------------------------------------------</span>
+<span class="cm">runSimpleFFSTest                           10   4.82 s     482 ms  2.075</span>
+<span class="cm">runRealFFSTest                             19  2.011 s   105.9 ms  9.447</span>
+
+<span class="cm">*/</span>
+
+<span class="kt">int</span> <span class="n">main</span><span class="p">(</span><span class="kt">int</span> <span class="n">argc</span><span class="p">,</span> <span class="kt">char</span><span class="o">**</span> <span class="n">argv</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">testing</span><span class="o">::</span><span class="n">InitGoogleTest</span><span class="p">(</span><span class="o">&amp;</span><span class="n">argc</span><span class="p">,</span> <span class="n">argv</span><span class="p">);</span>
+  <span class="n">google</span><span class="o">::</span><span class="n">ParseCommandLineFlags</span><span class="p">(</span><span class="o">&amp;</span><span class="n">argc</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">argv</span><span class="p">,</span> <span class="kc">true</span><span class="p">);</span>
+  <span class="k">auto</span> <span class="n">ret</span> <span class="o">=</span> <span class="n">RUN_ALL_TESTS</span><span class="p">();</span>
+  <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">ret</span> <span class="o">&amp;&amp;</span> <span class="n">FLAGS_benchmark</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">folly</span><span class="o">::</span><span class="n">runBenchmarks</span><span class="p">();</span>
+  <span class="p">}</span>
+  <span class="k">return</span> <span class="n">ret</span><span class="p">;</span>
+<span class="p">}</span>
+
+</pre></div></td></tr>
+
+</tbody>
+</table>
+</div>
+
+</body>
+<script>docas={repo:"joekychen/folly",depth:2}</script>
+<script>document.write('<script src=' + ('__proto__' in {} ? 'http://cdnjs.cloudflare.com/ajax/libs/zepto/1.0rc1/zepto.min.js' : 'https://ajax.googleapis.com/ajax/libs/jquery/1.7.2/jquery.min.js')+'><\\/script>')</script>
+<script src="http://baoshan.github.com/moment/min/moment.min.js"></script>
+<script src="../../javascript/docco.min.js"></script>
+</html>

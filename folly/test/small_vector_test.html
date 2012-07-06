@@ -1,0 +1,787 @@
+<!DOCTYPE html>
+<html><head><title>joekychen/folly » folly › test › small_vector_test.cpp
+
+</title>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+<meta name="generator" content="Docco">
+<link rel="stylesheet" media="all" href="../../stylesheets/docco.min.css" />
+
+
+</head>
+<body>
+<div id="container">
+<div id="background"></div>
+<table cellpadding="0" cellspacing="0">
+<thead><tr><th class="docs"><a id="home" href="../../index.html"></a><h1>small_vector_test.cpp</h1></th><th class="code"></th></tr></thead>
+<tbody>
+
+
+<tr id="section-1"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-1">&#182;</a></div></td><td class="code"><div class="highlight"><pre><span class="cm">/*</span>
+<span class="cm"> * Copyright 2012 Facebook, Inc.</span>
+<span class="cm"> *</span>
+<span class="cm"> * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span class="cm"> * you may not use this file except in compliance with the License.</span>
+<span class="cm"> * You may obtain a copy of the License at</span>
+<span class="cm"> *</span>
+<span class="cm"> *   http://www.apache.org/licenses/LICENSE-2.0</span>
+<span class="cm"> *</span>
+<span class="cm"> * Unless required by applicable law or agreed to in writing, software</span>
+<span class="cm"> * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span class="cm"> * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span class="cm"> * See the License for the specific language governing permissions and</span>
+<span class="cm"> * limitations under the License.</span>
+<span class="cm"> */</span>
+
+<span class="cp">#include &quot;folly/small_vector.h&quot;</span>
+
+<span class="cp">#include &lt;gtest/gtest.h&gt;</span>
+<span class="cp">#include &lt;string&gt;</span>
+<span class="cp">#include &lt;memory&gt;</span>
+<span class="cp">#include &lt;iostream&gt;</span>
+<span class="cp">#include &lt;limits&gt;</span>
+
+<span class="cp">#include &lt;boost/algorithm/string.hpp&gt;</span>
+
+<span class="cp">#include &quot;folly/Conv.h&quot;</span>
+
+<span class="k">using</span> <span class="n">folly</span><span class="o">::</span><span class="n">small_vector</span><span class="p">;</span>
+<span class="k">using</span> <span class="k">namespace</span> <span class="n">folly</span><span class="o">::</span><span class="n">small_vector_policy</span><span class="p">;</span>
+
+<span class="cp">#if defined(__x86_64__)</span>
+
+<span class="n">static_assert</span><span class="p">(</span><span class="k">sizeof</span><span class="p">(</span><span class="n">small_vector</span><span class="o">&lt;</span><span class="kt">int</span><span class="o">&gt;</span><span class="p">)</span> <span class="o">==</span> <span class="mi">16</span><span class="p">,</span>
+              <span class="s">&quot;Object size is not what we expect for small_vector&lt;int&gt;&quot;</span><span class="p">);</span>
+<span class="n">static_assert</span><span class="p">(</span><span class="k">sizeof</span><span class="p">(</span><span class="n">small_vector</span><span class="o">&lt;</span><span class="n">int32_t</span><span class="p">,</span><span class="mi">2</span><span class="o">&gt;</span><span class="p">)</span> <span class="o">==</span> <span class="mi">16</span><span class="p">,</span>
+              <span class="s">&quot;Object size is not what we expect for &quot;</span>
+              <span class="s">&quot;small_vector&lt;int32_t,2&gt;&quot;</span><span class="p">);</span>
+<span class="n">static_assert</span><span class="p">(</span><span class="k">sizeof</span><span class="p">(</span><span class="n">small_vector</span><span class="o">&lt;</span><span class="kt">int</span><span class="p">,</span><span class="mi">10</span><span class="o">&gt;</span><span class="p">)</span> <span class="o">==</span>
+                <span class="mi">10</span> <span class="o">*</span> <span class="k">sizeof</span><span class="p">(</span><span class="kt">int</span><span class="p">)</span> <span class="o">+</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">size_t</span><span class="p">),</span>
+              <span class="s">&quot;Object size is not what we expect for small_vector&lt;int,10&gt;&quot;</span><span class="p">);</span>
+
+<span class="n">static_assert</span><span class="p">(</span><span class="k">sizeof</span><span class="p">(</span><span class="n">small_vector</span><span class="o">&lt;</span><span class="n">int32_t</span><span class="p">,</span><span class="mi">1</span><span class="p">,</span><span class="n">uint32_t</span><span class="o">&gt;</span><span class="p">)</span> <span class="o">==</span>
+                <span class="mi">8</span> <span class="o">+</span> <span class="mi">4</span><span class="p">,</span>
+              <span class="s">&quot;small_vector&lt;int32_t,1,uint32_t&gt; is wrong size&quot;</span><span class="p">);</span>
+<span class="n">static_assert</span><span class="p">(</span><span class="k">sizeof</span><span class="p">(</span><span class="n">small_vector</span><span class="o">&lt;</span><span class="n">int32_t</span><span class="p">,</span><span class="mi">1</span><span class="p">,</span><span class="n">uint16_t</span><span class="o">&gt;</span><span class="p">)</span> <span class="o">==</span>
+                <span class="mi">8</span> <span class="o">+</span> <span class="mi">2</span><span class="p">,</span>
+              <span class="s">&quot;small_vector&lt;int32_t,1,uint32_t&gt; is wrong size&quot;</span><span class="p">);</span>
+<span class="n">static_assert</span><span class="p">(</span><span class="k">sizeof</span><span class="p">(</span><span class="n">small_vector</span><span class="o">&lt;</span><span class="n">int32_t</span><span class="p">,</span><span class="mi">1</span><span class="p">,</span><span class="n">uint8_t</span><span class="o">&gt;</span><span class="p">)</span> <span class="o">==</span>
+                <span class="mi">8</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span>
+              <span class="s">&quot;small_vector&lt;int32_t,1,uint32_t&gt; is wrong size&quot;</span><span class="p">);</span>
+
+<span class="n">static_assert</span><span class="p">(</span><span class="k">sizeof</span><span class="p">(</span><span class="n">small_vector</span><span class="o">&lt;</span><span class="n">int32_t</span><span class="p">,</span><span class="mi">1</span><span class="p">,</span><span class="n">OneBitMutex</span><span class="o">&gt;</span><span class="p">)</span> <span class="o">==</span> <span class="mi">16</span><span class="p">,</span>
+              <span class="s">&quot;OneBitMutex took more space than expected&quot;</span><span class="p">);</span>
+
+<span class="n">static_assert</span><span class="p">(</span><span class="k">sizeof</span><span class="p">(</span><span class="n">small_vector</span><span class="o">&lt;</span><span class="n">int16_t</span><span class="p">,</span><span class="mi">4</span><span class="p">,</span><span class="n">uint16_t</span><span class="o">&gt;</span><span class="p">)</span> <span class="o">==</span> <span class="mi">10</span><span class="p">,</span>
+              <span class="s">&quot;Sizeof unexpectedly large&quot;</span><span class="p">);</span>
+<span class="n">static_assert</span><span class="p">(</span><span class="k">sizeof</span><span class="p">(</span><span class="n">small_vector</span><span class="o">&lt;</span><span class="n">int16_t</span><span class="p">,</span><span class="mi">4</span><span class="p">,</span><span class="n">uint16_t</span><span class="p">,</span><span class="n">OneBitMutex</span><span class="o">&gt;</span><span class="p">)</span> <span class="o">==</span> <span class="mi">10</span><span class="p">,</span>
+              <span class="s">&quot;Sizeof unexpectedly large&quot;</span><span class="p">);</span>
+<span class="n">static_assert</span><span class="p">(</span><span class="k">sizeof</span><span class="p">(</span><span class="n">small_vector</span><span class="o">&lt;</span><span class="n">int16_t</span><span class="p">,</span><span class="mi">4</span><span class="p">,</span><span class="n">NoHeap</span><span class="p">,</span><span class="n">uint16_t</span><span class="p">,</span>
+                                  <span class="n">OneBitMutex</span><span class="o">&gt;</span><span class="p">)</span> <span class="o">==</span> <span class="mi">10</span><span class="p">,</span>
+              <span class="s">&quot;Sizeof unexpectedly large&quot;</span><span class="p">);</span>
+
+<span class="cp">#endif</span>
+
+<span class="k">namespace</span> <span class="p">{</span>
+
+<span class="k">struct</span> <span class="n">NontrivialType</span> <span class="p">{</span>
+  <span class="k">static</span> <span class="kt">int</span> <span class="n">ctored</span><span class="p">;</span>
+  <span class="k">explicit</span> <span class="n">NontrivialType</span><span class="p">()</span> <span class="o">:</span> <span class="n">a</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span> <span class="p">{}</span>
+
+  <span class="cm">/* implicit */</span> <span class="n">NontrivialType</span><span class="p">(</span><span class="kt">int</span> <span class="n">a</span><span class="p">)</span> <span class="o">:</span> <span class="n">a</span><span class="p">(</span><span class="n">a</span><span class="p">)</span> <span class="p">{</span>
+    <span class="o">++</span><span class="n">ctored</span><span class="p">;</span>
+  <span class="p">}</span>
+
+  <span class="n">NontrivialType</span><span class="p">(</span><span class="n">NontrivialType</span> <span class="k">const</span><span class="o">&amp;</span> <span class="n">s</span><span class="p">)</span> <span class="p">{</span>
+    <span class="o">++</span><span class="n">ctored</span><span class="p">;</span>
+  <span class="p">}</span>
+
+  <span class="n">NontrivialType</span><span class="o">&amp;</span> <span class="k">operator</span><span class="o">=</span><span class="p">(</span><span class="n">NontrivialType</span> <span class="k">const</span><span class="o">&amp;</span> <span class="n">o</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">a</span> <span class="o">=</span> <span class="n">o</span><span class="p">.</span><span class="n">a</span><span class="p">;</span>
+    <span class="k">return</span> <span class="o">*</span><span class="k">this</span><span class="p">;</span>
+  <span class="p">}</span>
+
+  <span class="n">int32_t</span> <span class="n">a</span><span class="p">;</span>
+<span class="p">};</span>
+<span class="n">static_assert</span><span class="p">(</span><span class="o">!</span><span class="n">boost</span><span class="o">::</span><span class="n">has_trivial_copy</span><span class="o">&lt;</span><span class="n">NontrivialType</span><span class="o">&gt;::</span><span class="n">value</span><span class="p">,</span>
+              <span class="s">&quot;NontrivialType isn&#39;t trivially copyable&quot;</span><span class="p">);</span>
+
+<span class="kt">int</span> <span class="n">NontrivialType</span><span class="o">::</span><span class="n">ctored</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+
+<span class="k">struct</span> <span class="n">TestException</span> <span class="p">{};</span>
+
+<span class="kt">int</span> <span class="n">throwCounter</span> <span class="o">=</span> <span class="mi">1</span><span class="p">;</span>
+<span class="kt">void</span> <span class="n">MaybeThrow</span><span class="p">()</span> <span class="p">{</span>
+  <span class="k">if</span> <span class="p">(</span><span class="o">!--</span><span class="n">throwCounter</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">throw</span> <span class="n">TestException</span><span class="p">();</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="k">const</span> <span class="kt">int</span> <span class="n">kMagic</span> <span class="o">=</span> <span class="mh">0xdeadbeef</span><span class="p">;</span>
+<span class="k">struct</span> <span class="n">Thrower</span> <span class="p">{</span>
+  <span class="k">static</span> <span class="kt">int</span> <span class="n">alive</span><span class="p">;</span>
+
+  <span class="n">Thrower</span><span class="p">()</span> <span class="o">:</span> <span class="n">magic</span><span class="p">(</span><span class="n">kMagic</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">magic</span><span class="p">,</span> <span class="n">kMagic</span><span class="p">);</span>
+    <span class="n">MaybeThrow</span><span class="p">();</span>
+    <span class="o">++</span><span class="n">alive</span><span class="p">;</span>
+  <span class="p">}</span>
+  <span class="n">Thrower</span><span class="p">(</span><span class="n">Thrower</span> <span class="k">const</span><span class="o">&amp;</span> <span class="n">other</span><span class="p">)</span> <span class="o">:</span> <span class="n">magic</span><span class="p">(</span><span class="n">other</span><span class="p">.</span><span class="n">magic</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">magic</span><span class="p">,</span> <span class="n">kMagic</span><span class="p">);</span>
+    <span class="n">MaybeThrow</span><span class="p">();</span>
+    <span class="o">++</span><span class="n">alive</span><span class="p">;</span>
+  <span class="p">}</span>
+  <span class="o">~</span><span class="n">Thrower</span><span class="p">()</span> <span class="n">noexcept</span> <span class="p">{</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">magic</span><span class="p">,</span> <span class="n">kMagic</span><span class="p">);</span>
+    <span class="n">magic</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+    <span class="o">--</span><span class="n">alive</span><span class="p">;</span>
+  <span class="p">}</span>
+
+  <span class="n">Thrower</span><span class="o">&amp;</span> <span class="k">operator</span><span class="o">=</span><span class="p">(</span><span class="n">Thrower</span> <span class="k">const</span><span class="o">&amp;</span> <span class="n">other</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">magic</span><span class="p">,</span> <span class="n">kMagic</span><span class="p">);</span>
+    <span class="n">MaybeThrow</span><span class="p">();</span>
+    <span class="k">return</span> <span class="o">*</span><span class="k">this</span><span class="p">;</span>
+  <span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-2"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-2">&#182;</a></div><p>This is just to try to make sure we don't get our member
+functions called on uninitialized memory.</p></td><td class="code"><div class="highlight"><pre>  <span class="kt">int</span> <span class="n">magic</span><span class="p">;</span>
+<span class="p">};</span>
+
+<span class="kt">int</span> <span class="n">Thrower</span><span class="o">::</span><span class="n">alive</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span></pre></div></td></tr>
+
+
+<tr id="section-3"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-3">&#182;</a></div><p>Type that counts how many exist and doesn't support copy
+construction.</p></td><td class="code"><div class="highlight"><pre><span class="k">struct</span> <span class="n">NoncopyableCounter</span> <span class="p">{</span>
+  <span class="k">static</span> <span class="kt">int</span> <span class="n">alive</span><span class="p">;</span>
+  <span class="n">NoncopyableCounter</span><span class="p">()</span> <span class="p">{</span>
+    <span class="o">++</span><span class="n">alive</span><span class="p">;</span>
+  <span class="p">}</span>
+  <span class="o">~</span><span class="n">NoncopyableCounter</span><span class="p">()</span> <span class="p">{</span>
+    <span class="o">--</span><span class="n">alive</span><span class="p">;</span>
+  <span class="p">}</span>
+  <span class="n">NoncopyableCounter</span><span class="p">(</span><span class="n">NoncopyableCounter</span><span class="o">&amp;&amp;</span><span class="p">)</span> <span class="p">{</span> <span class="o">++</span><span class="n">alive</span><span class="p">;</span> <span class="p">}</span>
+  <span class="n">NoncopyableCounter</span><span class="p">(</span><span class="n">NoncopyableCounter</span> <span class="k">const</span><span class="o">&amp;</span><span class="p">)</span> <span class="o">=</span> <span class="k">delete</span><span class="p">;</span>
+  <span class="n">NoncopyableCounter</span><span class="o">&amp;</span> <span class="k">operator</span><span class="o">=</span><span class="p">(</span><span class="n">NoncopyableCounter</span> <span class="k">const</span><span class="o">&amp;</span><span class="p">)</span> <span class="k">const</span> <span class="o">=</span> <span class="k">delete</span><span class="p">;</span>
+  <span class="n">NoncopyableCounter</span><span class="o">&amp;</span> <span class="k">operator</span><span class="o">=</span><span class="p">(</span><span class="n">NoncopyableCounter</span><span class="o">&amp;&amp;</span><span class="p">)</span> <span class="p">{</span> <span class="k">return</span> <span class="o">*</span><span class="k">this</span><span class="p">;</span> <span class="p">}</span>
+<span class="p">};</span>
+<span class="kt">int</span> <span class="n">NoncopyableCounter</span><span class="o">::</span><span class="n">alive</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span></pre></div></td></tr>
+
+
+<tr id="section-4"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-4">&#182;</a></div><p>Check that throws don't break the basic guarantee for some cases.
+Uses the method for testing exception safety described at
+http://www.boost.org/community/exception_safety.html, to force all
+throwing code paths to occur.</p></td><td class="code"><div class="highlight"><pre><span class="k">struct</span> <span class="n">TestBasicGuarantee</span> <span class="p">{</span>
+  <span class="n">folly</span><span class="o">::</span><span class="n">small_vector</span><span class="o">&lt;</span><span class="n">Thrower</span><span class="p">,</span><span class="mi">3</span><span class="o">&gt;</span> <span class="n">vec</span><span class="p">;</span>
+  <span class="kt">int</span> <span class="k">const</span> <span class="n">prepopulate</span><span class="p">;</span>
+
+  <span class="k">explicit</span> <span class="n">TestBasicGuarantee</span><span class="p">(</span><span class="kt">int</span> <span class="n">prepopulate</span><span class="p">)</span>
+    <span class="o">:</span> <span class="n">prepopulate</span><span class="p">(</span><span class="n">prepopulate</span><span class="p">)</span>
+  <span class="p">{</span>
+    <span class="n">throwCounter</span> <span class="o">=</span> <span class="mi">1000</span><span class="p">;</span>
+    <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">prepopulate</span><span class="p">;</span> <span class="o">++</span><span class="n">i</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">vec</span><span class="p">.</span><span class="n">push_back</span><span class="p">(</span><span class="n">Thrower</span><span class="p">());</span>
+    <span class="p">}</span>
+  <span class="p">}</span>
+
+  <span class="o">~</span><span class="n">TestBasicGuarantee</span><span class="p">()</span> <span class="p">{</span>
+    <span class="n">throwCounter</span> <span class="o">=</span> <span class="mi">1000</span><span class="p">;</span>
+  <span class="p">}</span>
+
+  <span class="k">template</span><span class="o">&lt;</span><span class="k">class</span> <span class="nc">Operation</span><span class="o">&gt;</span>
+  <span class="kt">void</span> <span class="k">operator</span><span class="p">()(</span><span class="kt">int</span> <span class="n">insertCount</span><span class="p">,</span> <span class="n">Operation</span> <span class="k">const</span><span class="o">&amp;</span> <span class="n">op</span><span class="p">)</span> <span class="p">{</span>
+    <span class="kt">bool</span> <span class="n">done</span> <span class="o">=</span> <span class="kc">false</span><span class="p">;</span>
+
+    <span class="n">std</span><span class="o">::</span><span class="n">unique_ptr</span><span class="o">&lt;</span><span class="n">folly</span><span class="o">::</span><span class="n">small_vector</span><span class="o">&lt;</span><span class="n">Thrower</span><span class="p">,</span><span class="mi">3</span><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="n">workingVec</span><span class="p">;</span>
+    <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">counter</span> <span class="o">=</span> <span class="mi">1</span><span class="p">;</span> <span class="o">!</span><span class="n">done</span><span class="p">;</span> <span class="o">++</span><span class="n">counter</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">throwCounter</span> <span class="o">=</span> <span class="mi">1000</span><span class="p">;</span>
+      <span class="n">workingVec</span><span class="p">.</span><span class="n">reset</span><span class="p">(</span><span class="k">new</span> <span class="n">folly</span><span class="o">::</span><span class="n">small_vector</span><span class="o">&lt;</span><span class="n">Thrower</span><span class="p">,</span><span class="mi">3</span><span class="o">&gt;</span><span class="p">(</span><span class="n">vec</span><span class="p">));</span>
+      <span class="n">throwCounter</span> <span class="o">=</span> <span class="n">counter</span><span class="p">;</span>
+      <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">Thrower</span><span class="o">::</span><span class="n">alive</span><span class="p">,</span> <span class="n">prepopulate</span> <span class="o">*</span> <span class="mi">2</span><span class="p">);</span>
+      <span class="k">try</span> <span class="p">{</span>
+        <span class="n">op</span><span class="p">(</span><span class="o">*</span><span class="n">workingVec</span><span class="p">);</span>
+        <span class="n">done</span> <span class="o">=</span> <span class="kc">true</span><span class="p">;</span>
+      <span class="p">}</span> <span class="k">catch</span> <span class="p">(...)</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-5"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-5">&#182;</a></div><p>Note that the size of the vector can change if we were
+inserting somewhere other than the end (it's a basic only
+guarantee).  All we're testing here is that we have the
+right amount of uninitialized vs initialized memory.</p></td><td class="code"><div class="highlight"><pre>        <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">Thrower</span><span class="o">::</span><span class="n">alive</span><span class="p">,</span> <span class="n">workingVec</span><span class="o">-&gt;</span><span class="n">size</span><span class="p">()</span> <span class="o">+</span> <span class="n">vec</span><span class="p">.</span><span class="n">size</span><span class="p">());</span>
+        <span class="k">continue</span><span class="p">;</span>
+      <span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-6"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-6">&#182;</a></div><p>If things succeeded.</p></td><td class="code"><div class="highlight"><pre>      <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">workingVec</span><span class="o">-&gt;</span><span class="n">size</span><span class="p">(),</span> <span class="n">prepopulate</span> <span class="o">+</span> <span class="n">insertCount</span><span class="p">);</span>
+      <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">Thrower</span><span class="o">::</span><span class="n">alive</span><span class="p">,</span> <span class="n">prepopulate</span> <span class="o">*</span> <span class="mi">2</span> <span class="o">+</span> <span class="n">insertCount</span><span class="p">);</span>
+    <span class="p">}</span>
+  <span class="p">}</span>
+<span class="p">};</span>
+
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">small_vector</span><span class="p">,</span> <span class="n">BasicGuarantee</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">prepop</span> <span class="o">=</span> <span class="mi">1</span><span class="p">;</span> <span class="n">prepop</span> <span class="o">&lt;</span> <span class="mi">30</span><span class="p">;</span> <span class="o">++</span><span class="n">prepop</span><span class="p">)</span> <span class="p">{</span>
+    <span class="p">(</span><span class="n">TestBasicGuarantee</span><span class="p">(</span><span class="n">prepop</span><span class="p">))(</span> <span class="c1">// parens or a mildly vexing parse :(</span>
+      <span class="mi">1</span><span class="p">,</span>
+      <span class="p">[</span><span class="o">&amp;</span><span class="p">]</span> <span class="p">(</span><span class="n">folly</span><span class="o">::</span><span class="n">small_vector</span><span class="o">&lt;</span><span class="n">Thrower</span><span class="p">,</span><span class="mi">3</span><span class="o">&gt;&amp;</span> <span class="n">v</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">v</span><span class="p">.</span><span class="n">push_back</span><span class="p">(</span><span class="n">Thrower</span><span class="p">());</span>
+      <span class="p">}</span>
+    <span class="p">);</span>
+
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">Thrower</span><span class="o">::</span><span class="n">alive</span><span class="p">,</span> <span class="mi">0</span><span class="p">);</span>
+
+    <span class="p">(</span><span class="n">TestBasicGuarantee</span><span class="p">(</span><span class="n">prepop</span><span class="p">))(</span>
+      <span class="mi">1</span><span class="p">,</span>
+      <span class="p">[</span><span class="o">&amp;</span><span class="p">]</span> <span class="p">(</span><span class="n">folly</span><span class="o">::</span><span class="n">small_vector</span><span class="o">&lt;</span><span class="n">Thrower</span><span class="p">,</span><span class="mi">3</span><span class="o">&gt;&amp;</span> <span class="n">v</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">v</span><span class="p">.</span><span class="n">insert</span><span class="p">(</span><span class="n">v</span><span class="p">.</span><span class="n">begin</span><span class="p">(),</span> <span class="n">Thrower</span><span class="p">());</span>
+      <span class="p">}</span>
+    <span class="p">);</span>
+
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">Thrower</span><span class="o">::</span><span class="n">alive</span><span class="p">,</span> <span class="mi">0</span><span class="p">);</span>
+
+    <span class="p">(</span><span class="n">TestBasicGuarantee</span><span class="p">(</span><span class="n">prepop</span><span class="p">))(</span>
+      <span class="mi">1</span><span class="p">,</span>
+      <span class="p">[</span><span class="o">&amp;</span><span class="p">]</span> <span class="p">(</span><span class="n">folly</span><span class="o">::</span><span class="n">small_vector</span><span class="o">&lt;</span><span class="n">Thrower</span><span class="p">,</span><span class="mi">3</span><span class="o">&gt;&amp;</span> <span class="n">v</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">v</span><span class="p">.</span><span class="n">insert</span><span class="p">(</span><span class="n">v</span><span class="p">.</span><span class="n">begin</span><span class="p">()</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="n">Thrower</span><span class="p">());</span>
+      <span class="p">}</span>
+    <span class="p">);</span>
+
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">Thrower</span><span class="o">::</span><span class="n">alive</span><span class="p">,</span> <span class="mi">0</span><span class="p">);</span>
+  <span class="p">}</span>
+
+  <span class="n">TestBasicGuarantee</span><span class="p">(</span><span class="mi">4</span><span class="p">)(</span>
+    <span class="mi">3</span><span class="p">,</span>
+    <span class="p">[</span><span class="o">&amp;</span><span class="p">]</span> <span class="p">(</span><span class="n">folly</span><span class="o">::</span><span class="n">small_vector</span><span class="o">&lt;</span><span class="n">Thrower</span><span class="p">,</span><span class="mi">3</span><span class="o">&gt;&amp;</span> <span class="n">v</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="n">Thrower</span><span class="o">&gt;</span> <span class="n">b</span><span class="p">;</span>
+      <span class="n">b</span><span class="p">.</span><span class="n">push_back</span><span class="p">(</span><span class="n">Thrower</span><span class="p">());</span>
+      <span class="n">b</span><span class="p">.</span><span class="n">push_back</span><span class="p">(</span><span class="n">Thrower</span><span class="p">());</span>
+      <span class="n">b</span><span class="p">.</span><span class="n">push_back</span><span class="p">(</span><span class="n">Thrower</span><span class="p">());</span>
+
+      <span class="cm">/*</span>
+<span class="cm">       * Apparently if you do the following initializer_list instead</span>
+<span class="cm">       * of the above push_back&#39;s, and one of the Throwers throws,</span>
+<span class="cm">       * g++4.6 doesn&#39;t destruct the previous ones.  Heh.</span>
+<span class="cm">       */</span></pre></div></td></tr>
+
+
+<tr id="section-7"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-7">&#182;</a></div><p>b = { Thrower(), Thrower(), Thrower() };</p></td><td class="code"><div class="highlight"><pre>      <span class="n">v</span><span class="p">.</span><span class="n">insert</span><span class="p">(</span><span class="n">v</span><span class="p">.</span><span class="n">begin</span><span class="p">()</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="n">b</span><span class="p">.</span><span class="n">begin</span><span class="p">(),</span> <span class="n">b</span><span class="p">.</span><span class="n">end</span><span class="p">());</span>
+    <span class="p">}</span>
+  <span class="p">);</span>
+
+  <span class="n">TestBasicGuarantee</span><span class="p">(</span><span class="mi">2</span><span class="p">)(</span>
+    <span class="mi">6</span><span class="p">,</span>
+    <span class="p">[</span><span class="o">&amp;</span><span class="p">]</span> <span class="p">(</span><span class="n">folly</span><span class="o">::</span><span class="n">small_vector</span><span class="o">&lt;</span><span class="n">Thrower</span><span class="p">,</span><span class="mi">3</span><span class="o">&gt;&amp;</span> <span class="n">v</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="n">Thrower</span><span class="o">&gt;</span> <span class="n">b</span><span class="p">;</span>
+      <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="mi">6</span><span class="p">;</span> <span class="o">++</span><span class="n">i</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">b</span><span class="p">.</span><span class="n">push_back</span><span class="p">(</span><span class="n">Thrower</span><span class="p">());</span>
+      <span class="p">}</span>
+
+      <span class="n">v</span><span class="p">.</span><span class="n">insert</span><span class="p">(</span><span class="n">v</span><span class="p">.</span><span class="n">begin</span><span class="p">()</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="n">b</span><span class="p">.</span><span class="n">begin</span><span class="p">(),</span> <span class="n">b</span><span class="p">.</span><span class="n">end</span><span class="p">());</span>
+    <span class="p">}</span>
+  <span class="p">);</span>
+
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">Thrower</span><span class="o">::</span><span class="n">alive</span><span class="p">,</span> <span class="mi">0</span><span class="p">);</span>
+  <span class="k">try</span> <span class="p">{</span>
+    <span class="n">throwCounter</span> <span class="o">=</span> <span class="mi">4</span><span class="p">;</span>
+    <span class="n">folly</span><span class="o">::</span><span class="n">small_vector</span><span class="o">&lt;</span><span class="n">Thrower</span><span class="p">,</span><span class="mi">1</span><span class="o">&gt;</span> <span class="n">p</span><span class="p">(</span><span class="mi">14</span><span class="p">,</span> <span class="n">Thrower</span><span class="p">());</span>
+  <span class="p">}</span> <span class="k">catch</span> <span class="p">(...)</span> <span class="p">{</span>
+  <span class="p">}</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">Thrower</span><span class="o">::</span><span class="n">alive</span><span class="p">,</span> <span class="mi">0</span><span class="p">);</span>
+<span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-8"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-8">&#182;</a></div><p>Run this with.
+MALLOC<em>CONF=prof</em>leak:true
+LD<em>PRELOAD=${JEMALLOC</em>PATH}/lib/libjemalloc.so.1
+LD<em>PRELOAD="$LD</em>PRELOAD:"${UNWIND_PATH}/lib/libunwind.so.7</p></td><td class="code"><div class="highlight"><pre><span class="n">TEST</span><span class="p">(</span><span class="n">small_vector</span><span class="p">,</span> <span class="n">leak_test</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">j</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">j</span> <span class="o">&lt;</span> <span class="mi">1000</span><span class="p">;</span> <span class="o">++</span><span class="n">j</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">folly</span><span class="o">::</span><span class="n">small_vector</span><span class="o">&lt;</span><span class="kt">int</span><span class="p">,</span> <span class="mi">10</span><span class="o">&gt;</span> <span class="n">someVec</span><span class="p">(</span><span class="mi">300</span><span class="p">);</span>
+    <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="mi">10000</span><span class="p">;</span> <span class="o">++</span><span class="n">i</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">someVec</span><span class="p">.</span><span class="n">push_back</span><span class="p">(</span><span class="mi">12</span><span class="p">);</span>
+    <span class="p">}</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">small_vector</span><span class="p">,</span> <span class="n">Insert</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">folly</span><span class="o">::</span><span class="n">small_vector</span><span class="o">&lt;</span><span class="kt">int</span><span class="o">&gt;</span> <span class="n">someVec</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">);</span>
+  <span class="n">someVec</span><span class="p">.</span><span class="n">insert</span><span class="p">(</span><span class="n">someVec</span><span class="p">.</span><span class="n">begin</span><span class="p">(),</span> <span class="mi">12</span><span class="p">,</span> <span class="mi">12</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">someVec</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="mi">15</span><span class="p">);</span>
+  <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">someVec</span><span class="p">.</span><span class="n">size</span><span class="p">();</span> <span class="o">++</span><span class="n">i</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">i</span> <span class="o">&lt;</span> <span class="mi">12</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">someVec</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="mi">12</span><span class="p">);</span>
+    <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+      <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">someVec</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="mi">3</span><span class="p">);</span>
+    <span class="p">}</span>
+  <span class="p">}</span>
+
+  <span class="k">auto</span> <span class="n">oldSize</span> <span class="o">=</span> <span class="n">someVec</span><span class="p">.</span><span class="n">size</span><span class="p">();</span>
+  <span class="n">someVec</span><span class="p">.</span><span class="n">insert</span><span class="p">(</span><span class="n">someVec</span><span class="p">.</span><span class="n">begin</span><span class="p">()</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">12</span><span class="p">,</span> <span class="mi">12</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">someVec</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="n">oldSize</span> <span class="o">+</span> <span class="mi">12</span><span class="p">);</span>
+
+  <span class="n">folly</span><span class="o">::</span><span class="n">small_vector</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="o">&gt;</span> <span class="n">v1</span><span class="p">(</span><span class="mi">6</span><span class="p">,</span> <span class="s">&quot;asd&quot;</span><span class="p">),</span> <span class="n">v2</span><span class="p">(</span><span class="mi">7</span><span class="p">,</span> <span class="s">&quot;wat&quot;</span><span class="p">);</span>
+  <span class="n">v1</span><span class="p">.</span><span class="n">insert</span><span class="p">(</span><span class="n">v1</span><span class="p">.</span><span class="n">begin</span><span class="p">()</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="n">v2</span><span class="p">.</span><span class="n">begin</span><span class="p">(),</span> <span class="n">v2</span><span class="p">.</span><span class="n">end</span><span class="p">());</span>
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">v1</span><span class="p">.</span><span class="n">size</span><span class="p">()</span> <span class="o">==</span> <span class="mi">6</span> <span class="o">+</span> <span class="mi">7</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">v1</span><span class="p">.</span><span class="n">front</span><span class="p">(),</span> <span class="s">&quot;asd&quot;</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">v1</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="s">&quot;wat&quot;</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">small_vector</span><span class="p">,</span> <span class="n">Swap</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">folly</span><span class="o">::</span><span class="n">small_vector</span><span class="o">&lt;</span><span class="kt">int</span><span class="p">,</span><span class="mi">10</span><span class="o">&gt;</span> <span class="n">somethingVec</span><span class="p">,</span> <span class="n">emptyVec</span><span class="p">;</span>
+  <span class="n">somethingVec</span><span class="p">.</span><span class="n">push_back</span><span class="p">(</span><span class="mi">1</span><span class="p">);</span>
+  <span class="n">somethingVec</span><span class="p">.</span><span class="n">push_back</span><span class="p">(</span><span class="mi">2</span><span class="p">);</span>
+  <span class="n">somethingVec</span><span class="p">.</span><span class="n">push_back</span><span class="p">(</span><span class="mi">3</span><span class="p">);</span>
+  <span class="n">somethingVec</span><span class="p">.</span><span class="n">push_back</span><span class="p">(</span><span class="mi">4</span><span class="p">);</span></pre></div></td></tr>
+
+
+<tr id="section-9"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-9">&#182;</a></div><p>Swapping intern'd with intern'd.</p></td><td class="code"><div class="highlight"><pre>  <span class="k">auto</span> <span class="n">vec</span> <span class="o">=</span> <span class="n">somethingVec</span><span class="p">;</span>
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">vec</span> <span class="o">==</span> <span class="n">somethingVec</span><span class="p">);</span>
+  <span class="n">EXPECT_FALSE</span><span class="p">(</span><span class="n">vec</span> <span class="o">==</span> <span class="n">emptyVec</span><span class="p">);</span>
+  <span class="n">EXPECT_FALSE</span><span class="p">(</span><span class="n">somethingVec</span> <span class="o">==</span> <span class="n">emptyVec</span><span class="p">);</span></pre></div></td></tr>
+
+
+<tr id="section-10"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-10">&#182;</a></div><p>Swapping a heap vector with an intern vector.</p></td><td class="code"><div class="highlight"><pre>  <span class="n">folly</span><span class="o">::</span><span class="n">small_vector</span><span class="o">&lt;</span><span class="kt">int</span><span class="p">,</span><span class="mi">10</span><span class="o">&gt;</span> <span class="n">junkVec</span><span class="p">;</span>
+  <span class="n">junkVec</span><span class="p">.</span><span class="n">assign</span><span class="p">(</span><span class="mi">12</span><span class="p">,</span> <span class="mi">12</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">junkVec</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="mi">12</span><span class="p">);</span>
+  <span class="k">for</span> <span class="p">(</span><span class="k">auto</span> <span class="n">i</span> <span class="o">:</span> <span class="n">junkVec</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="mi">12</span><span class="p">);</span>
+  <span class="p">}</span>
+  <span class="n">swap</span><span class="p">(</span><span class="n">junkVec</span><span class="p">,</span> <span class="n">vec</span><span class="p">);</span>
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">junkVec</span> <span class="o">==</span> <span class="n">somethingVec</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">vec</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="mi">12</span><span class="p">);</span>
+  <span class="k">for</span> <span class="p">(</span><span class="k">auto</span> <span class="n">i</span> <span class="o">:</span> <span class="n">vec</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="mi">12</span><span class="p">);</span>
+  <span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-11"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-11">&#182;</a></div><p>Swapping two heap vectors.</p></td><td class="code"><div class="highlight"><pre>  <span class="n">folly</span><span class="o">::</span><span class="n">small_vector</span><span class="o">&lt;</span><span class="kt">int</span><span class="p">,</span><span class="mi">10</span><span class="o">&gt;</span> <span class="n">moreJunk</span><span class="p">(</span><span class="mi">15</span><span class="p">,</span> <span class="mi">15</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">moreJunk</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="mi">15</span><span class="p">);</span>
+  <span class="k">for</span> <span class="p">(</span><span class="k">auto</span> <span class="n">i</span> <span class="o">:</span> <span class="n">moreJunk</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="mi">15</span><span class="p">);</span>
+  <span class="p">}</span>
+  <span class="n">swap</span><span class="p">(</span><span class="n">vec</span><span class="p">,</span> <span class="n">moreJunk</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">moreJunk</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="mi">12</span><span class="p">);</span>
+  <span class="k">for</span> <span class="p">(</span><span class="k">auto</span> <span class="n">i</span> <span class="o">:</span> <span class="n">moreJunk</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="mi">12</span><span class="p">);</span>
+  <span class="p">}</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">vec</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="mi">15</span><span class="p">);</span>
+  <span class="k">for</span> <span class="p">(</span><span class="k">auto</span> <span class="n">i</span> <span class="o">:</span> <span class="n">vec</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="mi">15</span><span class="p">);</span>
+  <span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-12"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-12">&#182;</a></div><p>Making a vector heap, then smaller than another non-heap vector,
+then swapping.</p></td><td class="code"><div class="highlight"><pre>  <span class="n">folly</span><span class="o">::</span><span class="n">small_vector</span><span class="o">&lt;</span><span class="kt">int</span><span class="p">,</span><span class="mi">5</span><span class="o">&gt;</span> <span class="n">shrinker</span><span class="p">,</span> <span class="n">other</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="mi">10</span><span class="p">);</span>
+  <span class="n">shrinker</span> <span class="o">=</span> <span class="p">{</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">6</span><span class="p">,</span> <span class="mi">7</span><span class="p">,</span> <span class="mi">8</span> <span class="p">};</span>
+  <span class="n">shrinker</span><span class="p">.</span><span class="n">erase</span><span class="p">(</span><span class="n">shrinker</span><span class="p">.</span><span class="n">begin</span><span class="p">()</span> <span class="o">+</span> <span class="mi">2</span><span class="p">,</span> <span class="n">shrinker</span><span class="p">.</span><span class="n">end</span><span class="p">());</span>
+  <span class="n">EXPECT_LT</span><span class="p">(</span><span class="n">shrinker</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="n">other</span><span class="p">.</span><span class="n">size</span><span class="p">());</span>
+  <span class="n">swap</span><span class="p">(</span><span class="n">shrinker</span><span class="p">,</span> <span class="n">other</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">shrinker</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="mi">4</span><span class="p">);</span>
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">boost</span><span class="o">::</span><span class="n">all</span><span class="p">(</span><span class="n">shrinker</span><span class="p">,</span> <span class="n">boost</span><span class="o">::</span><span class="n">is_any_of</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="kt">int</span><span class="o">&gt;</span><span class="p">{</span><span class="mi">10</span><span class="p">})));</span>
+  <span class="n">EXPECT_TRUE</span><span class="p">((</span><span class="n">other</span> <span class="o">==</span> <span class="n">small_vector</span><span class="o">&lt;</span><span class="kt">int</span><span class="p">,</span><span class="mi">5</span><span class="o">&gt;</span><span class="p">{</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span> <span class="p">}));</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">small_vector</span><span class="p">,</span> <span class="n">Emplace</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">NontrivialType</span><span class="o">::</span><span class="n">ctored</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+
+  <span class="n">folly</span><span class="o">::</span><span class="n">small_vector</span><span class="o">&lt;</span><span class="n">NontrivialType</span><span class="o">&gt;</span> <span class="n">vec</span><span class="p">;</span>
+  <span class="n">vec</span><span class="p">.</span><span class="n">reserve</span><span class="p">(</span><span class="mi">1024</span><span class="p">);</span>
+  <span class="n">vec</span><span class="p">.</span><span class="n">emplace_back</span><span class="p">(</span><span class="mi">12</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">NontrivialType</span><span class="o">::</span><span class="n">ctored</span><span class="p">,</span> <span class="mi">1</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">vec</span><span class="p">.</span><span class="n">front</span><span class="p">().</span><span class="n">a</span><span class="p">,</span> <span class="mi">12</span><span class="p">);</span>
+  <span class="n">vec</span><span class="p">.</span><span class="n">emplace_back</span><span class="p">(</span><span class="mi">13</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">vec</span><span class="p">.</span><span class="n">front</span><span class="p">().</span><span class="n">a</span><span class="p">,</span> <span class="mi">12</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">vec</span><span class="p">.</span><span class="n">back</span><span class="p">().</span><span class="n">a</span><span class="p">,</span> <span class="mi">13</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">NontrivialType</span><span class="o">::</span><span class="n">ctored</span><span class="p">,</span> <span class="mi">2</span><span class="p">);</span>
+
+  <span class="n">NontrivialType</span><span class="o">::</span><span class="n">ctored</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+  <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="mi">120</span><span class="p">;</span> <span class="o">++</span><span class="n">i</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">vec</span><span class="p">.</span><span class="n">emplace_back</span><span class="p">(</span><span class="n">i</span><span class="p">);</span>
+  <span class="p">}</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">NontrivialType</span><span class="o">::</span><span class="n">ctored</span><span class="p">,</span> <span class="mi">120</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">vec</span><span class="p">[</span><span class="mi">0</span><span class="p">].</span><span class="n">a</span><span class="p">,</span> <span class="mi">12</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">vec</span><span class="p">[</span><span class="mi">1</span><span class="p">].</span><span class="n">a</span><span class="p">,</span> <span class="mi">13</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">vec</span><span class="p">.</span><span class="n">back</span><span class="p">().</span><span class="n">a</span><span class="p">,</span> <span class="mi">119</span><span class="p">);</span></pre></div></td></tr>
+
+
+<tr id="section-13"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-13">&#182;</a></div><p>We implement emplace() with a temporary (see the implementation
+for a comment about why), so this should make 2 ctor calls.</p></td><td class="code"><div class="highlight"><pre>  <span class="n">NontrivialType</span><span class="o">::</span><span class="n">ctored</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+  <span class="n">vec</span><span class="p">.</span><span class="n">emplace</span><span class="p">(</span><span class="n">vec</span><span class="p">.</span><span class="n">begin</span><span class="p">(),</span> <span class="mi">12</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">NontrivialType</span><span class="o">::</span><span class="n">ctored</span><span class="p">,</span> <span class="mi">2</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">small_vector</span><span class="p">,</span> <span class="n">Erase</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">folly</span><span class="o">::</span><span class="n">small_vector</span><span class="o">&lt;</span><span class="kt">int</span><span class="p">,</span><span class="mi">4</span><span class="o">&gt;</span> <span class="n">notherVec</span> <span class="o">=</span> <span class="p">{</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span> <span class="p">};</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">notherVec</span><span class="p">.</span><span class="n">front</span><span class="p">(),</span> <span class="mi">1</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">notherVec</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="mi">5</span><span class="p">);</span>
+  <span class="n">notherVec</span><span class="p">.</span><span class="n">erase</span><span class="p">(</span><span class="n">notherVec</span><span class="p">.</span><span class="n">begin</span><span class="p">());</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">notherVec</span><span class="p">.</span><span class="n">front</span><span class="p">(),</span> <span class="mi">2</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">notherVec</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="mi">4</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">notherVec</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span> <span class="mi">4</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">notherVec</span><span class="p">[</span><span class="mi">3</span><span class="p">],</span> <span class="mi">5</span><span class="p">);</span>
+  <span class="n">notherVec</span><span class="p">.</span><span class="n">erase</span><span class="p">(</span><span class="n">notherVec</span><span class="p">.</span><span class="n">begin</span><span class="p">()</span> <span class="o">+</span> <span class="mi">2</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">notherVec</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="mi">3</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">notherVec</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span> <span class="mi">5</span><span class="p">);</span>
+
+  <span class="n">folly</span><span class="o">::</span><span class="n">small_vector</span><span class="o">&lt;</span><span class="kt">int</span><span class="p">,</span><span class="mi">2</span><span class="o">&gt;</span> <span class="n">vec2</span> <span class="o">=</span> <span class="p">{</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">6</span><span class="p">,</span> <span class="mi">7</span><span class="p">,</span> <span class="mi">8</span><span class="p">,</span> <span class="mi">9</span><span class="p">,</span> <span class="mi">10</span> <span class="p">};</span>
+  <span class="n">vec2</span><span class="p">.</span><span class="n">erase</span><span class="p">(</span><span class="n">vec2</span><span class="p">.</span><span class="n">begin</span><span class="p">()</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="n">vec2</span><span class="p">.</span><span class="n">end</span><span class="p">()</span> <span class="o">-</span> <span class="mi">1</span><span class="p">);</span>
+  <span class="n">folly</span><span class="o">::</span><span class="n">small_vector</span><span class="o">&lt;</span><span class="kt">int</span><span class="p">,</span><span class="mi">2</span><span class="o">&gt;</span> <span class="n">expected</span> <span class="o">=</span> <span class="p">{</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">10</span> <span class="p">};</span>
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">vec2</span> <span class="o">==</span> <span class="n">expected</span><span class="p">);</span>
+
+  <span class="n">folly</span><span class="o">::</span><span class="n">small_vector</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="p">,</span><span class="mi">3</span><span class="o">&gt;</span> <span class="n">v</span><span class="p">(</span><span class="mi">102</span><span class="p">,</span> <span class="s">&quot;ASD&quot;</span><span class="p">);</span>
+  <span class="n">v</span><span class="p">.</span><span class="n">resize</span><span class="p">(</span><span class="mi">1024</span><span class="p">,</span> <span class="s">&quot;D&quot;</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">v</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="mi">1024</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">v</span><span class="p">.</span><span class="n">back</span><span class="p">(),</span> <span class="s">&quot;D&quot;</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">v</span><span class="p">.</span><span class="n">front</span><span class="p">(),</span> <span class="s">&quot;ASD&quot;</span><span class="p">);</span>
+  <span class="n">v</span><span class="p">.</span><span class="n">resize</span><span class="p">(</span><span class="mi">1</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">v</span><span class="p">.</span><span class="n">front</span><span class="p">(),</span> <span class="s">&quot;ASD&quot;</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">v</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="mi">1</span><span class="p">);</span>
+  <span class="n">v</span><span class="p">.</span><span class="n">resize</span><span class="p">(</span><span class="mi">0</span><span class="p">);</span>
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">v</span><span class="p">.</span><span class="n">empty</span><span class="p">());</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">small_vector</span><span class="p">,</span> <span class="n">GrowShrinkGrow</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">folly</span><span class="o">::</span><span class="n">small_vector</span><span class="o">&lt;</span><span class="n">NontrivialType</span><span class="p">,</span><span class="mi">7</span><span class="o">&gt;</span> <span class="n">vec</span> <span class="o">=</span> <span class="p">{</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span> <span class="p">};</span>
+  <span class="n">std</span><span class="o">::</span><span class="n">generate_n</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">back_inserter</span><span class="p">(</span><span class="n">vec</span><span class="p">),</span> <span class="mi">102</span><span class="p">,</span> <span class="n">std</span><span class="o">::</span><span class="n">rand</span><span class="p">);</span>
+
+  <span class="k">auto</span> <span class="n">capacity</span> <span class="o">=</span> <span class="n">vec</span><span class="p">.</span><span class="n">capacity</span><span class="p">();</span>
+
+  <span class="k">auto</span> <span class="n">oldSize</span> <span class="o">=</span> <span class="n">vec</span><span class="p">.</span><span class="n">size</span><span class="p">();</span>
+  <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">oldSize</span><span class="p">;</span> <span class="o">++</span><span class="n">i</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">vec</span><span class="p">.</span><span class="n">erase</span><span class="p">(</span><span class="n">vec</span><span class="p">.</span><span class="n">begin</span><span class="p">()</span> <span class="o">+</span> <span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">rand</span><span class="p">()</span> <span class="o">%</span> <span class="n">vec</span><span class="p">.</span><span class="n">size</span><span class="p">()));</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">vec</span><span class="p">.</span><span class="n">capacity</span><span class="p">(),</span> <span class="n">capacity</span><span class="p">);</span>
+  <span class="p">}</span>
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">vec</span><span class="p">.</span><span class="n">empty</span><span class="p">());</span>
+
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">vec</span><span class="p">.</span><span class="n">capacity</span><span class="p">(),</span> <span class="n">capacity</span><span class="p">);</span>
+  <span class="n">std</span><span class="o">::</span><span class="n">generate_n</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">back_inserter</span><span class="p">(</span><span class="n">vec</span><span class="p">),</span> <span class="mi">102</span><span class="p">,</span> <span class="n">std</span><span class="o">::</span><span class="n">rand</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">vec</span><span class="p">.</span><span class="n">capacity</span><span class="p">(),</span> <span class="n">capacity</span><span class="p">);</span>
+
+  <span class="n">std</span><span class="o">::</span><span class="n">generate_n</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">back_inserter</span><span class="p">(</span><span class="n">vec</span><span class="p">),</span> <span class="mi">4096</span><span class="p">,</span> <span class="n">std</span><span class="o">::</span><span class="n">rand</span><span class="p">);</span>
+  <span class="n">EXPECT_GT</span><span class="p">(</span><span class="n">vec</span><span class="p">.</span><span class="n">capacity</span><span class="p">(),</span> <span class="n">capacity</span><span class="p">);</span>
+
+  <span class="n">vec</span><span class="p">.</span><span class="n">resize</span><span class="p">(</span><span class="mi">10</span><span class="p">);</span>
+  <span class="n">vec</span><span class="p">.</span><span class="n">shrink_to_fit</span><span class="p">();</span>
+  <span class="n">EXPECT_LT</span><span class="p">(</span><span class="n">vec</span><span class="p">.</span><span class="n">capacity</span><span class="p">(),</span> <span class="n">capacity</span><span class="p">);</span>
+  <span class="n">vec</span><span class="p">.</span><span class="n">resize</span><span class="p">(</span><span class="mi">4</span><span class="p">);</span>
+  <span class="n">vec</span><span class="p">.</span><span class="n">shrink_to_fit</span><span class="p">();</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">vec</span><span class="p">.</span><span class="n">capacity</span><span class="p">(),</span> <span class="mi">7</span><span class="p">);</span> <span class="c1">// in situ size</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">small_vector</span><span class="p">,</span> <span class="n">Iteration</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">folly</span><span class="o">::</span><span class="n">small_vector</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="p">,</span><span class="mi">3</span><span class="o">&gt;</span> <span class="n">vec</span> <span class="o">=</span> <span class="p">{</span> <span class="s">&quot;foo&quot;</span><span class="p">,</span> <span class="s">&quot;bar&quot;</span> <span class="p">};</span>
+  <span class="n">vec</span><span class="p">.</span><span class="n">push_back</span><span class="p">(</span><span class="s">&quot;blah&quot;</span><span class="p">);</span>
+  <span class="n">vec</span><span class="p">.</span><span class="n">push_back</span><span class="p">(</span><span class="s">&quot;blah2&quot;</span><span class="p">);</span>
+  <span class="n">vec</span><span class="p">.</span><span class="n">push_back</span><span class="p">(</span><span class="s">&quot;blah3&quot;</span><span class="p">);</span>
+  <span class="n">vec</span><span class="p">.</span><span class="n">erase</span><span class="p">(</span><span class="n">vec</span><span class="p">.</span><span class="n">begin</span><span class="p">()</span> <span class="o">+</span> <span class="mi">2</span><span class="p">);</span>
+
+  <span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="o">&gt;</span> <span class="n">otherVec</span><span class="p">;</span>
+  <span class="k">for</span> <span class="p">(</span><span class="k">auto</span><span class="o">&amp;</span> <span class="n">s</span> <span class="o">:</span> <span class="n">vec</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">otherVec</span><span class="p">.</span><span class="n">push_back</span><span class="p">(</span><span class="n">s</span><span class="p">);</span>
+  <span class="p">}</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">otherVec</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="n">vec</span><span class="p">.</span><span class="n">size</span><span class="p">());</span>
+  <span class="k">if</span> <span class="p">(</span><span class="n">otherVec</span><span class="p">.</span><span class="n">size</span><span class="p">()</span> <span class="o">==</span> <span class="n">vec</span><span class="p">.</span><span class="n">size</span><span class="p">())</span> <span class="p">{</span>
+    <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">equal</span><span class="p">(</span><span class="n">otherVec</span><span class="p">.</span><span class="n">begin</span><span class="p">(),</span> <span class="n">otherVec</span><span class="p">.</span><span class="n">end</span><span class="p">(),</span> <span class="n">vec</span><span class="p">.</span><span class="n">begin</span><span class="p">()));</span>
+  <span class="p">}</span>
+
+  <span class="n">std</span><span class="o">::</span><span class="n">reverse</span><span class="p">(</span><span class="n">otherVec</span><span class="p">.</span><span class="n">begin</span><span class="p">(),</span> <span class="n">otherVec</span><span class="p">.</span><span class="n">end</span><span class="p">());</span>
+  <span class="k">auto</span> <span class="n">oit</span> <span class="o">=</span> <span class="n">otherVec</span><span class="p">.</span><span class="n">begin</span><span class="p">();</span>
+  <span class="k">auto</span> <span class="n">rit</span> <span class="o">=</span> <span class="n">vec</span><span class="p">.</span><span class="n">crbegin</span><span class="p">();</span>
+  <span class="k">for</span> <span class="p">(;</span> <span class="n">rit</span> <span class="o">!=</span> <span class="n">vec</span><span class="p">.</span><span class="n">crend</span><span class="p">();</span> <span class="o">++</span><span class="n">oit</span><span class="p">,</span> <span class="o">++</span><span class="n">rit</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="o">*</span><span class="n">oit</span><span class="p">,</span> <span class="o">*</span><span class="n">rit</span><span class="p">);</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">small_vector</span><span class="p">,</span> <span class="n">NonCopyableType</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">folly</span><span class="o">::</span><span class="n">small_vector</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">unique_ptr</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="o">&gt;</span><span class="p">,</span><span class="mi">2</span><span class="o">&gt;</span> <span class="n">vec</span><span class="p">;</span>
+  <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="mi">10</span><span class="p">;</span> <span class="o">++</span><span class="n">i</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">vec</span><span class="p">.</span><span class="n">emplace</span><span class="p">(</span><span class="n">vec</span><span class="p">.</span><span class="n">begin</span><span class="p">(),</span> <span class="k">new</span> <span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="p">(</span><span class="s">&quot;asd&quot;</span><span class="p">));</span>
+  <span class="p">}</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">vec</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="mi">10</span><span class="p">);</span>
+  <span class="k">auto</span> <span class="n">vec2</span> <span class="o">=</span> <span class="n">std</span><span class="o">::</span><span class="n">move</span><span class="p">(</span><span class="n">vec</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">vec</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="mi">0</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">vec2</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="mi">10</span><span class="p">);</span>
+  <span class="n">vec2</span><span class="p">.</span><span class="n">clear</span><span class="p">();</span>
+
+  <span class="n">folly</span><span class="o">::</span><span class="n">small_vector</span><span class="o">&lt;</span><span class="n">NoncopyableCounter</span><span class="p">,</span><span class="mi">3</span><span class="o">&gt;</span> <span class="n">vec3</span><span class="p">;</span>
+  <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="mi">10</span><span class="p">;</span> <span class="o">++</span><span class="n">i</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">vec3</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="n">i</span><span class="p">);</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">NoncopyableCounter</span><span class="o">::</span><span class="n">alive</span><span class="p">,</span> <span class="n">i</span><span class="p">);</span>
+    <span class="n">vec3</span><span class="p">.</span><span class="n">insert</span><span class="p">(</span><span class="n">vec3</span><span class="p">.</span><span class="n">begin</span><span class="p">(),</span> <span class="n">NoncopyableCounter</span><span class="p">());</span>
+  <span class="p">}</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">vec3</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="mi">10</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">NoncopyableCounter</span><span class="o">::</span><span class="n">alive</span><span class="p">,</span> <span class="mi">10</span><span class="p">);</span>
+
+  <span class="n">vec3</span><span class="p">.</span><span class="n">insert</span><span class="p">(</span><span class="n">vec3</span><span class="p">.</span><span class="n">begin</span><span class="p">()</span> <span class="o">+</span> <span class="mi">3</span><span class="p">,</span> <span class="n">NoncopyableCounter</span><span class="p">());</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">NoncopyableCounter</span><span class="o">::</span><span class="n">alive</span><span class="p">,</span> <span class="mi">11</span><span class="p">);</span>
+  <span class="k">auto</span> <span class="n">vec4</span> <span class="o">=</span> <span class="n">std</span><span class="o">::</span><span class="n">move</span><span class="p">(</span><span class="n">vec3</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">NoncopyableCounter</span><span class="o">::</span><span class="n">alive</span><span class="p">,</span> <span class="mi">11</span><span class="p">);</span>
+  <span class="n">vec4</span><span class="p">.</span><span class="n">resize</span><span class="p">(</span><span class="mi">30</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">NoncopyableCounter</span><span class="o">::</span><span class="n">alive</span><span class="p">,</span> <span class="mi">30</span><span class="p">);</span>
+  <span class="n">vec4</span><span class="p">.</span><span class="n">erase</span><span class="p">(</span><span class="n">vec4</span><span class="p">.</span><span class="n">begin</span><span class="p">(),</span> <span class="n">vec4</span><span class="p">.</span><span class="n">end</span><span class="p">());</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">vec4</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="mi">0</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">NoncopyableCounter</span><span class="o">::</span><span class="n">alive</span><span class="p">,</span> <span class="mi">0</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">small_vector</span><span class="p">,</span> <span class="n">MoveConstructor</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">folly</span><span class="o">::</span><span class="n">small_vector</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="p">,</span><span class="mi">10</span><span class="o">&gt;</span> <span class="n">v1</span><span class="p">;</span>
+  <span class="n">v1</span><span class="p">.</span><span class="n">push_back</span><span class="p">(</span><span class="s">&quot;asd&quot;</span><span class="p">);</span>
+  <span class="n">v1</span><span class="p">.</span><span class="n">push_back</span><span class="p">(</span><span class="s">&quot;bsd&quot;</span><span class="p">);</span>
+  <span class="k">auto</span> <span class="n">v2</span> <span class="o">=</span> <span class="n">std</span><span class="o">::</span><span class="n">move</span><span class="p">(</span><span class="n">v1</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">v2</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="mi">2</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">v2</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="s">&quot;asd&quot;</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">v2</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="s">&quot;bsd&quot;</span><span class="p">);</span>
+
+  <span class="n">v1</span> <span class="o">=</span> <span class="n">std</span><span class="o">::</span><span class="n">move</span><span class="p">(</span><span class="n">v2</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">v1</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="mi">2</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">v1</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="s">&quot;asd&quot;</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">v1</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="s">&quot;bsd&quot;</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">small_vector</span><span class="p">,</span> <span class="n">NoHeap</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">typedef</span> <span class="n">folly</span><span class="o">::</span><span class="n">small_vector</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="p">,</span><span class="mi">10</span><span class="p">,</span>
+    <span class="n">std</span><span class="o">::</span><span class="n">size_t</span><span class="p">,</span><span class="n">folly</span><span class="o">::</span><span class="n">small_vector_policy</span><span class="o">::</span><span class="n">NoHeap</span><span class="o">&gt;</span> <span class="n">Vector</span><span class="p">;</span>
+
+  <span class="n">Vector</span> <span class="n">v</span><span class="p">;</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">v</span><span class="p">.</span><span class="n">max_size</span><span class="p">(),</span> <span class="mi">10</span><span class="p">);</span>
+
+  <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="mi">10</span><span class="p">;</span> <span class="o">++</span><span class="n">i</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">v</span><span class="p">.</span><span class="n">push_back</span><span class="p">(</span><span class="n">folly</span><span class="o">::</span><span class="n">to</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="o">&gt;</span><span class="p">(</span><span class="n">i</span><span class="p">));</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">v</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="n">i</span> <span class="o">+</span> <span class="mi">1</span><span class="p">);</span>
+  <span class="p">}</span>
+
+  <span class="kt">bool</span> <span class="n">caught</span> <span class="o">=</span> <span class="kc">false</span><span class="p">;</span>
+  <span class="k">try</span> <span class="p">{</span>
+    <span class="n">v</span><span class="p">.</span><span class="n">insert</span><span class="p">(</span><span class="n">v</span><span class="p">.</span><span class="n">begin</span><span class="p">(),</span> <span class="s">&quot;ha&quot;</span><span class="p">);</span>
+  <span class="p">}</span> <span class="k">catch</span> <span class="p">(</span><span class="k">const</span> <span class="n">std</span><span class="o">::</span><span class="n">length_error</span><span class="o">&amp;</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">caught</span> <span class="o">=</span> <span class="kc">true</span><span class="p">;</span>
+  <span class="p">}</span>
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">caught</span><span class="p">);</span></pre></div></td></tr>
+
+
+<tr id="section-14"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-14">&#182;</a></div><p>Check max_size works right with various policy combinations.</p></td><td class="code"><div class="highlight"><pre>  <span class="n">folly</span><span class="o">::</span><span class="n">small_vector</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="p">,</span><span class="mi">32</span><span class="p">,</span><span class="n">uint32_t</span><span class="p">,</span><span class="n">NoHeap</span><span class="p">,</span><span class="n">OneBitMutex</span><span class="o">&gt;</span> <span class="n">v2</span><span class="p">;</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">v2</span><span class="p">.</span><span class="n">max_size</span><span class="p">(),</span> <span class="mi">32</span><span class="p">);</span>
+  <span class="n">folly</span><span class="o">::</span><span class="n">small_vector</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="p">,</span><span class="mi">32</span><span class="p">,</span><span class="n">uint32_t</span><span class="p">,</span><span class="n">OneBitMutex</span><span class="o">&gt;</span> <span class="n">v3</span><span class="p">;</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">v3</span><span class="p">.</span><span class="n">max_size</span><span class="p">(),</span> <span class="p">(</span><span class="mi">1ul</span> <span class="o">&lt;&lt;</span> <span class="mi">30</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span><span class="p">);</span>
+  <span class="n">folly</span><span class="o">::</span><span class="n">small_vector</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="p">,</span><span class="mi">32</span><span class="p">,</span><span class="n">uint32_t</span><span class="o">&gt;</span> <span class="n">v4</span><span class="p">;</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">v4</span><span class="p">.</span><span class="n">max_size</span><span class="p">(),</span> <span class="p">(</span><span class="mi">1ul</span> <span class="o">&lt;&lt;</span> <span class="mi">31</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span><span class="p">);</span>
+
+  <span class="cm">/*</span>
+<span class="cm">   * Test that even when we ask for a small number inlined it&#39;ll still</span>
+<span class="cm">   * inline at least as much as it takes to store the value_type</span>
+<span class="cm">   * pointer.</span>
+<span class="cm">   */</span>
+  <span class="n">folly</span><span class="o">::</span><span class="n">small_vector</span><span class="o">&lt;</span><span class="kt">char</span><span class="p">,</span><span class="mi">1</span><span class="p">,</span><span class="n">NoHeap</span><span class="o">&gt;</span> <span class="n">notsosmall</span><span class="p">;</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">notsosmall</span><span class="p">.</span><span class="n">max_size</span><span class="p">(),</span> <span class="k">sizeof</span><span class="p">(</span><span class="kt">char</span><span class="o">*</span><span class="p">));</span>
+  <span class="n">caught</span> <span class="o">=</span> <span class="kc">false</span><span class="p">;</span>
+  <span class="k">try</span> <span class="p">{</span>
+    <span class="n">notsosmall</span><span class="p">.</span><span class="n">push_back</span><span class="p">(</span><span class="mi">12</span><span class="p">);</span>
+    <span class="n">notsosmall</span><span class="p">.</span><span class="n">push_back</span><span class="p">(</span><span class="mi">13</span><span class="p">);</span>
+    <span class="n">notsosmall</span><span class="p">.</span><span class="n">push_back</span><span class="p">(</span><span class="mi">14</span><span class="p">);</span>
+  <span class="p">}</span> <span class="k">catch</span> <span class="p">(</span><span class="k">const</span> <span class="n">std</span><span class="o">::</span><span class="n">length_error</span><span class="o">&amp;</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">caught</span> <span class="o">=</span> <span class="kc">true</span><span class="p">;</span>
+  <span class="p">}</span>
+  <span class="n">EXPECT_FALSE</span><span class="p">(</span><span class="n">caught</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">small_vector</span><span class="p">,</span> <span class="n">MaxSize</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">folly</span><span class="o">::</span><span class="n">small_vector</span><span class="o">&lt;</span><span class="kt">int</span><span class="p">,</span><span class="mi">2</span><span class="p">,</span><span class="n">uint8_t</span><span class="o">&gt;</span> <span class="n">vec</span><span class="p">;</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">vec</span><span class="p">.</span><span class="n">max_size</span><span class="p">(),</span> <span class="mi">127</span><span class="p">);</span>
+  <span class="n">folly</span><span class="o">::</span><span class="n">small_vector</span><span class="o">&lt;</span><span class="kt">int</span><span class="p">,</span><span class="mi">2</span><span class="p">,</span><span class="n">uint16_t</span><span class="o">&gt;</span> <span class="n">vec2</span><span class="p">;</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">vec2</span><span class="p">.</span><span class="n">max_size</span><span class="p">(),</span> <span class="p">(</span><span class="mi">1</span> <span class="o">&lt;&lt;</span> <span class="mi">15</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span><span class="p">);</span>
+  <span class="n">folly</span><span class="o">::</span><span class="n">small_vector</span><span class="o">&lt;</span><span class="kt">int</span><span class="p">,</span><span class="mi">2</span><span class="p">,</span><span class="n">uint16_t</span><span class="p">,</span><span class="n">OneBitMutex</span><span class="o">&gt;</span> <span class="n">vec3</span><span class="p">;</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">vec3</span><span class="p">.</span><span class="n">max_size</span><span class="p">(),</span> <span class="p">(</span><span class="mi">1</span> <span class="o">&lt;&lt;</span> <span class="mi">14</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">small_vector</span><span class="p">,</span> <span class="n">AllHeap</span><span class="p">)</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-15"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-15">&#182;</a></div><p>Use something bigger than the pointer so it can't get inlined.</p></td><td class="code"><div class="highlight"><pre>  <span class="k">struct</span> <span class="n">SomeObj</span> <span class="p">{</span>
+    <span class="kt">double</span> <span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">,</span> <span class="n">c</span><span class="p">,</span> <span class="n">d</span><span class="p">,</span> <span class="n">e</span><span class="p">;</span> <span class="kt">int</span> <span class="n">val</span><span class="p">;</span>
+    <span class="n">SomeObj</span><span class="p">(</span><span class="kt">int</span> <span class="n">val</span><span class="p">)</span> <span class="o">:</span> <span class="n">val</span><span class="p">(</span><span class="n">val</span><span class="p">)</span> <span class="p">{}</span>
+    <span class="kt">bool</span> <span class="k">operator</span><span class="o">==</span><span class="p">(</span><span class="n">SomeObj</span> <span class="k">const</span><span class="o">&amp;</span> <span class="n">o</span><span class="p">)</span> <span class="k">const</span> <span class="p">{</span>
+      <span class="k">return</span> <span class="n">o</span><span class="p">.</span><span class="n">val</span> <span class="o">==</span> <span class="n">val</span><span class="p">;</span>
+    <span class="p">}</span>
+  <span class="p">};</span>
+
+  <span class="n">folly</span><span class="o">::</span><span class="n">small_vector</span><span class="o">&lt;</span><span class="n">SomeObj</span><span class="p">,</span><span class="mi">0</span><span class="o">&gt;</span> <span class="n">vec</span> <span class="o">=</span> <span class="p">{</span> <span class="mi">1</span> <span class="p">};</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">vec</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="mi">1</span><span class="p">);</span>
+  <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">vec</span><span class="p">.</span><span class="n">empty</span><span class="p">())</span> <span class="p">{</span>
+    <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">vec</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="mi">1</span><span class="p">);</span>
+  <span class="p">}</span>
+  <span class="n">vec</span><span class="p">.</span><span class="n">insert</span><span class="p">(</span><span class="n">vec</span><span class="p">.</span><span class="n">begin</span><span class="p">(),</span> <span class="p">{</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span> <span class="p">});</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">vec</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="mi">5</span><span class="p">);</span>
+  <span class="n">EXPECT_TRUE</span><span class="p">((</span><span class="n">vec</span> <span class="o">==</span> <span class="n">folly</span><span class="o">::</span><span class="n">small_vector</span><span class="o">&lt;</span><span class="n">SomeObj</span><span class="p">,</span><span class="mi">0</span><span class="o">&gt;</span><span class="p">{</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">1</span> <span class="p">}));</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">small_vector</span><span class="p">,</span> <span class="n">Basic</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">typedef</span> <span class="n">folly</span><span class="o">::</span><span class="n">small_vector</span><span class="o">&lt;</span><span class="kt">int</span><span class="p">,</span><span class="mi">3</span><span class="p">,</span><span class="n">uint32_t</span>
+<span class="cp">#ifdef __x86_64__</span>
+    <span class="p">,</span><span class="n">OneBitMutex</span>
+<span class="cp">#endif</span>
+  <span class="o">&gt;</span> <span class="n">Vector</span><span class="p">;</span>
+
+  <span class="n">Vector</span> <span class="n">a</span><span class="p">;</span>
+
+<span class="cp">#ifdef __x86_64__</span>
+  <span class="n">a</span><span class="p">.</span><span class="n">lock</span><span class="p">();</span>
+  <span class="n">a</span><span class="p">.</span><span class="n">unlock</span><span class="p">();</span>
+<span class="cp">#endif</span>
+
+  <span class="n">a</span><span class="p">.</span><span class="n">push_back</span><span class="p">(</span><span class="mi">12</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">a</span><span class="p">.</span><span class="n">front</span><span class="p">(),</span> <span class="mi">12</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">a</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="mi">1</span><span class="p">);</span>
+  <span class="n">a</span><span class="p">.</span><span class="n">push_back</span><span class="p">(</span><span class="mi">13</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">a</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="mi">2</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">a</span><span class="p">.</span><span class="n">front</span><span class="p">(),</span> <span class="mi">12</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">a</span><span class="p">.</span><span class="n">back</span><span class="p">(),</span> <span class="mi">13</span><span class="p">);</span>
+
+  <span class="n">a</span><span class="p">.</span><span class="n">emplace</span><span class="p">(</span><span class="n">a</span><span class="p">.</span><span class="n">end</span><span class="p">(),</span> <span class="mi">32</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">a</span><span class="p">.</span><span class="n">back</span><span class="p">(),</span> <span class="mi">32</span><span class="p">);</span>
+
+  <span class="n">a</span><span class="p">.</span><span class="n">emplace</span><span class="p">(</span><span class="n">a</span><span class="p">.</span><span class="n">begin</span><span class="p">(),</span> <span class="mi">12</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">a</span><span class="p">.</span><span class="n">front</span><span class="p">(),</span> <span class="mi">12</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">a</span><span class="p">.</span><span class="n">back</span><span class="p">(),</span> <span class="mi">32</span><span class="p">);</span>
+  <span class="n">a</span><span class="p">.</span><span class="n">erase</span><span class="p">(</span><span class="n">a</span><span class="p">.</span><span class="n">end</span><span class="p">()</span> <span class="o">-</span> <span class="mi">1</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">a</span><span class="p">.</span><span class="n">back</span><span class="p">(),</span> <span class="mi">13</span><span class="p">);</span>
+
+  <span class="n">a</span><span class="p">.</span><span class="n">push_back</span><span class="p">(</span><span class="mi">12</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">a</span><span class="p">.</span><span class="n">back</span><span class="p">(),</span> <span class="mi">12</span><span class="p">);</span>
+  <span class="n">a</span><span class="p">.</span><span class="n">pop_back</span><span class="p">();</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">a</span><span class="p">.</span><span class="n">back</span><span class="p">(),</span> <span class="mi">13</span><span class="p">);</span>
+
+  <span class="k">const</span> <span class="kt">int</span> <span class="n">s</span> <span class="o">=</span> <span class="mi">12</span><span class="p">;</span>
+  <span class="n">a</span><span class="p">.</span><span class="n">push_back</span><span class="p">(</span><span class="n">s</span><span class="p">);</span> <span class="c1">// lvalue reference</span>
+
+  <span class="n">Vector</span> <span class="n">b</span><span class="p">,</span> <span class="n">c</span><span class="p">;</span>
+  <span class="n">b</span> <span class="o">=</span> <span class="n">a</span><span class="p">;</span>
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">b</span> <span class="o">==</span> <span class="n">a</span><span class="p">);</span>
+  <span class="n">c</span> <span class="o">=</span> <span class="n">std</span><span class="o">::</span><span class="n">move</span><span class="p">(</span><span class="n">b</span><span class="p">);</span>
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">c</span> <span class="o">==</span> <span class="n">a</span><span class="p">);</span>
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">c</span> <span class="o">!=</span> <span class="n">b</span> <span class="o">&amp;&amp;</span> <span class="n">b</span> <span class="o">!=</span> <span class="n">a</span><span class="p">);</span>
+
+  <span class="n">EXPECT_GT</span><span class="p">(</span><span class="n">c</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="mi">0</span><span class="p">);</span>
+  <span class="n">c</span><span class="p">.</span><span class="n">resize</span><span class="p">(</span><span class="mi">1</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">c</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="mi">1</span><span class="p">);</span>
+
+  <span class="n">Vector</span> <span class="n">intCtor</span><span class="p">(</span><span class="mi">12</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">small_vector</span><span class="p">,</span> <span class="n">Capacity</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">folly</span><span class="o">::</span><span class="n">small_vector</span><span class="o">&lt;</span><span class="kt">unsigned</span> <span class="kt">long</span><span class="p">,</span> <span class="mi">1</span><span class="o">&gt;</span> <span class="n">vec</span><span class="p">;</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">vec</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="mi">0</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">vec</span><span class="p">.</span><span class="n">capacity</span><span class="p">(),</span> <span class="mi">1</span><span class="p">);</span>
+
+  <span class="n">vec</span><span class="p">.</span><span class="n">push_back</span><span class="p">(</span><span class="mi">0</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">vec</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="mi">1</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">vec</span><span class="p">.</span><span class="n">capacity</span><span class="p">(),</span> <span class="mi">1</span><span class="p">);</span>
+
+  <span class="n">vec</span><span class="p">.</span><span class="n">push_back</span><span class="p">(</span><span class="mi">1</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">vec</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="mi">2</span><span class="p">);</span>
+  <span class="n">EXPECT_GT</span><span class="p">(</span><span class="n">vec</span><span class="p">.</span><span class="n">capacity</span><span class="p">(),</span> <span class="mi">1</span><span class="p">);</span>
+
+
+  <span class="n">folly</span><span class="o">::</span><span class="n">small_vector</span><span class="o">&lt;</span><span class="kt">unsigned</span> <span class="kt">long</span><span class="p">,</span> <span class="mi">2</span><span class="o">&gt;</span> <span class="n">vec2</span><span class="p">;</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">vec2</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="mi">0</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">vec2</span><span class="p">.</span><span class="n">capacity</span><span class="p">(),</span> <span class="mi">2</span><span class="p">);</span>
+
+  <span class="n">vec2</span><span class="p">.</span><span class="n">push_back</span><span class="p">(</span><span class="mi">0</span><span class="p">);</span>
+  <span class="n">vec2</span><span class="p">.</span><span class="n">push_back</span><span class="p">(</span><span class="mi">1</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">vec2</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="mi">2</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">vec2</span><span class="p">.</span><span class="n">capacity</span><span class="p">(),</span> <span class="mi">2</span><span class="p">);</span>
+
+  <span class="n">vec2</span><span class="p">.</span><span class="n">push_back</span><span class="p">(</span><span class="mi">2</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">vec2</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="mi">3</span><span class="p">);</span>
+  <span class="n">EXPECT_GT</span><span class="p">(</span><span class="n">vec2</span><span class="p">.</span><span class="n">capacity</span><span class="p">(),</span> <span class="mi">2</span><span class="p">);</span></pre></div></td></tr>
+
+
+<tr id="section-16"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-16">&#182;</a></div><p>Both have grown by the minimum amount</p></td><td class="code"><div class="highlight"><pre>  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">vec</span><span class="p">.</span><span class="n">capacity</span><span class="p">(),</span> <span class="n">vec2</span><span class="p">.</span><span class="n">capacity</span><span class="p">());</span></pre></div></td></tr>
+
+
+<tr id="section-17"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-17">&#182;</a></div><p>Test capacity heapifying logic</p></td><td class="code"><div class="highlight"><pre>  <span class="n">folly</span><span class="o">::</span><span class="n">small_vector</span><span class="o">&lt;</span><span class="kt">unsigned</span> <span class="kt">char</span><span class="p">,</span> <span class="mi">1</span><span class="o">&gt;</span> <span class="n">vec3</span><span class="p">;</span>
+  <span class="k">const</span> <span class="n">size_t</span> <span class="n">hc_size</span> <span class="o">=</span> <span class="mi">1000000</span><span class="p">;</span>
+  <span class="k">for</span> <span class="p">(</span><span class="n">size_t</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">hc_size</span><span class="p">;</span> <span class="o">++</span><span class="n">i</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">auto</span> <span class="n">v</span> <span class="o">=</span> <span class="p">(</span><span class="kt">unsigned</span> <span class="kt">char</span><span class="p">)</span><span class="n">i</span><span class="p">;</span>
+    <span class="n">vec3</span><span class="p">.</span><span class="n">push_back</span><span class="p">(</span><span class="n">v</span><span class="p">);</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">vec3</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="n">v</span><span class="p">);</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">vec3</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="n">i</span> <span class="o">+</span> <span class="mi">1</span><span class="p">);</span>
+    <span class="n">EXPECT_GT</span><span class="p">(</span><span class="n">vec3</span><span class="p">.</span><span class="n">capacity</span><span class="p">(),</span> <span class="n">i</span><span class="p">);</span>
+  <span class="p">}</span>
+  <span class="k">for</span> <span class="p">(</span><span class="k">auto</span> <span class="n">i</span> <span class="o">=</span> <span class="n">hc_size</span><span class="p">;</span> <span class="n">i</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">;</span> <span class="o">--</span><span class="n">i</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">auto</span> <span class="n">v</span> <span class="o">=</span> <span class="p">(</span><span class="kt">unsigned</span> <span class="kt">char</span><span class="p">)(</span><span class="n">i</span> <span class="o">-</span> <span class="mi">1</span><span class="p">);</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">vec3</span><span class="p">.</span><span class="n">back</span><span class="p">(),</span> <span class="n">v</span><span class="p">);</span>
+    <span class="n">vec3</span><span class="p">.</span><span class="n">pop_back</span><span class="p">();</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">vec3</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="n">i</span> <span class="o">-</span> <span class="mi">1</span><span class="p">);</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">small_vector</span><span class="p">,</span> <span class="n">SelfPushBack</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">1</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="mi">33</span><span class="p">;</span> <span class="o">++</span><span class="n">i</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">folly</span><span class="o">::</span><span class="n">small_vector</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="o">&gt;</span> <span class="n">vec</span><span class="p">;</span>
+    <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">j</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">j</span> <span class="o">&lt;</span> <span class="n">i</span><span class="p">;</span> <span class="o">++</span><span class="n">j</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">vec</span><span class="p">.</span><span class="n">push_back</span><span class="p">(</span><span class="s">&quot;abc&quot;</span><span class="p">);</span>
+    <span class="p">}</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">vec</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="n">i</span><span class="p">);</span>
+    <span class="n">vec</span><span class="p">.</span><span class="n">push_back</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">move</span><span class="p">(</span><span class="n">vec</span><span class="p">[</span><span class="mi">0</span><span class="p">]));</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">vec</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="n">i</span> <span class="o">+</span> <span class="mi">1</span><span class="p">);</span>
+
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">vec</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="s">&quot;abc&quot;</span><span class="p">);</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">small_vector</span><span class="p">,</span> <span class="n">SelfEmplaceBack</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">1</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="mi">33</span><span class="p">;</span> <span class="o">++</span><span class="n">i</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">folly</span><span class="o">::</span><span class="n">small_vector</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="o">&gt;</span> <span class="n">vec</span><span class="p">;</span>
+    <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">j</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">j</span> <span class="o">&lt;</span> <span class="n">i</span><span class="p">;</span> <span class="o">++</span><span class="n">j</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">vec</span><span class="p">.</span><span class="n">emplace_back</span><span class="p">(</span><span class="s">&quot;abc&quot;</span><span class="p">);</span>
+    <span class="p">}</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">vec</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="n">i</span><span class="p">);</span>
+    <span class="n">vec</span><span class="p">.</span><span class="n">emplace_back</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">move</span><span class="p">(</span><span class="n">vec</span><span class="p">[</span><span class="mi">0</span><span class="p">]));</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">vec</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="n">i</span> <span class="o">+</span> <span class="mi">1</span><span class="p">);</span>
+
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">vec</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="s">&quot;abc&quot;</span><span class="p">);</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">small_vector</span><span class="p">,</span> <span class="n">SelfInsert</span><span class="p">)</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-18"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-18">&#182;</a></div><p>end insert</p></td><td class="code"><div class="highlight"><pre>  <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">1</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="mi">33</span><span class="p">;</span> <span class="o">++</span><span class="n">i</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">folly</span><span class="o">::</span><span class="n">small_vector</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="o">&gt;</span> <span class="n">vec</span><span class="p">;</span>
+    <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">j</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">j</span> <span class="o">&lt;</span> <span class="n">i</span><span class="p">;</span> <span class="o">++</span><span class="n">j</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">vec</span><span class="p">.</span><span class="n">push_back</span><span class="p">(</span><span class="s">&quot;abc&quot;</span><span class="p">);</span>
+    <span class="p">}</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">vec</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="n">i</span><span class="p">);</span>
+    <span class="n">vec</span><span class="p">.</span><span class="n">insert</span><span class="p">(</span><span class="n">vec</span><span class="p">.</span><span class="n">end</span><span class="p">(),</span> <span class="n">std</span><span class="o">::</span><span class="n">move</span><span class="p">(</span><span class="n">vec</span><span class="p">[</span><span class="mi">0</span><span class="p">]));</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">vec</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="n">i</span> <span class="o">+</span> <span class="mi">1</span><span class="p">);</span>
+
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">vec</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="s">&quot;abc&quot;</span><span class="p">);</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">vec</span><span class="p">[</span><span class="n">vec</span><span class="p">.</span><span class="n">size</span><span class="p">()</span> <span class="o">-</span> <span class="mi">1</span><span class="p">],</span> <span class="s">&quot;abc&quot;</span><span class="p">);</span>
+  <span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-19"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-19">&#182;</a></div><p>middle insert</p></td><td class="code"><div class="highlight"><pre>  <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">2</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="mi">33</span><span class="p">;</span> <span class="o">++</span><span class="n">i</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">folly</span><span class="o">::</span><span class="n">small_vector</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="o">&gt;</span> <span class="n">vec</span><span class="p">;</span>
+    <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">j</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">j</span> <span class="o">&lt;</span> <span class="n">i</span><span class="p">;</span> <span class="o">++</span><span class="n">j</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">vec</span><span class="p">.</span><span class="n">push_back</span><span class="p">(</span><span class="s">&quot;abc&quot;</span><span class="p">);</span>
+    <span class="p">}</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">vec</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="n">i</span><span class="p">);</span>
+    <span class="n">vec</span><span class="p">.</span><span class="n">insert</span><span class="p">(</span><span class="n">vec</span><span class="p">.</span><span class="n">end</span><span class="p">()</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">std</span><span class="o">::</span><span class="n">move</span><span class="p">(</span><span class="n">vec</span><span class="p">[</span><span class="mi">0</span><span class="p">]));</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">vec</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="n">i</span> <span class="o">+</span> <span class="mi">1</span><span class="p">);</span>
+
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">vec</span><span class="p">[</span><span class="n">i</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="s">&quot;abc&quot;</span><span class="p">);</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">vec</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="s">&quot;abc&quot;</span><span class="p">);</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+</pre></div></td></tr>
+
+</tbody>
+</table>
+</div>
+
+</body>
+<script>docas={repo:"joekychen/folly",depth:2}</script>
+<script>document.write('<script src=' + ('__proto__' in {} ? 'http://cdnjs.cloudflare.com/ajax/libs/zepto/1.0rc1/zepto.min.js' : 'https://ajax.googleapis.com/ajax/libs/jquery/1.7.2/jquery.min.js')+'><\\/script>')</script>
+<script src="http://baoshan.github.com/moment/min/moment.min.js"></script>
+<script src="../../javascript/docco.min.js"></script>
+</html>

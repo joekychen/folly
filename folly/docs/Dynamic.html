@@ -1,0 +1,207 @@
+<h2><code>folly/dynamic.h</code></h2>
+
+<p><code>folly/dynamic.h</code> provides a runtime dynamically typed value for
+C++, similar to the way languages with runtime type systems work
+(e.g. Python). It can hold types from a predetermined set of types
+(ints, bools, arrays of other dynamics, etc), similar to something like
+<code>boost::variant</code>, but the syntax is intended to be a little more like
+using the native type directly.</p>
+
+<p>To use <code>dynamic</code>, you need to be using gcc 4.6 or later. You'll want to
+include <code>folly/dynamic.h</code> (or perhaps also <code>folly/json.h</code>).</p>
+
+<h3>Overview</h3>
+
+<hr />
+
+<p>Here are some code samples to get started (assumes a <code>using
+folly::dynamic;</code> was used):</p>
+
+<p>``` Cpp
+    dynamic twelve = 12; // creates a dynamic that holds an integer
+    dynamic str = "string"; // yep, this one is an fbstring</p>
+
+<pre><code>// A few other types.
+dynamic nul = nullptr;
+dynamic boolean = false;
+
+// Arrays can be initialized with brackets.
+dynamic array = { "array ", "of ", 4, " elements" };
+assert(array.size() == 4);
+dynamic emptyArray = {};
+assert(array.empty());
+
+// Maps from dynamics to dynamics are called objects.  The
+// dynamic::object constant is how you make an empty map from dynamics
+// to dynamics.
+dynamic map = dynamic::object;
+map["something"] = 12;
+map["another_something"] = map["something"] * 2;
+
+// Dynamic objects may be intialized this way
+dynamic map2 = dynamic::object("something", 12)("another_something", 24);
+</code></pre>
+
+<p>```</p>
+
+<h3>Runtime Type Checking and Conversions</h3>
+
+<hr />
+
+<p>Any operation on a dynamic requires checking at runtime that the
+type is compatible with the operation. If it isn't, you'll get a
+<code>folly::TypeError</code>. Other exceptions can also be thrown if
+you try to do something impossible (e.g. if you put a very large
+64-bit integer in and try to read it out as a double).</p>
+
+<p>More examples should hopefully clarify this:</p>
+
+<p>``` Cpp
+    dynamic dint = 42;</p>
+
+<pre><code>dynamic str = "foo";
+dynamic anotherStr = str + "something"; // fine
+dynamic thisThrows = str + dint; // TypeError is raised
+</code></pre>
+
+<p>```</p>
+
+<p>Explicit type conversions can be requested for some of the basic types:</p>
+
+<p>``` Cpp
+    dynamic dint = 12345678;
+    dynamic doub = dint.asDouble(); // doub will hold 12345678.0
+    dynamic str = dint.asString(); // str == "12345678"</p>
+
+<pre><code>dynamic hugeInt = std::numeric_limits&lt;int64_t&gt;::max();
+dynamic hugeDoub = hugeInt.asDouble();  // throws a folly/Conv.h error,
+                                        // since it can't fit in a double
+</code></pre>
+
+<p>```</p>
+
+<h3>Iteration and Lookup</h3>
+
+<hr />
+
+<p>You can iterate over dynamic arrays as you would over any C++ sequence container.</p>
+
+<p>``` Cpp
+    dynamic array = {2, 3, "foo"};</p>
+
+<pre><code>for (auto&amp; val : array) {
+  doSomethingWith(val);
+}
+</code></pre>
+
+<p>```</p>
+
+<p>You can iterate over dynamic maps by calling <code>items()</code>, <code>keys()</code>,
+<code>values()</code>, which behave similarly to the homonymous methods of Python
+dictionaries.</p>
+
+<p>``` Cpp
+    dynamic obj = dynamic::object(2, 3)("hello", "world")("x", 4);</p>
+
+<pre><code>for (auto&amp; pair : obj.items()) {
+  // Key is pair.first, value is pair.second
+  processKey(pair.first);
+  processValue(pair.second);
+}
+
+for (auto&amp; key : obj.keys()) {
+  processKey(key);
+}
+
+for (auto&amp; value : obj.values()) {
+  processValue(value);
+}
+</code></pre>
+
+<p>```</p>
+
+<p>You can find an element by key in a dynamic map using the <code>find()</code> method,
+which returns an iterator compatible with <code>items()</code>:</p>
+
+<p>``` Cpp
+    dynamic obj = dynamic::object(2, 3)("hello", "world")("x", 4);</p>
+
+<pre><code>auto pos = obj.find("hello");
+// pos-&gt;first is "hello"
+// pos-&gt;second is "world"
+
+auto pos = obj.find("no_such_key);
+// pos == obj.items().end()
+</code></pre>
+
+<p>```</p>
+
+<h3>Use for JSON</h3>
+
+<hr />
+
+<p>The original motivation for implementing this type was to try to
+make dealing with json documents in C++ almost as easy as it is
+in languages with dynamic type systems (php or javascript, etc).
+The reader can judge whether we're anywhere near that goal, but
+here's what it looks like:</p>
+
+<p>``` Cpp
+    // Parsing JSON strings and using them.
+    std::string jsonDocument = R"({"key":12,"key2":[false, null, true, "yay"]})";
+    dynamic parsed = folly::parseJson(jsonDocument);
+    assert(parsed["key"] == 12);
+    assert(parsed["key2"][0] == false);
+    assert(parsed["key2"][1] == nullptr);</p>
+
+<pre><code>// Building the same document programatically.
+dynamic sonOfAJ = dynamic::object
+  ("key", 12)
+  ("key2", { false, nullptr, true, "yay" });
+
+// Printing.  (See also folly::toPrettyJson)
+auto str = folly::toJson(sonOfAJ);
+assert(jsonDocument.compare(str) == 0);
+</code></pre>
+
+<p>```</p>
+
+<h3>Performance</h3>
+
+<hr />
+
+<p>Dynamic typing is more expensive than static typing, even when
+you do it in C++. ;)</p>
+
+<p>However, some effort has been made to keep <code>folly::dynamic</code> and
+the json (de)serialization at least reasonably performant for
+common cases. The heap is only used for arrays and objects, and
+move construction is fully supported. String formatting
+internally also uses the highly performant <code>folly::to&lt;&gt;</code> (see
+<code>folly/Conv.h</code>).</p>
+
+<p>A trade off to keep in mind though, is that
+<code>sizeof(folly::dynamic)</code> is 64 bytes. You probably don't want to
+use it if you need to allocate large numbers of them (prefer
+static types, etc).</p>
+
+<h3>Some Design Rationale</h3>
+
+<hr />
+
+<p><strong>Q. Why is there no default constructor?</strong></p>
+
+<p>This is a bit of a limitation of <code>std::initializer_list&lt;&gt;</code> for
+this use case. The expression <code>dynamic d = {}</code> is required by the
+standard to call the default constructor if one exists (the
+reasoning for this makes sense, since <code>{}</code> is part of the concept
+of "uniform initialization", and is intended for use with things
+like <code>std::vector</code>). It would be surprising if this expression
+didn't leave <code>d.isArray()</code> true, but on the other hand it would
+also be surprising if <code>dynamic d</code> left <code>d.isArray()</code> as true. The
+solution was just to disallow uninitialized dynamics: every
+dynamic must start out being assigned to some value (or nullptr).</p>
+
+<p><strong>Q. Isn't this just a poor imitation of the C# language feature?</strong></p>
+
+<p>Pretty much.</p>

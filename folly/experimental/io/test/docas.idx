@@ -1,0 +1,5 @@
+f | NetworkBenchmark.cpp | s | 5.7K | 143 | Jordan DeLong | jdelong@fb.com | 1338661169 |  | Pull from FB rev 63ce89e2f2301e6bba44a111cc7d4218022156f6
+f | Makefile.am | g | 326B |  | Jordan DeLong | jdelong@fb.com | 1338661169 |  | Pull from FB rev 63ce89e2f2301e6bba44a111cc7d4218022156f6
+f | IOBufCursorTest.cpp | s | 9.3K | 292 | Jordan DeLong | jdelong@fb.com | 1338661169 |  | Pull from FB rev 63ce89e2f2301e6bba44a111cc7d4218022156f6
+f | IOBufQueueTest.cpp | s | 7.0K | 218 | Tudor Bosman | tudorb@fb.com | 1339180112 |  | Add IOBufQueue::wrapBuffer, which handles buffers > 4GB.  Test Plan: test added  Reviewed By: brianp@fb.com  FB internal diff: D489158
+f | IOBufTest.cpp | s | 18K | 548 | Tudor Bosman | tudorb@fb.com | 1340332731 |  | Add TypedIOBuf.  Summary: Simple class to handle IOBuf as an array of objects of fixed size.  Test Plan: test added  Reviewed By: brianp@fb.com  FB internal diff: D497287

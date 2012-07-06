@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html><head><title>joekychen/folly » folly › String.h
+
+</title>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+<meta name="generator" content="Docco">
+<link rel="stylesheet" media="all" href="../stylesheets/docco.min.css" />
+
+
+</head>
+<body>
+<div id="container">
+<div id="background"></div>
+<table cellpadding="0" cellspacing="0">
+<thead><tr><th class="docs"><a id="home" href="../index.html"></a><h1>String.h</h1></th><th class="code"></th></tr></thead>
+<tbody>
+
+
+<tr id="section-1"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-1">&#182;</a></div></td><td class="code"><div class="highlight"><pre><span class="cm">/*</span>
+<span class="cm"> * Copyright 2012 Facebook, Inc.</span>
+<span class="cm"> *</span>
+<span class="cm"> * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span class="cm"> * you may not use this file except in compliance with the License.</span>
+<span class="cm"> * You may obtain a copy of the License at</span>
+<span class="cm"> *</span>
+<span class="cm"> *   http://www.apache.org/licenses/LICENSE-2.0</span>
+<span class="cm"> *</span>
+<span class="cm"> * Unless required by applicable law or agreed to in writing, software</span>
+<span class="cm"> * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span class="cm"> * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span class="cm"> * See the License for the specific language governing permissions and</span>
+<span class="cm"> * limitations under the License.</span>
+<span class="cm"> */</span>
+
+<span class="cp">#ifndef FOLLY_BASE_STRING_H_</span>
+<span class="cp">#define FOLLY_BASE_STRING_H_</span>
+
+<span class="cp">#include &lt;string&gt;</span>
+<span class="cp">#include &lt;boost/type_traits.hpp&gt;</span>
+
+<span class="cp">#ifdef __GNUC__</span>
+<span class="cp"># include &lt;ext/hash_set&gt;</span>
+<span class="cp"># include &lt;ext/hash_map&gt;</span>
+<span class="cp">#endif</span>
+
+<span class="cp">#include &quot;folly/Conv.h&quot;</span>
+<span class="cp">#include &quot;folly/FBString.h&quot;</span>
+<span class="cp">#include &quot;folly/FBVector.h&quot;</span>
+<span class="cp">#include &quot;folly/Range.h&quot;</span>
+<span class="cp">#include &quot;folly/ScopeGuard.h&quot;</span></pre></div></td></tr>
+
+
+<tr id="section-2"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-2">&#182;</a></div><p>Compatibility function, to make sure toStdString(s) can be called
+to convert a std::string or fbstring variable s into type std::string
+with very little overhead if s was already std::string</p></td><td class="code"><div class="highlight"><pre><span class="n">namespace</span> <span class="n">folly</span> <span class="p">{</span>
+
+<span class="kr">inline</span>
+<span class="n">std</span><span class="o">::</span><span class="n">string</span> <span class="n">toStdString</span><span class="p">(</span><span class="k">const</span> <span class="n">folly</span><span class="o">::</span><span class="n">fbstring</span><span class="o">&amp;</span> <span class="n">s</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">return</span> <span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="p">(</span><span class="n">s</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span> <span class="n">s</span><span class="p">.</span><span class="n">size</span><span class="p">());</span>
+<span class="p">}</span>
+
+<span class="kr">inline</span>
+<span class="k">const</span> <span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="o">&amp;</span> <span class="n">toStdString</span><span class="p">(</span><span class="k">const</span> <span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="o">&amp;</span> <span class="n">s</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">return</span> <span class="n">s</span><span class="p">;</span>
+<span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-3"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-3">&#182;</a></div><p>If called with a temporary, the compiler will select this overload instead
+of the above, so we don't return a (lvalue) reference to a temporary.</p></td><td class="code"><div class="highlight"><pre><span class="kr">inline</span>
+<span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="o">&amp;&amp;</span> <span class="n">toStdString</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="o">&amp;&amp;</span> <span class="n">s</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">return</span> <span class="n">std</span><span class="o">::</span><span class="n">move</span><span class="p">(</span><span class="n">s</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="cm">/**</span>
+<span class="cm"> * C-Escape a string, making it suitable for representation as a C string</span>
+<span class="cm"> * literal.  Appends the result to the output string.</span>
+<span class="cm"> *</span>
+<span class="cm"> * Backslashes all occurrences of backslash and double-quote:</span>
+<span class="cm"> *   &quot;  -&gt;  \&quot;</span>
+<span class="cm"> *   \  -&gt;  \\</span>
+<span class="cm"> *</span>
+<span class="cm"> * Replaces all non-printable ASCII characters with backslash-octal</span>
+<span class="cm"> * representation:</span>
+<span class="cm"> *   &lt;ASCII 254&gt; -&gt; \376</span>
+<span class="cm"> *</span>
+<span class="cm"> * Note that we use backslash-octal instead of backslash-hex because the octal</span>
+<span class="cm"> * representation is guaranteed to consume no more than 3 characters; &quot;\3760&quot;</span>
+<span class="cm"> * represents two characters, one with value 254, and one with value 48 (&#39;0&#39;),</span>
+<span class="cm"> * whereas &quot;\xfe0&quot; represents only one character (with value 4064, which leads</span>
+<span class="cm"> * to implementation-defined behavior).</span>
+<span class="cm"> */</span>
+<span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">String</span><span class="o">&gt;</span>
+<span class="kt">void</span> <span class="n">cEscape</span><span class="p">(</span><span class="n">StringPiece</span> <span class="n">str</span><span class="p">,</span> <span class="n">String</span><span class="o">&amp;</span> <span class="n">out</span><span class="p">);</span>
+
+<span class="cm">/**</span>
+<span class="cm"> * Similar to cEscape above, but returns the escaped string.</span>
+<span class="cm"> */</span>
+<span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">String</span><span class="o">&gt;</span>
+<span class="n">String</span> <span class="n">cEscape</span><span class="p">(</span><span class="n">StringPiece</span> <span class="n">str</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">String</span> <span class="n">out</span><span class="p">;</span>
+  <span class="n">cEscape</span><span class="p">(</span><span class="n">str</span><span class="p">,</span> <span class="n">out</span><span class="p">);</span>
+  <span class="k">return</span> <span class="n">out</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="cm">/**</span>
+<span class="cm"> * C-Unescape a string; the opposite of cEscape above.  Appends the result</span>
+<span class="cm"> * to the output string.</span>
+<span class="cm"> *</span>
+<span class="cm"> * Recognizes the standard C escape sequences:</span>
+<span class="cm"> *</span>
+<span class="cm"> * \&#39; \&quot; \? \\ \a \b \f \n \r \t \v</span>
+<span class="cm"> * \[0-7]+</span>
+<span class="cm"> * \x[0-9a-fA-F]+</span>
+<span class="cm"> *</span>
+<span class="cm"> * In strict mode (default), throws std::invalid_argument if it encounters</span>
+<span class="cm"> * an unrecognized escape sequence.  In non-strict mode, it leaves</span>
+<span class="cm"> * the escape sequence unchanged.</span>
+<span class="cm"> */</span>
+<span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">String</span><span class="o">&gt;</span>
+<span class="kt">void</span> <span class="n">cUnescape</span><span class="p">(</span><span class="n">StringPiece</span> <span class="n">str</span><span class="p">,</span> <span class="n">String</span><span class="o">&amp;</span> <span class="n">out</span><span class="p">,</span> <span class="n">bool</span> <span class="n">strict</span> <span class="o">=</span> <span class="nb">true</span><span class="p">);</span>
+
+<span class="cm">/**</span>
+<span class="cm"> * Similar to cUnescape above, but returns the escaped string.</span>
+<span class="cm"> */</span>
+<span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">String</span><span class="o">&gt;</span>
+<span class="n">String</span> <span class="n">cUnescape</span><span class="p">(</span><span class="n">StringPiece</span> <span class="n">str</span><span class="p">,</span> <span class="n">bool</span> <span class="n">strict</span> <span class="o">=</span> <span class="nb">true</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">String</span> <span class="n">out</span><span class="p">;</span>
+  <span class="n">cUnescape</span><span class="p">(</span><span class="n">str</span><span class="p">,</span> <span class="n">out</span><span class="p">,</span> <span class="n">strict</span><span class="p">);</span>
+  <span class="k">return</span> <span class="n">out</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="cm">/**</span>
+<span class="cm"> * stringPrintf is much like printf but deposits its result into a</span>
+<span class="cm"> * string. Two signatures are supported: the first simply returns the</span>
+<span class="cm"> * resulting string, and the second appends the produced characters to</span>
+<span class="cm"> * the specified string and returns a reference to it.</span>
+<span class="cm"> */</span>
+<span class="n">std</span><span class="o">::</span><span class="n">string</span> <span class="n">stringPrintf</span><span class="p">(</span><span class="k">const</span> <span class="kt">char</span><span class="o">*</span> <span class="n">format</span><span class="p">,</span> <span class="p">...)</span>
+  <span class="n">__attribute__</span> <span class="p">((</span><span class="n">format</span> <span class="p">(</span><span class="n">printf</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">)));</span>
+
+<span class="cm">/** Similar to stringPrintf, with different signiture.</span>
+<span class="cm">  */</span>
+<span class="kt">void</span> <span class="n">stringPrintf</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="o">*</span> <span class="n">out</span><span class="p">,</span> <span class="k">const</span> <span class="kt">char</span><span class="o">*</span> <span class="n">fmt</span><span class="p">,</span> <span class="p">...)</span>
+  <span class="n">__attribute__</span> <span class="p">((</span><span class="n">format</span> <span class="p">(</span><span class="n">printf</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">)));</span>
+
+<span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="o">&amp;</span> <span class="n">stringAppendf</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="o">*</span> <span class="n">output</span><span class="p">,</span> <span class="k">const</span> <span class="kt">char</span><span class="o">*</span> <span class="n">format</span><span class="p">,</span> <span class="p">...)</span>
+  <span class="n">__attribute__</span> <span class="p">((</span><span class="n">format</span> <span class="p">(</span><span class="n">printf</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">)));</span>
+
+<span class="cm">/**</span>
+<span class="cm"> * Backslashify a string, that is, replace non-printable characters</span>
+<span class="cm"> * with C-style (but NOT C compliant) &quot;\xHH&quot; encoding.  If hex_style</span>
+<span class="cm"> * is false, then shorthand notations like &quot;\0&quot; will be used instead</span>
+<span class="cm"> * of &quot;\x00&quot; for the most common backslash cases.</span>
+<span class="cm"> *</span>
+<span class="cm"> * There are two forms, one returning the input string, and one</span>
+<span class="cm"> * creating output in the specified output string.</span>
+<span class="cm"> *</span>
+<span class="cm"> * This is mainly intended for printing to a terminal, so it is not</span>
+<span class="cm"> * particularly optimized.</span>
+<span class="cm"> *</span>
+<span class="cm"> * Do *not* use this in situations where you expect to be able to feed</span>
+<span class="cm"> * the string to a C or C++ compiler, as there are nuances with how C</span>
+<span class="cm"> * parses such strings that lead to failures.  This is for display</span>
+<span class="cm"> * purposed only.  If you want a string you can embed for use in C or</span>
+<span class="cm"> * C++, use cEscape instead.  This function is for display purposes</span>
+<span class="cm"> * only.</span>
+<span class="cm"> */</span>
+<span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">String1</span><span class="p">,</span> <span class="n">class</span> <span class="n">String2</span><span class="o">&gt;</span>
+<span class="kt">void</span> <span class="n">backslashify</span><span class="p">(</span><span class="k">const</span> <span class="n">String1</span><span class="o">&amp;</span> <span class="n">input</span><span class="p">,</span> <span class="n">String2</span><span class="o">&amp;</span> <span class="n">output</span><span class="p">,</span> <span class="n">bool</span> <span class="n">hex_style</span><span class="o">=</span><span class="nb">false</span><span class="p">);</span>
+
+<span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">String</span><span class="o">&gt;</span>
+<span class="n">String</span> <span class="n">backslashify</span><span class="p">(</span><span class="k">const</span> <span class="n">String</span><span class="o">&amp;</span> <span class="n">input</span><span class="p">,</span> <span class="n">bool</span> <span class="n">hex_style</span><span class="o">=</span><span class="nb">false</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">String</span> <span class="n">output</span><span class="p">;</span>
+  <span class="n">backslashify</span><span class="p">(</span><span class="n">input</span><span class="p">,</span> <span class="n">output</span><span class="p">,</span> <span class="n">hex_style</span><span class="p">);</span>
+  <span class="k">return</span> <span class="n">output</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="cm">/**</span>
+<span class="cm"> * Take a string and &quot;humanify&quot; it -- that is, make it look better.</span>
+<span class="cm"> * Since &quot;better&quot; is subjective, caveat emptor.  The basic approach is</span>
+<span class="cm"> * to count the number of unprintable characters.  If there are none,</span>
+<span class="cm"> * then the output is the input.  If there are relatively few, or if</span>
+<span class="cm"> * there is a long &quot;enough&quot; prefix of printable characters, use</span>
+<span class="cm"> * backslashify.  If it is mostly binary, then simply hex encode.</span>
+<span class="cm"> *</span>
+<span class="cm"> * This is an attempt to make a computer smart, and so likely is wrong</span>
+<span class="cm"> * most of the time.</span>
+<span class="cm"> */</span>
+<span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">String1</span><span class="p">,</span> <span class="n">class</span> <span class="n">String2</span><span class="o">&gt;</span>
+<span class="kt">void</span> <span class="n">humanify</span><span class="p">(</span><span class="k">const</span> <span class="n">String1</span><span class="o">&amp;</span> <span class="n">input</span><span class="p">,</span> <span class="n">String2</span><span class="o">&amp;</span> <span class="n">output</span><span class="p">);</span>
+
+<span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">String</span><span class="o">&gt;</span>
+<span class="n">String</span> <span class="n">humanify</span><span class="p">(</span><span class="k">const</span> <span class="n">String</span><span class="o">&amp;</span> <span class="n">input</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">String</span> <span class="n">output</span><span class="p">;</span>
+  <span class="n">humanify</span><span class="p">(</span><span class="n">input</span><span class="p">,</span> <span class="n">output</span><span class="p">);</span>
+  <span class="k">return</span> <span class="n">output</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="cm">/**</span>
+<span class="cm"> * Same functionality as Python&#39;s binascii.hexlify.  Returns true</span>
+<span class="cm"> * on successful conversion.</span>
+<span class="cm"> *</span>
+<span class="cm"> * If append_output is true, append data to the output rather than</span>
+<span class="cm"> * replace it.</span>
+<span class="cm"> */</span>
+<span class="n">template</span><span class="o">&lt;</span><span class="n">class</span> <span class="n">InputString</span><span class="p">,</span> <span class="n">class</span> <span class="n">OutputString</span><span class="o">&gt;</span>
+<span class="n">bool</span> <span class="n">hexlify</span><span class="p">(</span><span class="k">const</span> <span class="n">InputString</span><span class="o">&amp;</span> <span class="n">input</span><span class="p">,</span> <span class="n">OutputString</span><span class="o">&amp;</span> <span class="n">output</span><span class="p">,</span>
+             <span class="n">bool</span> <span class="n">append</span><span class="o">=</span><span class="nb">false</span><span class="p">);</span>
+
+<span class="cm">/**</span>
+<span class="cm"> * Same functionality as Python&#39;s binascii.unhexlify.  Returns true</span>
+<span class="cm"> * on successful conversion.</span>
+<span class="cm"> */</span>
+<span class="n">template</span><span class="o">&lt;</span><span class="n">class</span> <span class="n">InputString</span><span class="p">,</span> <span class="n">class</span> <span class="n">OutputString</span><span class="o">&gt;</span>
+<span class="n">bool</span> <span class="n">unhexlify</span><span class="p">(</span><span class="k">const</span> <span class="n">InputString</span><span class="o">&amp;</span> <span class="n">input</span><span class="p">,</span> <span class="n">OutputString</span><span class="o">&amp;</span> <span class="n">output</span><span class="p">);</span>
+
+<span class="cm">/*</span>
+<span class="cm"> * A pretty-printer for numbers that appends suffixes of units of the</span>
+<span class="cm"> * given type.  It prints 4 sig-figs of value with the most</span>
+<span class="cm"> * appropriate unit.</span>
+<span class="cm"> *</span>
+<span class="cm"> * If `addSpace&#39; is true, we put a space between the units suffix and</span>
+<span class="cm"> * the value.</span>
+<span class="cm"> *</span>
+<span class="cm"> * Current types are:</span>
+<span class="cm"> *   PRETTY_TIME         - s, ms, us, ns, etc.</span>
+<span class="cm"> *   PRETTY_BYTES        - kb, MB, GB, etc (goes up by 2^10 = 1024 each time)</span>
+<span class="cm"> *   PRETTY_BYTES_METRIC - kb, MB, GB, etc (goes up by 10^3 = 1000 each time)</span>
+<span class="cm"> *   PRETTY_UNITS_METRIC - k, M, G, etc (goes up by 10^3 = 1000 each time)</span>
+<span class="cm"> *   PRETTY_UNITS_BINARY - k, M, G, etc (goes up by 2^10 = 1024 each time)</span>
+<span class="cm"> *</span>
+<span class="cm"> * @author Mark Rabkin &lt;mrabkin@fb.com&gt;</span>
+<span class="cm"> */</span>
+<span class="k">enum</span> <span class="n">PrettyType</span> <span class="p">{</span>
+  <span class="n">PRETTY_TIME</span><span class="p">,</span>
+  <span class="n">PRETTY_BYTES</span><span class="p">,</span>
+  <span class="n">PRETTY_BYTES_METRIC</span><span class="p">,</span>
+  <span class="n">PRETTY_UNITS_METRIC</span><span class="p">,</span>
+  <span class="n">PRETTY_UNITS_BINARY</span><span class="p">,</span>
+
+  <span class="n">PRETTY_NUM_TYPES</span>
+<span class="p">};</span>
+
+<span class="n">std</span><span class="o">::</span><span class="n">string</span> <span class="n">prettyPrint</span><span class="p">(</span><span class="kt">double</span> <span class="n">val</span><span class="p">,</span> <span class="n">PrettyType</span><span class="p">,</span> <span class="n">bool</span> <span class="n">addSpace</span> <span class="o">=</span> <span class="nb">true</span><span class="p">);</span>
+
+<span class="cm">/**</span>
+<span class="cm"> * Write a hex dump of size bytes starting at ptr to out.</span>
+<span class="cm"> *</span>
+<span class="cm"> * The hex dump is formatted as follows:</span>
+<span class="cm"> *</span>
+<span class="cm"> * for the string &quot;abcdefghijklmnopqrstuvwxyz\x02&quot;</span>
+<span class="cm">00000000  61 62 63 64 65 66 67 68  69 6a 6b 6c 6d 6e 6f 70  |abcdefghijklmnop|</span>
+<span class="cm">00000010  71 72 73 74 75 76 77 78  79 7a 02                 |qrstuvwxyz.     |</span>
+<span class="cm"> *</span>
+<span class="cm"> * that is, we write 16 bytes per line, both as hex bytes and as printable</span>
+<span class="cm"> * characters.  Non-printable characters are replaced with &#39;.&#39;</span>
+<span class="cm"> * Lines are written to out one by one (one StringPiece at a time) without</span>
+<span class="cm"> * delimiters.</span>
+<span class="cm"> */</span>
+<span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">OutIt</span><span class="o">&gt;</span>
+<span class="kt">void</span> <span class="n">hexDump</span><span class="p">(</span><span class="k">const</span> <span class="kt">void</span><span class="o">*</span> <span class="n">ptr</span><span class="p">,</span> <span class="kt">size_t</span> <span class="n">size</span><span class="p">,</span> <span class="n">OutIt</span> <span class="n">out</span><span class="p">);</span>
+
+<span class="cm">/**</span>
+<span class="cm"> * Return the hex dump of size bytes starting at ptr as a string.</span>
+<span class="cm"> */</span>
+<span class="n">std</span><span class="o">::</span><span class="n">string</span> <span class="n">hexDump</span><span class="p">(</span><span class="k">const</span> <span class="kt">void</span><span class="o">*</span> <span class="n">ptr</span><span class="p">,</span> <span class="kt">size_t</span> <span class="n">size</span><span class="p">);</span>
+
+<span class="cm">/**</span>
+<span class="cm"> * Return a fbstring containing the description of the given errno value.</span>
+<span class="cm"> * Takes care not to overwrite the actual system errno, so calling</span>
+<span class="cm"> * errnoStr(errno) is valid.</span>
+<span class="cm"> */</span>
+<span class="n">fbstring</span> <span class="n">errnoStr</span><span class="p">(</span><span class="kt">int</span> <span class="n">err</span><span class="p">);</span>
+
+<span class="cm">/**</span>
+<span class="cm"> * Return the demangled (prettyfied) version of a C++ type.</span>
+<span class="cm"> *</span>
+<span class="cm"> * This function tries to produce a human-readable type, but the type name will</span>
+<span class="cm"> * be returned unchanged in case of error or if demangling isn&#39;t supported on</span>
+<span class="cm"> * your system.</span>
+<span class="cm"> *</span>
+<span class="cm"> * Use for debugging -- do not rely on demangle() returning anything useful.</span>
+<span class="cm"> *</span>
+<span class="cm"> * This function may allocate memory (and therefore throw).</span>
+<span class="cm"> */</span>
+<span class="n">fbstring</span> <span class="n">demangle</span><span class="p">(</span><span class="k">const</span> <span class="kt">char</span><span class="o">*</span> <span class="n">name</span><span class="p">);</span>
+<span class="kr">inline</span> <span class="n">fbstring</span> <span class="nf">demangle</span><span class="p">(</span><span class="k">const</span> <span class="n">std</span><span class="o">::</span><span class="n">type_info</span><span class="o">&amp;</span> <span class="n">type</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">return</span> <span class="n">demangle</span><span class="p">(</span><span class="n">type</span><span class="p">.</span><span class="n">name</span><span class="p">());</span>
+<span class="p">}</span>
+
+<span class="cm">/**</span>
+<span class="cm"> * Debug string for an exception: include type and what().</span>
+<span class="cm"> */</span>
+<span class="kr">inline</span> <span class="n">fbstring</span> <span class="nf">exceptionStr</span><span class="p">(</span><span class="k">const</span> <span class="n">std</span><span class="o">::</span><span class="n">exception</span><span class="o">&amp;</span> <span class="n">e</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">return</span> <span class="n">folly</span><span class="o">::</span><span class="n">to</span><span class="o">&lt;</span><span class="n">fbstring</span><span class="o">&gt;</span><span class="p">(</span><span class="n">demangle</span><span class="p">(</span><span class="n">typeid</span><span class="p">(</span><span class="n">e</span><span class="p">)),</span> <span class="s">&quot;: &quot;</span><span class="p">,</span> <span class="n">e</span><span class="p">.</span><span class="n">what</span><span class="p">());</span>
+<span class="p">}</span>
+
+<span class="cm">/*</span>
+<span class="cm"> * Split a string into a list of tokens by delimiter.</span>
+<span class="cm"> *</span>
+<span class="cm"> * The split interface here supports different output types, selected</span>
+<span class="cm"> * at compile time: StringPiece, fbstring, or std::string.  If you are</span>
+<span class="cm"> * using a vector to hold the output, it detects the type based on</span>
+<span class="cm"> * what your vector contains.  If the output vector is not empty, split</span>
+<span class="cm"> * will append to the end of the vector.</span>
+<span class="cm"> *</span>
+<span class="cm"> * You can also use splitTo() to write the output to an arbitrary</span>
+<span class="cm"> * OutputIterator (e.g. std::inserter() on a std::set&lt;&gt;), in which</span>
+<span class="cm"> * case you have to tell the function the type.  (Rationale:</span>
+<span class="cm"> * OutputIterators don&#39;t have a value_type, so we can&#39;t detect the</span>
+<span class="cm"> * type in splitTo without being told.)</span>
+<span class="cm"> *</span>
+<span class="cm"> * Examples:</span>
+<span class="cm"> *</span>
+<span class="cm"> *   std::vector&lt;folly::StringPiece&gt; v;</span>
+<span class="cm"> *   folly::split(&quot;:&quot;, &quot;asd:bsd&quot;, v);</span>
+<span class="cm"> *</span>
+<span class="cm"> *   std::set&lt;StringPiece&gt; s;</span>
+<span class="cm"> *   folly::splitTo&lt;StringPiece&gt;(&quot;:&quot;, &quot;asd:bsd:asd:csd&quot;,</span>
+<span class="cm"> *    std::inserter(s, s.begin()));</span>
+<span class="cm"> *</span>
+<span class="cm"> * Split also takes a flag (ignoreEmpty) that indicates whether adjacent</span>
+<span class="cm"> * delimiters should be treated as one single separator (ignoring empty tokens)</span>
+<span class="cm"> * or not (generating empty tokens).</span>
+<span class="cm"> */</span>
+
+<span class="n">template</span><span class="o">&lt;</span><span class="n">class</span> <span class="n">Delim</span><span class="p">,</span> <span class="n">class</span> <span class="n">String</span><span class="p">,</span> <span class="n">class</span> <span class="n">OutputType</span><span class="o">&gt;</span>
+<span class="kt">void</span> <span class="n">split</span><span class="p">(</span><span class="k">const</span> <span class="n">Delim</span><span class="o">&amp;</span> <span class="n">delimiter</span><span class="p">,</span>
+           <span class="k">const</span> <span class="n">String</span><span class="o">&amp;</span> <span class="n">input</span><span class="p">,</span>
+           <span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="n">OutputType</span><span class="o">&gt;&amp;</span> <span class="n">out</span><span class="p">,</span>
+           <span class="n">bool</span> <span class="n">ignoreEmpty</span> <span class="o">=</span> <span class="nb">false</span><span class="p">);</span>
+
+<span class="n">template</span><span class="o">&lt;</span><span class="n">class</span> <span class="n">Delim</span><span class="p">,</span> <span class="n">class</span> <span class="n">String</span><span class="p">,</span> <span class="n">class</span> <span class="n">OutputType</span><span class="o">&gt;</span>
+<span class="kt">void</span> <span class="n">split</span><span class="p">(</span><span class="k">const</span> <span class="n">Delim</span><span class="o">&amp;</span> <span class="n">delimiter</span><span class="p">,</span>
+           <span class="k">const</span> <span class="n">String</span><span class="o">&amp;</span> <span class="n">input</span><span class="p">,</span>
+           <span class="n">folly</span><span class="o">::</span><span class="n">fbvector</span><span class="o">&lt;</span><span class="n">OutputType</span><span class="o">&gt;&amp;</span> <span class="n">out</span><span class="p">,</span>
+           <span class="n">bool</span> <span class="n">ignoreEmpty</span> <span class="o">=</span> <span class="nb">false</span><span class="p">);</span>
+
+<span class="n">template</span><span class="o">&lt;</span><span class="n">class</span> <span class="n">OutputValueType</span><span class="p">,</span> <span class="n">class</span> <span class="n">Delim</span><span class="p">,</span> <span class="n">class</span> <span class="n">String</span><span class="p">,</span>
+         <span class="n">class</span> <span class="n">OutputIterator</span><span class="o">&gt;</span>
+<span class="kt">void</span> <span class="n">splitTo</span><span class="p">(</span><span class="k">const</span> <span class="n">Delim</span><span class="o">&amp;</span> <span class="n">delimiter</span><span class="p">,</span>
+             <span class="k">const</span> <span class="n">String</span><span class="o">&amp;</span> <span class="n">input</span><span class="p">,</span>
+             <span class="n">OutputIterator</span> <span class="n">out</span><span class="p">,</span>
+             <span class="n">bool</span> <span class="n">ignoreEmpty</span> <span class="o">=</span> <span class="nb">false</span><span class="p">);</span>
+
+<span class="p">}</span> <span class="c1">// namespace folly</span></pre></div></td></tr>
+
+
+<tr id="section-4"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-4">&#182;</a></div><p>Hash functions for string and fbstring usable with e.g. hash_map</p></td><td class="code"><div class="highlight"><pre><span class="cp">#ifdef __GNUC__</span>
+<span class="n">namespace</span> <span class="n">__gnu_cxx</span> <span class="p">{</span>
+
+<span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">C</span><span class="o">&gt;</span>
+<span class="k">struct</span> <span class="n">hash</span><span class="o">&lt;</span><span class="n">folly</span><span class="o">::</span><span class="n">basic_fbstring</span><span class="o">&lt;</span><span class="n">C</span><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">:</span> <span class="n">private</span> <span class="n">hash</span><span class="o">&lt;</span><span class="k">const</span> <span class="n">C</span><span class="o">*&gt;</span> <span class="p">{</span>
+  <span class="kt">size_t</span> <span class="n">operator</span><span class="p">()(</span><span class="k">const</span> <span class="n">folly</span><span class="o">::</span><span class="n">basic_fbstring</span><span class="o">&lt;</span><span class="n">C</span><span class="o">&gt;</span> <span class="o">&amp;</span> <span class="n">s</span><span class="p">)</span> <span class="k">const</span> <span class="p">{</span>
+    <span class="k">return</span> <span class="n">hash</span><span class="o">&lt;</span><span class="k">const</span> <span class="n">C</span><span class="o">*&gt;::</span><span class="n">operator</span><span class="p">()(</span><span class="n">s</span><span class="p">.</span><span class="n">c_str</span><span class="p">());</span>
+  <span class="p">}</span>
+<span class="p">};</span>
+
+<span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">C</span><span class="o">&gt;</span>
+<span class="k">struct</span> <span class="n">hash</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">basic_string</span><span class="o">&lt;</span><span class="n">C</span><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">:</span> <span class="n">private</span> <span class="n">hash</span><span class="o">&lt;</span><span class="k">const</span> <span class="n">C</span><span class="o">*&gt;</span> <span class="p">{</span>
+  <span class="kt">size_t</span> <span class="n">operator</span><span class="p">()(</span><span class="k">const</span> <span class="n">std</span><span class="o">::</span><span class="n">basic_string</span><span class="o">&lt;</span><span class="n">C</span><span class="o">&gt;</span> <span class="o">&amp;</span> <span class="n">s</span><span class="p">)</span> <span class="k">const</span> <span class="p">{</span>
+    <span class="k">return</span> <span class="n">hash</span><span class="o">&lt;</span><span class="k">const</span> <span class="n">C</span><span class="o">*&gt;::</span><span class="n">operator</span><span class="p">()(</span><span class="n">s</span><span class="p">.</span><span class="n">c_str</span><span class="p">());</span>
+  <span class="p">}</span>
+<span class="p">};</span>
+
+<span class="p">}</span> <span class="c1">// namespace __gnu_cxx</span>
+<span class="cp">#endif</span></pre></div></td></tr>
+
+
+<tr id="section-5"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-5">&#182;</a></div><p>Hook into boost's type traits</p></td><td class="code"><div class="highlight"><pre><span class="n">namespace</span> <span class="n">boost</span> <span class="p">{</span>
+<span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">T</span><span class="o">&gt;</span>
+<span class="k">struct</span> <span class="n">has_nothrow_constructor</span><span class="o">&lt;</span><span class="n">folly</span><span class="o">::</span><span class="n">basic_fbstring</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">:</span> <span class="n">true_type</span> <span class="p">{</span>
+  <span class="k">enum</span> <span class="p">{</span> <span class="n">value</span> <span class="o">=</span> <span class="nb">true</span> <span class="p">};</span>
+<span class="p">};</span>
+<span class="p">}</span> <span class="c1">// namespace boost</span>
+
+<span class="cp">#include &quot;folly/String-inl.h&quot;</span>
+
+<span class="cp">#endif</span>
+
+</pre></div></td></tr>
+
+</tbody>
+</table>
+</div>
+
+</body>
+<script>docas={repo:"joekychen/folly",depth:1}</script>
+<script>document.write('<script src=' + ('__proto__' in {} ? 'http://cdnjs.cloudflare.com/ajax/libs/zepto/1.0rc1/zepto.min.js' : 'https://ajax.googleapis.com/ajax/libs/jquery/1.7.2/jquery.min.js')+'><\\/script>')</script>
+<script src="http://baoshan.github.com/moment/min/moment.min.js"></script>
+<script src="../javascript/docco.min.js"></script>
+</html>

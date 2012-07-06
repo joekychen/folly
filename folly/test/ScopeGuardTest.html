@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html><head><title>joekychen/folly » folly › test › ScopeGuardTest.cpp
+
+</title>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+<meta name="generator" content="Docco">
+<link rel="stylesheet" media="all" href="../../stylesheets/docco.min.css" />
+
+
+</head>
+<body>
+<div id="container">
+<div id="background"></div>
+<table cellpadding="0" cellspacing="0">
+<thead><tr><th class="docs"><a id="home" href="../../index.html"></a><h1>ScopeGuardTest.cpp</h1></th><th class="code"></th></tr></thead>
+<tbody>
+
+
+<tr id="section-1"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-1">&#182;</a></div></td><td class="code"><div class="highlight"><pre><span class="cm">/*</span>
+<span class="cm"> * Copyright 2012 Facebook, Inc.</span>
+<span class="cm"> *</span>
+<span class="cm"> * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span class="cm"> * you may not use this file except in compliance with the License.</span>
+<span class="cm"> * You may obtain a copy of the License at</span>
+<span class="cm"> *</span>
+<span class="cm"> *   http://www.apache.org/licenses/LICENSE-2.0</span>
+<span class="cm"> *</span>
+<span class="cm"> * Unless required by applicable law or agreed to in writing, software</span>
+<span class="cm"> * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span class="cm"> * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span class="cm"> * See the License for the specific language governing permissions and</span>
+<span class="cm"> * limitations under the License.</span>
+<span class="cm"> */</span>
+
+<span class="cp">#include &quot;folly/ScopeGuard.h&quot;</span>
+
+<span class="cp">#include &lt;gflags/gflags.h&gt;</span>
+<span class="cp">#include &lt;gtest/gtest.h&gt;</span>
+
+<span class="cp">#include &lt;functional&gt;</span>
+<span class="cp">#include &lt;stdexcept&gt;</span>
+
+<span class="k">using</span> <span class="n">folly</span><span class="o">::</span><span class="n">ScopeGuard</span><span class="p">;</span>
+<span class="k">using</span> <span class="n">folly</span><span class="o">::</span><span class="n">makeGuard</span><span class="p">;</span>
+<span class="k">using</span> <span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="p">;</span>
+
+<span class="kt">double</span> <span class="n">returnsDouble</span><span class="p">()</span> <span class="p">{</span>
+  <span class="k">return</span> <span class="mf">0.0</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="k">class</span> <span class="nc">MyFunctor</span> <span class="p">{</span>
+ <span class="k">public</span><span class="o">:</span>
+  <span class="k">explicit</span> <span class="n">MyFunctor</span><span class="p">(</span><span class="kt">int</span><span class="o">*</span> <span class="n">ptr</span><span class="p">)</span> <span class="o">:</span> <span class="n">ptr_</span><span class="p">(</span><span class="n">ptr</span><span class="p">)</span> <span class="p">{}</span>
+
+  <span class="kt">void</span> <span class="k">operator</span><span class="p">()()</span> <span class="p">{</span>
+    <span class="o">++*</span><span class="n">ptr_</span><span class="p">;</span>
+  <span class="p">}</span>
+
+ <span class="k">private</span><span class="o">:</span>
+  <span class="kt">int</span><span class="o">*</span> <span class="n">ptr_</span><span class="p">;</span>
+<span class="p">};</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">ScopeGuard</span><span class="p">,</span> <span class="n">DifferentWaysToBind</span><span class="p">)</span> <span class="p">{</span>
+  <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-2"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-2">&#182;</a></div><p>There is implicit conversion from func pointer
+double (*)() to function<void()>.</p></td><td class="code"><div class="highlight"><pre>    <span class="n">ScopeGuard</span> <span class="n">g</span> <span class="o">=</span> <span class="n">makeGuard</span><span class="p">(</span><span class="n">returnsDouble</span><span class="p">);</span>
+  <span class="p">}</span>
+
+  <span class="n">vector</span><span class="o">&lt;</span><span class="kt">int</span><span class="o">&gt;</span> <span class="n">v</span><span class="p">;</span>
+  <span class="kt">void</span> <span class="p">(</span><span class="n">vector</span><span class="o">&lt;</span><span class="kt">int</span><span class="o">&gt;::*</span><span class="n">push_back</span><span class="p">)(</span><span class="kt">int</span> <span class="k">const</span><span class="o">&amp;</span><span class="p">)</span> <span class="o">=</span> <span class="o">&amp;</span><span class="n">vector</span><span class="o">&lt;</span><span class="kt">int</span><span class="o">&gt;::</span><span class="n">push_back</span><span class="p">;</span>
+
+  <span class="n">v</span><span class="p">.</span><span class="n">push_back</span><span class="p">(</span><span class="mi">1</span><span class="p">);</span>
+  <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-3"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-3">&#182;</a></div><p>binding to member function.</p></td><td class="code"><div class="highlight"><pre>    <span class="n">ScopeGuard</span> <span class="n">g</span> <span class="o">=</span> <span class="n">makeGuard</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">bind</span><span class="p">(</span><span class="o">&amp;</span><span class="n">vector</span><span class="o">&lt;</span><span class="kt">int</span><span class="o">&gt;::</span><span class="n">pop_back</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">v</span><span class="p">));</span>
+  <span class="p">}</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">v</span><span class="p">.</span><span class="n">size</span><span class="p">());</span>
+
+  <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-4"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-4">&#182;</a></div><p>bind member function with args. v is passed-by-value!</p></td><td class="code"><div class="highlight"><pre>    <span class="n">ScopeGuard</span> <span class="n">g</span> <span class="o">=</span> <span class="n">makeGuard</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">bind</span><span class="p">(</span><span class="n">push_back</span><span class="p">,</span> <span class="n">v</span><span class="p">,</span> <span class="mi">2</span><span class="p">));</span>
+  <span class="p">}</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">v</span><span class="p">.</span><span class="n">size</span><span class="p">());</span> <span class="c1">// push_back happened on a copy of v... fail!</span></pre></div></td></tr>
+
+
+<tr id="section-5"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-5">&#182;</a></div><p>pass in an argument by pointer so to avoid copy.</p></td><td class="code"><div class="highlight"><pre>  <span class="p">{</span>
+    <span class="n">ScopeGuard</span> <span class="n">g</span> <span class="o">=</span> <span class="n">makeGuard</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">bind</span><span class="p">(</span><span class="n">push_back</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">v</span><span class="p">,</span> <span class="mi">4</span><span class="p">));</span>
+  <span class="p">}</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">v</span><span class="p">.</span><span class="n">size</span><span class="p">());</span>
+
+  <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-6"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-6">&#182;</a></div><p>pass in an argument by reference so to avoid copy.</p></td><td class="code"><div class="highlight"><pre>    <span class="n">ScopeGuard</span> <span class="n">g</span> <span class="o">=</span> <span class="n">makeGuard</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">bind</span><span class="p">(</span><span class="n">push_back</span><span class="p">,</span> <span class="n">std</span><span class="o">::</span><span class="n">ref</span><span class="p">(</span><span class="n">v</span><span class="p">),</span> <span class="mi">4</span><span class="p">));</span>
+  <span class="p">}</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="n">v</span><span class="p">.</span><span class="n">size</span><span class="p">());</span></pre></div></td></tr>
+
+
+<tr id="section-7"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-7">&#182;</a></div><p>lambda with a reference to v</p></td><td class="code"><div class="highlight"><pre>  <span class="p">{</span>
+    <span class="n">ScopeGuard</span> <span class="n">g</span> <span class="o">=</span> <span class="n">makeGuard</span><span class="p">([</span><span class="o">&amp;</span><span class="p">]</span> <span class="p">{</span> <span class="n">v</span><span class="p">.</span><span class="n">push_back</span><span class="p">(</span><span class="mi">5</span><span class="p">);</span> <span class="p">});</span>
+  <span class="p">}</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="n">v</span><span class="p">.</span><span class="n">size</span><span class="p">());</span></pre></div></td></tr>
+
+
+<tr id="section-8"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-8">&#182;</a></div><p>lambda with a copy of v</p></td><td class="code"><div class="highlight"><pre>  <span class="p">{</span>
+    <span class="n">ScopeGuard</span> <span class="n">g</span> <span class="o">=</span> <span class="n">makeGuard</span><span class="p">([</span><span class="n">v</span><span class="p">]</span> <span class="p">()</span> <span class="k">mutable</span> <span class="p">{</span> <span class="n">v</span><span class="p">.</span><span class="n">push_back</span><span class="p">(</span><span class="mi">6</span><span class="p">);</span> <span class="p">});</span>
+  <span class="p">}</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="n">v</span><span class="p">.</span><span class="n">size</span><span class="p">());</span></pre></div></td></tr>
+
+
+<tr id="section-9"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-9">&#182;</a></div><p>functor object</p></td><td class="code"><div class="highlight"><pre>  <span class="kt">int</span> <span class="n">n</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+  <span class="p">{</span>
+    <span class="n">MyFunctor</span> <span class="n">f</span><span class="p">(</span><span class="o">&amp;</span><span class="n">n</span><span class="p">);</span>
+    <span class="n">ScopeGuard</span> <span class="n">g</span> <span class="o">=</span> <span class="n">makeGuard</span><span class="p">(</span><span class="n">f</span><span class="p">);</span>
+  <span class="p">}</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">n</span><span class="p">);</span></pre></div></td></tr>
+
+
+<tr id="section-10"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-10">&#182;</a></div><p>temporary functor object</p></td><td class="code"><div class="highlight"><pre>  <span class="n">n</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+  <span class="p">{</span>
+    <span class="n">ScopeGuard</span> <span class="n">g</span> <span class="o">=</span> <span class="n">makeGuard</span><span class="p">(</span><span class="n">MyFunctor</span><span class="p">(</span><span class="o">&amp;</span><span class="n">n</span><span class="p">));</span>
+  <span class="p">}</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">n</span><span class="p">);</span></pre></div></td></tr>
+
+
+<tr id="section-11"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-11">&#182;</a></div><p>Use auto instead of ScopeGuard</p></td><td class="code"><div class="highlight"><pre>  <span class="n">n</span> <span class="o">=</span> <span class="mi">2</span><span class="p">;</span>
+  <span class="p">{</span>
+    <span class="k">auto</span> <span class="n">g</span> <span class="o">=</span> <span class="n">makeGuard</span><span class="p">(</span><span class="n">MyFunctor</span><span class="p">(</span><span class="o">&amp;</span><span class="n">n</span><span class="p">));</span>
+  <span class="p">}</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="n">n</span><span class="p">);</span></pre></div></td></tr>
+
+
+<tr id="section-12"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-12">&#182;</a></div><p>Use const auto&amp; instead of ScopeGuard</p></td><td class="code"><div class="highlight"><pre>  <span class="n">n</span> <span class="o">=</span> <span class="mi">10</span><span class="p">;</span>
+  <span class="p">{</span>
+    <span class="k">const</span> <span class="k">auto</span><span class="o">&amp;</span> <span class="n">g</span> <span class="o">=</span> <span class="n">makeGuard</span><span class="p">(</span><span class="n">MyFunctor</span><span class="p">(</span><span class="o">&amp;</span><span class="n">n</span><span class="p">));</span>
+  <span class="p">}</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">11</span><span class="p">,</span> <span class="n">n</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">ScopeGuard</span><span class="p">,</span> <span class="n">GuardException</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">EXPECT_DEATH</span><span class="p">({</span>
+    <span class="n">ScopeGuard</span> <span class="n">g</span> <span class="o">=</span> <span class="n">makeGuard</span><span class="p">([</span><span class="o">&amp;</span><span class="p">]</span> <span class="p">{</span>
+      <span class="k">throw</span> <span class="n">std</span><span class="o">::</span><span class="n">runtime_error</span><span class="p">(</span><span class="s">&quot;destructors should never throw!&quot;</span><span class="p">);</span>
+    <span class="p">});</span>
+  <span class="p">},</span>
+  <span class="s">&quot;destructors should never throw&quot;</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="cm">/**</span>
+<span class="cm"> * Add an integer to a vector iff it was inserted into the</span>
+<span class="cm"> * db successfuly. Here is a schematic of how you would accomplish</span>
+<span class="cm"> * this with scope guard.</span>
+<span class="cm"> */</span>
+<span class="kt">void</span> <span class="n">testUndoAction</span><span class="p">(</span><span class="kt">bool</span> <span class="n">failure</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">vector</span><span class="o">&lt;</span><span class="n">int64_t</span><span class="o">&gt;</span> <span class="n">v</span><span class="p">;</span>
+  <span class="p">{</span> <span class="c1">// defines a &quot;mini&quot; scope</span></pre></div></td></tr>
+
+
+<tr id="section-13"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-13">&#182;</a></div><p>be optimistic and insert this into memory</p></td><td class="code"><div class="highlight"><pre>    <span class="n">v</span><span class="p">.</span><span class="n">push_back</span><span class="p">(</span><span class="mi">1</span><span class="p">);</span></pre></div></td></tr>
+
+
+<tr id="section-14"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-14">&#182;</a></div><p>The guard is triggered to undo the insertion unless dismiss() is called.</p></td><td class="code"><div class="highlight"><pre>    <span class="n">ScopeGuard</span> <span class="n">guard</span> <span class="o">=</span> <span class="n">makeGuard</span><span class="p">([</span><span class="o">&amp;</span><span class="p">]</span> <span class="p">{</span> <span class="n">v</span><span class="p">.</span><span class="n">pop_back</span><span class="p">();</span> <span class="p">});</span></pre></div></td></tr>
+
+
+<tr id="section-15"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-15">&#182;</a></div><p>Do some action; Use the failure argument to pretend
+if it failed or succeeded.</p></td><td class="code"><div class="highlight"><pre></pre></div></td></tr>
+
+
+<tr id="section-16"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-16">&#182;</a></div><p>if there was no failure, dismiss the undo guard action.</p></td><td class="code"><div class="highlight"><pre>    <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">failure</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">guard</span><span class="p">.</span><span class="n">dismiss</span><span class="p">();</span>
+    <span class="p">}</span>
+  <span class="p">}</span> <span class="c1">// all stack allocated in the mini-scope will be destroyed here.</span>
+
+  <span class="k">if</span> <span class="p">(</span><span class="n">failure</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">v</span><span class="p">.</span><span class="n">size</span><span class="p">());</span> <span class="c1">// the action failed =&gt; undo insertion</span>
+  <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">v</span><span class="p">.</span><span class="n">size</span><span class="p">());</span> <span class="c1">// the action succeeded =&gt; keep insertion</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">ScopeGuard</span><span class="p">,</span> <span class="n">UndoAction</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">testUndoAction</span><span class="p">(</span><span class="kc">true</span><span class="p">);</span>
+  <span class="n">testUndoAction</span><span class="p">(</span><span class="kc">false</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="cm">/**</span>
+<span class="cm"> * Sometimes in a try catch block we want to execute a piece of code</span>
+<span class="cm"> * regardless if an exception happened or not. For example, you want</span>
+<span class="cm"> * to close a db connection regardless if an exception was thrown during</span>
+<span class="cm"> * insertion. In Java and other languages there is a finally clause that</span>
+<span class="cm"> * helps accomplish this:</span>
+<span class="cm"> *</span>
+<span class="cm"> *   try {</span>
+<span class="cm"> *     dbConn.doInsert(sql);</span>
+<span class="cm"> *   } catch (const DbException&amp; dbe) {</span>
+<span class="cm"> *     dbConn.recordFailure(dbe);</span>
+<span class="cm"> *   } catch (const CriticalException&amp; e) {</span>
+<span class="cm"> *     throw e; // re-throw the exception</span>
+<span class="cm"> *   } finally {</span>
+<span class="cm"> *     dbConn.closeConnection(); // executes no matter what!</span>
+<span class="cm"> *   }</span>
+<span class="cm"> *</span>
+<span class="cm"> * We can approximate this behavior in C++ with ScopeGuard.</span>
+<span class="cm"> */</span>
+<span class="k">enum</span> <span class="k">class</span> <span class="nc">ErrorBehavior</span> <span class="p">{</span>
+  <span class="n">SUCCESS</span><span class="p">,</span>
+  <span class="n">HANDLED_ERROR</span><span class="p">,</span>
+  <span class="n">UNHANDLED_ERROR</span><span class="p">,</span>
+<span class="p">};</span>
+
+<span class="kt">void</span> <span class="n">testFinally</span><span class="p">(</span><span class="n">ErrorBehavior</span> <span class="n">error</span><span class="p">)</span> <span class="p">{</span>
+  <span class="kt">bool</span> <span class="n">cleanupOccurred</span> <span class="o">=</span> <span class="kc">false</span><span class="p">;</span>
+
+  <span class="k">try</span> <span class="p">{</span>
+    <span class="n">ScopeGuard</span> <span class="n">guard</span> <span class="o">=</span> <span class="n">makeGuard</span><span class="p">([</span><span class="o">&amp;</span><span class="p">]</span> <span class="p">{</span> <span class="n">cleanupOccurred</span> <span class="o">=</span> <span class="kc">true</span><span class="p">;</span> <span class="p">});</span>
+
+    <span class="k">try</span> <span class="p">{</span>
+      <span class="k">if</span> <span class="p">(</span><span class="n">error</span> <span class="o">==</span> <span class="n">ErrorBehavior</span><span class="o">::</span><span class="n">HANDLED_ERROR</span><span class="p">)</span> <span class="p">{</span>
+        <span class="k">throw</span> <span class="n">std</span><span class="o">::</span><span class="n">runtime_error</span><span class="p">(</span><span class="s">&quot;throwing an expected error&quot;</span><span class="p">);</span>
+      <span class="p">}</span> <span class="k">else</span> <span class="k">if</span> <span class="p">(</span><span class="n">error</span> <span class="o">==</span> <span class="n">ErrorBehavior</span><span class="o">::</span><span class="n">UNHANDLED_ERROR</span><span class="p">)</span> <span class="p">{</span>
+        <span class="k">throw</span> <span class="s">&quot;never throw raw strings&quot;</span><span class="p">;</span>
+      <span class="p">}</span>
+    <span class="p">}</span> <span class="k">catch</span> <span class="p">(</span><span class="k">const</span> <span class="n">std</span><span class="o">::</span><span class="n">runtime_error</span><span class="o">&amp;</span><span class="p">)</span> <span class="p">{</span>
+    <span class="p">}</span>
+  <span class="p">}</span> <span class="k">catch</span> <span class="p">(...)</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-17"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-17">&#182;</a></div><p>Outer catch to swallow the error for the UNHANDLED_ERROR behavior</p></td><td class="code"><div class="highlight"><pre>  <span class="p">}</span>
+
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">cleanupOccurred</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">ScopeGuard</span><span class="p">,</span> <span class="n">TryCatchFinally</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">testFinally</span><span class="p">(</span><span class="n">ErrorBehavior</span><span class="o">::</span><span class="n">SUCCESS</span><span class="p">);</span>
+  <span class="n">testFinally</span><span class="p">(</span><span class="n">ErrorBehavior</span><span class="o">::</span><span class="n">HANDLED_ERROR</span><span class="p">);</span>
+  <span class="n">testFinally</span><span class="p">(</span><span class="n">ErrorBehavior</span><span class="o">::</span><span class="n">UNHANDLED_ERROR</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">ScopeGuard</span><span class="p">,</span> <span class="n">TEST_SCOPE_EXIT</span><span class="p">)</span> <span class="p">{</span>
+  <span class="kt">int</span> <span class="n">x</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+  <span class="p">{</span>
+    <span class="n">SCOPE_EXIT</span> <span class="p">{</span> <span class="o">++</span><span class="n">x</span><span class="p">;</span> <span class="p">};</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">x</span><span class="p">);</span>
+  <span class="p">}</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">x</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="k">class</span> <span class="nc">Foo</span> <span class="p">{</span>
+<span class="k">public</span><span class="o">:</span>
+  <span class="n">Foo</span><span class="p">()</span> <span class="p">{}</span>
+  <span class="o">~</span><span class="n">Foo</span><span class="p">()</span> <span class="p">{</span>
+    <span class="k">try</span> <span class="p">{</span>
+      <span class="k">auto</span> <span class="n">e</span> <span class="o">=</span> <span class="n">std</span><span class="o">::</span><span class="n">current_exception</span><span class="p">();</span>
+      <span class="kt">int</span> <span class="n">test</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+      <span class="p">{</span>
+        <span class="n">SCOPE_EXIT</span> <span class="p">{</span> <span class="o">++</span><span class="n">test</span><span class="p">;</span> <span class="p">};</span>
+        <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">test</span><span class="p">);</span>
+      <span class="p">}</span>
+      <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">test</span><span class="p">);</span>
+    <span class="p">}</span> <span class="k">catch</span> <span class="p">(</span><span class="k">const</span> <span class="n">std</span><span class="o">::</span><span class="n">exception</span><span class="o">&amp;</span> <span class="n">ex</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">LOG</span><span class="p">(</span><span class="n">FATAL</span><span class="p">)</span> <span class="o">&lt;&lt;</span> <span class="s">&quot;Unexpected exception: &quot;</span> <span class="o">&lt;&lt;</span> <span class="n">ex</span><span class="p">.</span><span class="n">what</span><span class="p">();</span>
+    <span class="p">}</span>
+  <span class="p">}</span>
+<span class="p">};</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">ScopeGuard</span><span class="p">,</span> <span class="n">TEST_SCOPE_FAILURE2</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">try</span> <span class="p">{</span>
+    <span class="n">Foo</span> <span class="n">f</span><span class="p">;</span>
+    <span class="k">throw</span> <span class="n">std</span><span class="o">::</span><span class="n">runtime_error</span><span class="p">(</span><span class="s">&quot;test&quot;</span><span class="p">);</span>
+  <span class="p">}</span> <span class="k">catch</span> <span class="p">(...)</span> <span class="p">{</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="kt">int</span> <span class="n">main</span><span class="p">(</span><span class="kt">int</span> <span class="n">argc</span><span class="p">,</span> <span class="kt">char</span><span class="o">**</span> <span class="n">argv</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">testing</span><span class="o">::</span><span class="n">InitGoogleTest</span><span class="p">(</span><span class="o">&amp;</span><span class="n">argc</span><span class="p">,</span> <span class="n">argv</span><span class="p">);</span>
+  <span class="n">google</span><span class="o">::</span><span class="n">ParseCommandLineFlags</span><span class="p">(</span><span class="o">&amp;</span><span class="n">argc</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">argv</span><span class="p">,</span> <span class="kc">true</span><span class="p">);</span>
+  <span class="k">return</span> <span class="n">RUN_ALL_TESTS</span><span class="p">();</span>
+<span class="p">}</span>
+
+</pre></div></td></tr>
+
+</tbody>
+</table>
+</div>
+
+</body>
+<script>docas={repo:"joekychen/folly",depth:2}</script>
+<script>document.write('<script src=' + ('__proto__' in {} ? 'http://cdnjs.cloudflare.com/ajax/libs/zepto/1.0rc1/zepto.min.js' : 'https://ajax.googleapis.com/ajax/libs/jquery/1.7.2/jquery.min.js')+'><\\/script>')</script>
+<script src="http://baoshan.github.com/moment/min/moment.min.js"></script>
+<script src="../../javascript/docco.min.js"></script>
+</html>

@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html><head><title>joekychen/folly » folly › test › function_benchmark › main.cpp
+
+</title>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+<meta name="generator" content="Docco">
+<link rel="stylesheet" media="all" href="../../../stylesheets/docco.min.css" />
+
+
+</head>
+<body>
+<div id="container">
+<div id="background"></div>
+<table cellpadding="0" cellspacing="0">
+<thead><tr><th class="docs"><a id="home" href="../../../index.html"></a><h1>main.cpp</h1></th><th class="code"></th></tr></thead>
+<tbody>
+
+
+<tr id="section-1"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-1">&#182;</a></div></td><td class="code"><div class="highlight"><pre><span class="cm">/*</span>
+<span class="cm"> * Copyright 2012 Facebook, Inc.</span>
+<span class="cm"> *</span>
+<span class="cm"> * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span class="cm"> * you may not use this file except in compliance with the License.</span>
+<span class="cm"> * You may obtain a copy of the License at</span>
+<span class="cm"> *</span>
+<span class="cm"> *   http://www.apache.org/licenses/LICENSE-2.0</span>
+<span class="cm"> *</span>
+<span class="cm"> * Unless required by applicable law or agreed to in writing, software</span>
+<span class="cm"> * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span class="cm"> * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span class="cm"> * See the License for the specific language governing permissions and</span>
+<span class="cm"> * limitations under the License.</span>
+<span class="cm"> */</span>
+
+<span class="cp">#include &quot;folly/test/function_benchmark/benchmark_impl.h&quot;</span>
+<span class="cp">#include &quot;folly/test/function_benchmark/test_functions.h&quot;</span>
+
+<span class="cp">#include &quot;folly/Benchmark.h&quot;</span>
+<span class="cp">#include &quot;folly/ScopeGuard.h&quot;</span>
+<span class="cp">#include &lt;gflags/gflags.h&gt;</span>
+<span class="cp">#include &lt;glog/logging.h&gt;</span>
+
+<span class="k">using</span> <span class="n">folly</span><span class="o">::</span><span class="n">ScopeGuard</span><span class="p">;</span>
+<span class="k">using</span> <span class="n">folly</span><span class="o">::</span><span class="n">makeGuard</span><span class="p">;</span></pre></div></td></tr>
+
+
+<tr id="section-2"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-2">&#182;</a></div><p>Declare the bm<em>max</em>iters flag from folly/Benchmark.cpp</p></td><td class="code"><div class="highlight"><pre><span class="n">DECLARE_int32</span><span class="p">(</span><span class="n">bm_max_iters</span><span class="p">);</span></pre></div></td></tr>
+
+
+<tr id="section-3"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-3">&#182;</a></div><p>Directly invoking a function</p></td><td class="code"><div class="highlight"><pre><span class="n">BENCHMARK</span><span class="p">(</span><span class="n">fn_invoke</span><span class="p">,</span> <span class="n">iters</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">n</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">n</span> <span class="o">&lt;</span> <span class="n">iters</span><span class="p">;</span> <span class="o">++</span><span class="n">n</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">doNothing</span><span class="p">();</span>
+  <span class="p">}</span>
+<span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-4"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-4">&#182;</a></div><p>Invoking a function through a function pointer</p></td><td class="code"><div class="highlight"><pre><span class="n">BENCHMARK</span><span class="p">(</span><span class="n">fn_ptr_invoke</span><span class="p">,</span> <span class="n">iters</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">BM_fn_ptr_invoke_impl</span><span class="p">(</span><span class="n">iters</span><span class="p">,</span> <span class="n">doNothing</span><span class="p">);</span>
+<span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-5"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-5">&#182;</a></div><p>Invoking a function through a std::function object</p></td><td class="code"><div class="highlight"><pre><span class="n">BENCHMARK</span><span class="p">(</span><span class="n">std_function_invoke</span><span class="p">,</span> <span class="n">iters</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">BM_std_function_invoke_impl</span><span class="p">(</span><span class="n">iters</span><span class="p">,</span> <span class="n">doNothing</span><span class="p">);</span>
+<span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-6"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-6">&#182;</a></div><p>Invoking a member function through a member function pointer</p></td><td class="code"><div class="highlight"><pre><span class="n">BENCHMARK</span><span class="p">(</span><span class="n">mem_fn_invoke</span><span class="p">,</span> <span class="n">iters</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">TestClass</span> <span class="n">tc</span><span class="p">;</span>
+  <span class="n">BM_mem_fn_invoke_impl</span><span class="p">(</span><span class="n">iters</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">tc</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">TestClass</span><span class="o">::</span><span class="n">doNothing</span><span class="p">);</span>
+<span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-7"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-7">&#182;</a></div><p>Invoke a function pointer through an inlined wrapper function</p></td><td class="code"><div class="highlight"><pre><span class="n">BENCHMARK</span><span class="p">(</span><span class="n">fn_ptr_invoke_through_inline</span><span class="p">,</span> <span class="n">iters</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">BM_fn_ptr_invoke_inlined_impl</span><span class="p">(</span><span class="n">iters</span><span class="p">,</span> <span class="n">doNothing</span><span class="p">);</span>
+<span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-8"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-8">&#182;</a></div><p>Invoke a lambda that calls doNothing() through an inlined wrapper function</p></td><td class="code"><div class="highlight"><pre><span class="n">BENCHMARK</span><span class="p">(</span><span class="n">lambda_invoke_fn</span><span class="p">,</span> <span class="n">iters</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">BM_invoke_fn_template_impl</span><span class="p">(</span><span class="n">iters</span><span class="p">,</span> <span class="p">[]</span> <span class="p">{</span> <span class="n">doNothing</span><span class="p">();</span> <span class="p">});</span>
+<span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-9"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-9">&#182;</a></div><p>Invoke a lambda that does nothing</p></td><td class="code"><div class="highlight"><pre><span class="n">BENCHMARK</span><span class="p">(</span><span class="n">lambda_noop</span><span class="p">,</span> <span class="n">iters</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">BM_invoke_fn_template_impl</span><span class="p">(</span><span class="n">iters</span><span class="p">,</span> <span class="p">[]</span> <span class="p">{});</span>
+<span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-10"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-10">&#182;</a></div><p>Invoke a lambda that modifies a local variable</p></td><td class="code"><div class="highlight"><pre><span class="n">BENCHMARK</span><span class="p">(</span><span class="n">lambda_local_var</span><span class="p">,</span> <span class="n">iters</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">uint32_t</span> <span class="n">count1</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+  <span class="n">uint32_t</span> <span class="n">count2</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+  <span class="n">BM_invoke_fn_template_impl</span><span class="p">(</span><span class="n">iters</span><span class="p">,</span> <span class="p">[</span><span class="o">&amp;</span><span class="p">]</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-11"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-11">&#182;</a></div><p>Do something slightly more complicated than just incrementing a
+variable.  Otherwise gcc is smart enough to optimize the loop away.</p></td><td class="code"><div class="highlight"><pre>    <span class="k">if</span> <span class="p">(</span><span class="n">count1</span> <span class="o">&amp;</span> <span class="mh">0x1</span><span class="p">)</span> <span class="p">{</span>
+      <span class="o">++</span><span class="n">count2</span><span class="p">;</span>
+    <span class="p">}</span>
+    <span class="o">++</span><span class="n">count1</span><span class="p">;</span>
+  <span class="p">});</span></pre></div></td></tr>
+
+
+<tr id="section-12"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-12">&#182;</a></div><p>Use the values we computed, so gcc won't optimize the loop away</p></td><td class="code"><div class="highlight"><pre>  <span class="n">CHECK_EQ</span><span class="p">(</span><span class="n">iters</span><span class="p">,</span> <span class="n">count1</span><span class="p">);</span>
+  <span class="n">CHECK_EQ</span><span class="p">(</span><span class="n">iters</span> <span class="o">/</span> <span class="mi">2</span><span class="p">,</span> <span class="n">count2</span><span class="p">);</span>
+<span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-13"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-13">&#182;</a></div><p>Invoke a function pointer through the same wrapper used for lambdas</p></td><td class="code"><div class="highlight"><pre><span class="n">BENCHMARK</span><span class="p">(</span><span class="n">fn_ptr_invoke_through_template</span><span class="p">,</span> <span class="n">iters</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">BM_invoke_fn_template_impl</span><span class="p">(</span><span class="n">iters</span><span class="p">,</span> <span class="n">doNothing</span><span class="p">);</span>
+<span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-14"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-14">&#182;</a></div><p>Invoking a virtual method</p></td><td class="code"><div class="highlight"><pre><span class="n">BENCHMARK</span><span class="p">(</span><span class="n">virtual_fn_invoke</span><span class="p">,</span> <span class="n">iters</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">VirtualClass</span> <span class="n">vc</span><span class="p">;</span>
+  <span class="n">BM_virtual_fn_invoke_impl</span><span class="p">(</span><span class="n">iters</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">vc</span><span class="p">);</span>
+<span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-15"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-15">&#182;</a></div><p>Creating a function pointer and invoking it</p></td><td class="code"><div class="highlight"><pre><span class="n">BENCHMARK</span><span class="p">(</span><span class="n">fn_ptr_create_invoke</span><span class="p">,</span> <span class="n">iters</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">n</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">n</span> <span class="o">&lt;</span> <span class="n">iters</span><span class="p">;</span> <span class="o">++</span><span class="n">n</span><span class="p">)</span> <span class="p">{</span>
+    <span class="kt">void</span> <span class="p">(</span><span class="o">*</span><span class="n">fn</span><span class="p">)()</span> <span class="o">=</span> <span class="n">doNothing</span><span class="p">;</span>
+    <span class="n">fn</span><span class="p">();</span>
+  <span class="p">}</span>
+<span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-16"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-16">&#182;</a></div><p>Creating a std::function object from a function pointer, and invoking it</p></td><td class="code"><div class="highlight"><pre><span class="n">BENCHMARK</span><span class="p">(</span><span class="n">std_function_create_invoke</span><span class="p">,</span> <span class="n">iters</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">n</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">n</span> <span class="o">&lt;</span> <span class="n">iters</span><span class="p">;</span> <span class="o">++</span><span class="n">n</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">std</span><span class="o">::</span><span class="n">function</span><span class="o">&lt;</span><span class="kt">void</span><span class="p">()</span><span class="o">&gt;</span> <span class="n">fn</span> <span class="o">=</span> <span class="n">doNothing</span><span class="p">;</span>
+    <span class="n">fn</span><span class="p">();</span>
+  <span class="p">}</span>
+<span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-17"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-17">&#182;</a></div><p>Creating a pointer-to-member and invoking it</p></td><td class="code"><div class="highlight"><pre><span class="n">BENCHMARK</span><span class="p">(</span><span class="n">mem_fn_create_invoke</span><span class="p">,</span> <span class="n">iters</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">TestClass</span> <span class="n">tc</span><span class="p">;</span>
+  <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">n</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">n</span> <span class="o">&lt;</span> <span class="n">iters</span><span class="p">;</span> <span class="o">++</span><span class="n">n</span><span class="p">)</span> <span class="p">{</span>
+    <span class="kt">void</span> <span class="p">(</span><span class="n">TestClass</span><span class="o">::*</span><span class="n">memfn</span><span class="p">)()</span> <span class="o">=</span> <span class="o">&amp;</span><span class="n">TestClass</span><span class="o">::</span><span class="n">doNothing</span><span class="p">;</span>
+    <span class="p">(</span><span class="n">tc</span><span class="p">.</span><span class="o">*</span><span class="n">memfn</span><span class="p">)();</span>
+  <span class="p">}</span>
+<span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-18"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-18">&#182;</a></div><p>Using std::bind to create a std::function from a member function,
+and invoking it</p></td><td class="code"><div class="highlight"><pre><span class="n">BENCHMARK</span><span class="p">(</span><span class="n">std_bind_create_invoke</span><span class="p">,</span> <span class="n">iters</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">TestClass</span> <span class="n">tc</span><span class="p">;</span>
+  <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">n</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">n</span> <span class="o">&lt;</span> <span class="n">iters</span><span class="p">;</span> <span class="o">++</span><span class="n">n</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">std</span><span class="o">::</span><span class="n">function</span><span class="o">&lt;</span><span class="kt">void</span><span class="p">()</span><span class="o">&gt;</span> <span class="n">fn</span> <span class="o">=</span> <span class="n">std</span><span class="o">::</span><span class="n">bind</span><span class="p">(</span><span class="o">&amp;</span><span class="n">TestClass</span><span class="o">::</span><span class="n">doNothing</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">tc</span><span class="p">);</span>
+    <span class="n">fn</span><span class="p">();</span>
+  <span class="p">}</span>
+<span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-19"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-19">&#182;</a></div><p>Using ScopeGuard to invoke a std::function</p></td><td class="code"><div class="highlight"><pre><span class="n">BENCHMARK</span><span class="p">(</span><span class="n">scope_guard_std_function</span><span class="p">,</span> <span class="n">iters</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">std</span><span class="o">::</span><span class="n">function</span><span class="o">&lt;</span><span class="kt">void</span><span class="p">()</span><span class="o">&gt;</span> <span class="n">fn</span><span class="p">(</span><span class="n">doNothing</span><span class="p">);</span>
+  <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">n</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">n</span> <span class="o">&lt;</span> <span class="n">iters</span><span class="p">;</span> <span class="o">++</span><span class="n">n</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">ScopeGuard</span> <span class="n">g</span> <span class="o">=</span> <span class="n">makeGuard</span><span class="p">(</span><span class="n">fn</span><span class="p">);</span>
+  <span class="p">}</span>
+<span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-20"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-20">&#182;</a></div><p>Using ScopeGuard to invoke a std::function,
+but create the ScopeGuard with an rvalue to a std::function</p></td><td class="code"><div class="highlight"><pre><span class="n">BENCHMARK</span><span class="p">(</span><span class="n">scope_guard_std_function_rvalue</span><span class="p">,</span> <span class="n">iters</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">n</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">n</span> <span class="o">&lt;</span> <span class="n">iters</span><span class="p">;</span> <span class="o">++</span><span class="n">n</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">ScopeGuard</span> <span class="n">g</span> <span class="o">=</span> <span class="n">makeGuard</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">function</span><span class="o">&lt;</span><span class="kt">void</span><span class="p">()</span><span class="o">&gt;</span><span class="p">(</span><span class="n">doNothing</span><span class="p">));</span>
+  <span class="p">}</span>
+<span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-21"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-21">&#182;</a></div><p>Using ScopeGuard to invoke a function pointer</p></td><td class="code"><div class="highlight"><pre><span class="n">BENCHMARK</span><span class="p">(</span><span class="n">scope_guard_fn_ptr</span><span class="p">,</span> <span class="n">iters</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">n</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">n</span> <span class="o">&lt;</span> <span class="n">iters</span><span class="p">;</span> <span class="o">++</span><span class="n">n</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">ScopeGuard</span> <span class="n">g</span> <span class="o">=</span> <span class="n">makeGuard</span><span class="p">(</span><span class="n">doNothing</span><span class="p">);</span>
+  <span class="p">}</span>
+<span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-22"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-22">&#182;</a></div><p>Using ScopeGuard to invoke a lambda that does nothing</p></td><td class="code"><div class="highlight"><pre><span class="n">BENCHMARK</span><span class="p">(</span><span class="n">scope_guard_lambda_noop</span><span class="p">,</span> <span class="n">iters</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">n</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">n</span> <span class="o">&lt;</span> <span class="n">iters</span><span class="p">;</span> <span class="o">++</span><span class="n">n</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">ScopeGuard</span> <span class="n">g</span> <span class="o">=</span> <span class="n">makeGuard</span><span class="p">([]</span> <span class="p">{});</span>
+  <span class="p">}</span>
+<span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-23"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-23">&#182;</a></div><p>Using ScopeGuard to invoke a lambda that invokes a function</p></td><td class="code"><div class="highlight"><pre><span class="n">BENCHMARK</span><span class="p">(</span><span class="n">scope_guard_lambda_function</span><span class="p">,</span> <span class="n">iters</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">n</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">n</span> <span class="o">&lt;</span> <span class="n">iters</span><span class="p">;</span> <span class="o">++</span><span class="n">n</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">ScopeGuard</span> <span class="n">g</span> <span class="o">=</span> <span class="n">makeGuard</span><span class="p">([]</span> <span class="p">{</span> <span class="n">doNothing</span><span class="p">();</span> <span class="p">});</span>
+  <span class="p">}</span>
+<span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-24"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-24">&#182;</a></div><p>Using ScopeGuard to invoke a lambda that modifies a local variable</p></td><td class="code"><div class="highlight"><pre><span class="n">BENCHMARK</span><span class="p">(</span><span class="n">scope_guard_lambda_local_var</span><span class="p">,</span> <span class="n">iters</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">uint32_t</span> <span class="n">count</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+  <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">n</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">n</span> <span class="o">&lt;</span> <span class="n">iters</span><span class="p">;</span> <span class="o">++</span><span class="n">n</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">ScopeGuard</span> <span class="n">g</span> <span class="o">=</span> <span class="n">makeGuard</span><span class="p">([</span><span class="o">&amp;</span><span class="p">]</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-25"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-25">&#182;</a></div><p>Increment count if n is odd.  Without this conditional check
+(i.e., if we just increment count each time through the loop),
+gcc is smart enough to optimize the entire loop away, and just set
+count = iters.</p></td><td class="code"><div class="highlight"><pre>      <span class="k">if</span> <span class="p">(</span><span class="n">n</span> <span class="o">&amp;</span> <span class="mh">0x1</span><span class="p">)</span> <span class="p">{</span>
+        <span class="o">++</span><span class="n">count</span><span class="p">;</span>
+      <span class="p">}</span>
+    <span class="p">});</span>
+  <span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-26"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-26">&#182;</a></div><p>Check that the value of count is what we expect.
+This check is necessary: if we don't use count, gcc detects that count is
+unused and optimizes the entire loop away.</p></td><td class="code"><div class="highlight"><pre>  <span class="n">CHECK_EQ</span><span class="p">(</span><span class="n">iters</span> <span class="o">/</span> <span class="mi">2</span><span class="p">,</span> <span class="n">count</span><span class="p">);</span>
+<span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-27"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-27">&#182;</a></div><p>main()</p></td><td class="code"><div class="highlight"><pre><span class="kt">int</span> <span class="n">main</span><span class="p">(</span><span class="kt">int</span> <span class="n">argc</span><span class="p">,</span> <span class="kt">char</span><span class="o">**</span> <span class="n">argv</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">google</span><span class="o">::</span><span class="n">ParseCommandLineFlags</span><span class="p">(</span><span class="o">&amp;</span><span class="n">argc</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">argv</span><span class="p">,</span> <span class="kc">true</span><span class="p">);</span>
+  <span class="n">folly</span><span class="o">::</span><span class="n">runBenchmarks</span><span class="p">();</span>
+<span class="p">}</span>
+
+</pre></div></td></tr>
+
+</tbody>
+</table>
+</div>
+
+</body>
+<script>docas={repo:"joekychen/folly",depth:3}</script>
+<script>document.write('<script src=' + ('__proto__' in {} ? 'http://cdnjs.cloudflare.com/ajax/libs/zepto/1.0rc1/zepto.min.js' : 'https://ajax.googleapis.com/ajax/libs/jquery/1.7.2/jquery.min.js')+'><\\/script>')</script>
+<script src="http://baoshan.github.com/moment/min/moment.min.js"></script>
+<script src="../../../javascript/docco.min.js"></script>
+</html>

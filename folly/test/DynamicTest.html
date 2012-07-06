@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html><head><title>joekychen/folly » folly › test › DynamicTest.cpp
+
+</title>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+<meta name="generator" content="Docco">
+<link rel="stylesheet" media="all" href="../../stylesheets/docco.min.css" />
+
+
+</head>
+<body>
+<div id="container">
+<div id="background"></div>
+<table cellpadding="0" cellspacing="0">
+<thead><tr><th class="docs"><a id="home" href="../../index.html"></a><h1>DynamicTest.cpp</h1></th><th class="code"></th></tr></thead>
+<tbody>
+
+
+<tr id="section-1"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-1">&#182;</a></div></td><td class="code"><div class="highlight"><pre><span class="cm">/*</span>
+<span class="cm"> * Copyright 2012 Facebook, Inc.</span>
+<span class="cm"> *</span>
+<span class="cm"> * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span class="cm"> * you may not use this file except in compliance with the License.</span>
+<span class="cm"> * You may obtain a copy of the License at</span>
+<span class="cm"> *</span>
+<span class="cm"> *   http://www.apache.org/licenses/LICENSE-2.0</span>
+<span class="cm"> *</span>
+<span class="cm"> * Unless required by applicable law or agreed to in writing, software</span>
+<span class="cm"> * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span class="cm"> * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span class="cm"> * See the License for the specific language governing permissions and</span>
+<span class="cm"> * limitations under the License.</span>
+<span class="cm"> */</span>
+
+<span class="cp">#include &quot;folly/dynamic.h&quot;</span>
+<span class="cp">#include &quot;folly/json.h&quot;</span>
+<span class="cp">#include &lt;gtest/gtest.h&gt;</span>
+<span class="cp">#include &lt;gflags/gflags.h&gt;</span>
+<span class="cp">#include &lt;boost/next_prior.hpp&gt;</span>
+<span class="cp">#include &quot;folly/Benchmark.h&quot;</span>
+
+<span class="k">using</span> <span class="n">folly</span><span class="o">::</span><span class="n">dynamic</span><span class="p">;</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">Dynamic</span><span class="p">,</span> <span class="n">ObjectBasics</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">dynamic</span> <span class="n">obj</span> <span class="o">=</span> <span class="n">dynamic</span><span class="o">::</span><span class="n">object</span><span class="p">(</span><span class="s">&quot;a&quot;</span><span class="p">,</span> <span class="kc">false</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">obj</span><span class="p">.</span><span class="n">at</span><span class="p">(</span><span class="s">&quot;a&quot;</span><span class="p">),</span> <span class="kc">false</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">obj</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="mi">1</span><span class="p">);</span>
+  <span class="n">obj</span><span class="p">.</span><span class="n">insert</span><span class="p">(</span><span class="s">&quot;a&quot;</span><span class="p">,</span> <span class="kc">true</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">obj</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="mi">1</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">obj</span><span class="p">.</span><span class="n">at</span><span class="p">(</span><span class="s">&quot;a&quot;</span><span class="p">),</span> <span class="kc">true</span><span class="p">);</span>
+  <span class="n">obj</span><span class="p">.</span><span class="n">at</span><span class="p">(</span><span class="s">&quot;a&quot;</span><span class="p">)</span> <span class="o">=</span> <span class="n">nullptr</span><span class="p">;</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">obj</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="mi">1</span><span class="p">);</span>
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">obj</span><span class="p">.</span><span class="n">at</span><span class="p">(</span><span class="s">&quot;a&quot;</span><span class="p">)</span> <span class="o">==</span> <span class="n">nullptr</span><span class="p">);</span>
+
+  <span class="n">dynamic</span> <span class="n">newObject</span> <span class="o">=</span> <span class="n">dynamic</span><span class="o">::</span><span class="n">object</span><span class="p">;</span>
+
+  <span class="n">newObject</span><span class="p">[</span><span class="s">&quot;z&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="mi">12</span><span class="p">;</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">newObject</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="mi">1</span><span class="p">);</span>
+  <span class="n">newObject</span><span class="p">[</span><span class="s">&quot;a&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="kc">true</span><span class="p">;</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">newObject</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="mi">2</span><span class="p">);</span>
+
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="o">*</span><span class="n">newObject</span><span class="p">.</span><span class="n">keys</span><span class="p">().</span><span class="n">begin</span><span class="p">(),</span> <span class="n">newObject</span><span class="p">.</span><span class="n">items</span><span class="p">().</span><span class="n">begin</span><span class="p">()</span><span class="o">-&gt;</span><span class="n">first</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="o">*</span><span class="n">newObject</span><span class="p">.</span><span class="n">values</span><span class="p">().</span><span class="n">begin</span><span class="p">(),</span> <span class="n">newObject</span><span class="p">.</span><span class="n">items</span><span class="p">().</span><span class="n">begin</span><span class="p">()</span><span class="o">-&gt;</span><span class="n">second</span><span class="p">);</span>
+  <span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">pair</span><span class="o">&lt;</span><span class="n">folly</span><span class="o">::</span><span class="n">fbstring</span><span class="p">,</span> <span class="n">dynamic</span><span class="o">&gt;&gt;</span> <span class="n">found</span><span class="p">;</span>
+  <span class="n">found</span><span class="p">.</span><span class="n">push_back</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">make_pair</span><span class="p">(</span>
+     <span class="n">newObject</span><span class="p">.</span><span class="n">keys</span><span class="p">().</span><span class="n">begin</span><span class="p">()</span><span class="o">-&gt;</span><span class="n">asString</span><span class="p">(),</span>
+     <span class="o">*</span><span class="n">newObject</span><span class="p">.</span><span class="n">values</span><span class="p">().</span><span class="n">begin</span><span class="p">()));</span>
+
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="o">*</span><span class="n">boost</span><span class="o">::</span><span class="n">next</span><span class="p">(</span><span class="n">newObject</span><span class="p">.</span><span class="n">keys</span><span class="p">().</span><span class="n">begin</span><span class="p">()),</span>
+            <span class="n">boost</span><span class="o">::</span><span class="n">next</span><span class="p">(</span><span class="n">newObject</span><span class="p">.</span><span class="n">items</span><span class="p">().</span><span class="n">begin</span><span class="p">())</span><span class="o">-&gt;</span><span class="n">first</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="o">*</span><span class="n">boost</span><span class="o">::</span><span class="n">next</span><span class="p">(</span><span class="n">newObject</span><span class="p">.</span><span class="n">values</span><span class="p">().</span><span class="n">begin</span><span class="p">()),</span>
+            <span class="n">boost</span><span class="o">::</span><span class="n">next</span><span class="p">(</span><span class="n">newObject</span><span class="p">.</span><span class="n">items</span><span class="p">().</span><span class="n">begin</span><span class="p">())</span><span class="o">-&gt;</span><span class="n">second</span><span class="p">);</span>
+  <span class="n">found</span><span class="p">.</span><span class="n">push_back</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">make_pair</span><span class="p">(</span>
+      <span class="n">boost</span><span class="o">::</span><span class="n">next</span><span class="p">(</span><span class="n">newObject</span><span class="p">.</span><span class="n">keys</span><span class="p">().</span><span class="n">begin</span><span class="p">())</span><span class="o">-&gt;</span><span class="n">asString</span><span class="p">(),</span>
+      <span class="o">*</span><span class="n">boost</span><span class="o">::</span><span class="n">next</span><span class="p">(</span><span class="n">newObject</span><span class="p">.</span><span class="n">values</span><span class="p">().</span><span class="n">begin</span><span class="p">())));</span>
+
+  <span class="n">std</span><span class="o">::</span><span class="n">sort</span><span class="p">(</span><span class="n">found</span><span class="p">.</span><span class="n">begin</span><span class="p">(),</span> <span class="n">found</span><span class="p">.</span><span class="n">end</span><span class="p">());</span>
+
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;a&quot;</span><span class="p">,</span> <span class="n">found</span><span class="p">[</span><span class="mi">0</span><span class="p">].</span><span class="n">first</span><span class="p">);</span>
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">found</span><span class="p">[</span><span class="mi">0</span><span class="p">].</span><span class="n">second</span><span class="p">.</span><span class="n">asBool</span><span class="p">());</span>
+
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;z&quot;</span><span class="p">,</span> <span class="n">found</span><span class="p">[</span><span class="mi">1</span><span class="p">].</span><span class="n">first</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">12</span><span class="p">,</span> <span class="n">found</span><span class="p">[</span><span class="mi">1</span><span class="p">].</span><span class="n">second</span><span class="p">.</span><span class="n">asInt</span><span class="p">());</span>
+
+  <span class="n">dynamic</span> <span class="n">obj2</span> <span class="o">=</span> <span class="n">dynamic</span><span class="o">::</span><span class="n">object</span><span class="p">;</span>
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">obj2</span><span class="p">.</span><span class="n">isObject</span><span class="p">());</span>
+
+  <span class="n">dynamic</span> <span class="n">d3</span> <span class="o">=</span> <span class="n">nullptr</span><span class="p">;</span>
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">d3</span> <span class="o">==</span> <span class="n">nullptr</span><span class="p">);</span>
+  <span class="n">d3</span> <span class="o">=</span> <span class="n">dynamic</span><span class="o">::</span><span class="n">object</span><span class="p">;</span>
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">d3</span><span class="p">.</span><span class="n">isObject</span><span class="p">());</span>
+  <span class="n">d3</span><span class="p">[</span><span class="s">&quot;foo&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span> <span class="p">};</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">d3</span><span class="p">.</span><span class="n">count</span><span class="p">(</span><span class="s">&quot;foo&quot;</span><span class="p">),</span> <span class="mi">1</span><span class="p">);</span>
+
+  <span class="n">d3</span><span class="p">[</span><span class="mi">123</span><span class="p">]</span> <span class="o">=</span> <span class="mi">321</span><span class="p">;</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">d3</span><span class="p">.</span><span class="n">at</span><span class="p">(</span><span class="mi">123</span><span class="p">),</span> <span class="mi">321</span><span class="p">);</span>
+
+  <span class="n">d3</span><span class="p">[</span><span class="s">&quot;123&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="mi">42</span><span class="p">;</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">d3</span><span class="p">.</span><span class="n">at</span><span class="p">(</span><span class="s">&quot;123&quot;</span><span class="p">),</span> <span class="mi">42</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">d3</span><span class="p">.</span><span class="n">at</span><span class="p">(</span><span class="mi">123</span><span class="p">),</span> <span class="mi">321</span><span class="p">);</span></pre></div></td></tr>
+
+
+<tr id="section-2"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-2">&#182;</a></div><p>We don't allow objects as keys in objects.</p></td><td class="code"><div class="highlight"><pre>  <span class="n">EXPECT_ANY_THROW</span><span class="p">(</span><span class="n">newObject</span><span class="p">[</span><span class="n">d3</span><span class="p">]</span> <span class="o">=</span> <span class="mi">12</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">Dynamic</span><span class="p">,</span> <span class="n">ObjectErase</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">dynamic</span> <span class="n">obj</span> <span class="o">=</span> <span class="n">dynamic</span><span class="o">::</span><span class="n">object</span><span class="p">(</span><span class="s">&quot;key1&quot;</span><span class="p">,</span> <span class="s">&quot;val&quot;</span><span class="p">)</span>
+                               <span class="p">(</span><span class="s">&quot;key2&quot;</span><span class="p">,</span> <span class="s">&quot;val2&quot;</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">obj</span><span class="p">.</span><span class="n">count</span><span class="p">(</span><span class="s">&quot;key1&quot;</span><span class="p">),</span> <span class="mi">1</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">obj</span><span class="p">.</span><span class="n">count</span><span class="p">(</span><span class="s">&quot;key2&quot;</span><span class="p">),</span> <span class="mi">1</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">obj</span><span class="p">.</span><span class="n">erase</span><span class="p">(</span><span class="s">&quot;key1&quot;</span><span class="p">),</span> <span class="mi">1</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">obj</span><span class="p">.</span><span class="n">count</span><span class="p">(</span><span class="s">&quot;key1&quot;</span><span class="p">),</span> <span class="mi">0</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">obj</span><span class="p">.</span><span class="n">count</span><span class="p">(</span><span class="s">&quot;key2&quot;</span><span class="p">),</span> <span class="mi">1</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">obj</span><span class="p">.</span><span class="n">erase</span><span class="p">(</span><span class="s">&quot;key1&quot;</span><span class="p">),</span> <span class="mi">0</span><span class="p">);</span>
+  <span class="n">obj</span><span class="p">[</span><span class="s">&quot;key1&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="mi">12</span><span class="p">;</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">obj</span><span class="p">.</span><span class="n">count</span><span class="p">(</span><span class="s">&quot;key1&quot;</span><span class="p">),</span> <span class="mi">1</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">obj</span><span class="p">.</span><span class="n">count</span><span class="p">(</span><span class="s">&quot;key2&quot;</span><span class="p">),</span> <span class="mi">1</span><span class="p">);</span>
+  <span class="k">auto</span> <span class="n">it</span> <span class="o">=</span> <span class="n">obj</span><span class="p">.</span><span class="n">find</span><span class="p">(</span><span class="s">&quot;key2&quot;</span><span class="p">);</span>
+  <span class="n">obj</span><span class="p">.</span><span class="n">erase</span><span class="p">(</span><span class="n">it</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">obj</span><span class="p">.</span><span class="n">count</span><span class="p">(</span><span class="s">&quot;key1&quot;</span><span class="p">),</span> <span class="mi">1</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">obj</span><span class="p">.</span><span class="n">count</span><span class="p">(</span><span class="s">&quot;key2&quot;</span><span class="p">),</span> <span class="mi">0</span><span class="p">);</span>
+
+  <span class="n">obj</span><span class="p">[</span><span class="s">&quot;asd&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="mf">42.0</span><span class="p">;</span>
+  <span class="n">obj</span><span class="p">[</span><span class="s">&quot;foo&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="mf">42.0</span><span class="p">;</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">obj</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="mi">3</span><span class="p">);</span>
+  <span class="k">auto</span> <span class="n">ret</span> <span class="o">=</span> <span class="n">obj</span><span class="p">.</span><span class="n">erase</span><span class="p">(</span><span class="n">boost</span><span class="o">::</span><span class="n">next</span><span class="p">(</span><span class="n">obj</span><span class="p">.</span><span class="n">items</span><span class="p">().</span><span class="n">begin</span><span class="p">()),</span> <span class="n">obj</span><span class="p">.</span><span class="n">items</span><span class="p">().</span><span class="n">end</span><span class="p">());</span>
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">ret</span> <span class="o">==</span> <span class="n">obj</span><span class="p">.</span><span class="n">items</span><span class="p">().</span><span class="n">end</span><span class="p">());</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">obj</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="mi">1</span><span class="p">);</span>
+  <span class="n">obj</span><span class="p">.</span><span class="n">erase</span><span class="p">(</span><span class="n">obj</span><span class="p">.</span><span class="n">items</span><span class="p">().</span><span class="n">begin</span><span class="p">());</span>
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">obj</span><span class="p">.</span><span class="n">empty</span><span class="p">());</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">Dynamic</span><span class="p">,</span> <span class="n">ArrayErase</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">dynamic</span> <span class="n">arr</span> <span class="o">=</span> <span class="p">{</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">6</span> <span class="p">};</span>
+
+  <span class="n">EXPECT_THROW</span><span class="p">(</span><span class="n">arr</span><span class="p">.</span><span class="n">erase</span><span class="p">(</span><span class="mi">1</span><span class="p">),</span> <span class="n">std</span><span class="o">::</span><span class="n">exception</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">arr</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="mi">6</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">arr</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="mi">1</span><span class="p">);</span>
+  <span class="n">arr</span><span class="p">.</span><span class="n">erase</span><span class="p">(</span><span class="n">arr</span><span class="p">.</span><span class="n">begin</span><span class="p">());</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">arr</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="mi">5</span><span class="p">);</span>
+
+  <span class="n">arr</span><span class="p">.</span><span class="n">erase</span><span class="p">(</span><span class="n">boost</span><span class="o">::</span><span class="n">next</span><span class="p">(</span><span class="n">arr</span><span class="p">.</span><span class="n">begin</span><span class="p">()),</span> <span class="n">boost</span><span class="o">::</span><span class="n">prior</span><span class="p">(</span><span class="n">arr</span><span class="p">.</span><span class="n">end</span><span class="p">()));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">arr</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="mi">2</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">arr</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="mi">2</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">arr</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="mi">6</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">Dynamic</span><span class="p">,</span> <span class="n">StringBasics</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">dynamic</span> <span class="n">str</span> <span class="o">=</span> <span class="s">&quot;hello world&quot;</span><span class="p">;</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="mi">11</span><span class="p">,</span> <span class="n">str</span><span class="p">.</span><span class="n">size</span><span class="p">());</span>
+  <span class="n">EXPECT_FALSE</span><span class="p">(</span><span class="n">str</span><span class="p">.</span><span class="n">empty</span><span class="p">());</span>
+  <span class="n">str</span> <span class="o">=</span> <span class="s">&quot;&quot;</span><span class="p">;</span>
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">str</span><span class="p">.</span><span class="n">empty</span><span class="p">());</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">Dynamic</span><span class="p">,</span> <span class="n">ArrayBasics</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">dynamic</span> <span class="n">array</span> <span class="o">=</span> <span class="p">{</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span> <span class="p">};</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">array</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="mi">3</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">array</span><span class="p">.</span><span class="n">at</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span> <span class="mi">1</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">array</span><span class="p">.</span><span class="n">at</span><span class="p">(</span><span class="mi">1</span><span class="p">),</span> <span class="mi">2</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">array</span><span class="p">.</span><span class="n">at</span><span class="p">(</span><span class="mi">2</span><span class="p">),</span> <span class="mi">3</span><span class="p">);</span>
+
+  <span class="n">EXPECT_ANY_THROW</span><span class="p">(</span><span class="n">array</span><span class="p">.</span><span class="n">at</span><span class="p">(</span><span class="mi">3</span><span class="p">));</span>
+
+  <span class="n">array</span><span class="p">.</span><span class="n">push_back</span><span class="p">(</span><span class="s">&quot;foo&quot;</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">array</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="mi">4</span><span class="p">);</span>
+
+  <span class="n">array</span><span class="p">.</span><span class="n">resize</span><span class="p">(</span><span class="mi">12</span><span class="p">,</span> <span class="s">&quot;something&quot;</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">array</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="mi">12</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">array</span><span class="p">[</span><span class="mi">11</span><span class="p">],</span> <span class="s">&quot;something&quot;</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">Dynamic</span><span class="p">,</span> <span class="n">DeepCopy</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">dynamic</span> <span class="n">val</span> <span class="o">=</span> <span class="p">{</span> <span class="s">&quot;foo&quot;</span><span class="p">,</span> <span class="s">&quot;bar&quot;</span><span class="p">,</span> <span class="p">{</span> <span class="s">&quot;foo1&quot;</span><span class="p">,</span> <span class="s">&quot;bar1&quot;</span> <span class="p">}</span> <span class="p">};</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">val</span><span class="p">.</span><span class="n">at</span><span class="p">(</span><span class="mi">2</span><span class="p">).</span><span class="n">at</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span> <span class="s">&quot;foo1&quot;</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">val</span><span class="p">.</span><span class="n">at</span><span class="p">(</span><span class="mi">2</span><span class="p">).</span><span class="n">at</span><span class="p">(</span><span class="mi">1</span><span class="p">),</span> <span class="s">&quot;bar1&quot;</span><span class="p">);</span>
+  <span class="n">dynamic</span> <span class="n">val2</span> <span class="o">=</span> <span class="n">val</span><span class="p">;</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">val2</span><span class="p">.</span><span class="n">at</span><span class="p">(</span><span class="mi">2</span><span class="p">).</span><span class="n">at</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span> <span class="s">&quot;foo1&quot;</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">val2</span><span class="p">.</span><span class="n">at</span><span class="p">(</span><span class="mi">2</span><span class="p">).</span><span class="n">at</span><span class="p">(</span><span class="mi">1</span><span class="p">),</span> <span class="s">&quot;bar1&quot;</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">val</span><span class="p">.</span><span class="n">at</span><span class="p">(</span><span class="mi">2</span><span class="p">).</span><span class="n">at</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span> <span class="s">&quot;foo1&quot;</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">val</span><span class="p">.</span><span class="n">at</span><span class="p">(</span><span class="mi">2</span><span class="p">).</span><span class="n">at</span><span class="p">(</span><span class="mi">1</span><span class="p">),</span> <span class="s">&quot;bar1&quot;</span><span class="p">);</span>
+  <span class="n">val2</span><span class="p">.</span><span class="n">at</span><span class="p">(</span><span class="mi">2</span><span class="p">).</span><span class="n">at</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span> <span class="o">=</span> <span class="s">&quot;foo3&quot;</span><span class="p">;</span>
+  <span class="n">val2</span><span class="p">.</span><span class="n">at</span><span class="p">(</span><span class="mi">2</span><span class="p">).</span><span class="n">at</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span> <span class="o">=</span> <span class="s">&quot;bar3&quot;</span><span class="p">;</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">val</span><span class="p">.</span><span class="n">at</span><span class="p">(</span><span class="mi">2</span><span class="p">).</span><span class="n">at</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span> <span class="s">&quot;foo1&quot;</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">val</span><span class="p">.</span><span class="n">at</span><span class="p">(</span><span class="mi">2</span><span class="p">).</span><span class="n">at</span><span class="p">(</span><span class="mi">1</span><span class="p">),</span> <span class="s">&quot;bar1&quot;</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">val2</span><span class="p">.</span><span class="n">at</span><span class="p">(</span><span class="mi">2</span><span class="p">).</span><span class="n">at</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span> <span class="s">&quot;foo3&quot;</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">val2</span><span class="p">.</span><span class="n">at</span><span class="p">(</span><span class="mi">2</span><span class="p">).</span><span class="n">at</span><span class="p">(</span><span class="mi">1</span><span class="p">),</span> <span class="s">&quot;bar3&quot;</span><span class="p">);</span>
+
+  <span class="n">dynamic</span> <span class="n">obj</span> <span class="o">=</span> <span class="n">dynamic</span><span class="o">::</span><span class="n">object</span><span class="p">(</span><span class="s">&quot;a&quot;</span><span class="p">,</span> <span class="s">&quot;b&quot;</span><span class="p">)</span>
+                               <span class="p">(</span><span class="s">&quot;c&quot;</span><span class="p">,</span> <span class="p">{</span><span class="s">&quot;d&quot;</span><span class="p">,</span> <span class="s">&quot;e&quot;</span><span class="p">,</span> <span class="s">&quot;f&quot;</span><span class="p">})</span>
+                               <span class="p">;</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">obj</span><span class="p">.</span><span class="n">at</span><span class="p">(</span><span class="s">&quot;a&quot;</span><span class="p">),</span> <span class="s">&quot;b&quot;</span><span class="p">);</span>
+  <span class="n">dynamic</span> <span class="n">obj2</span> <span class="o">=</span> <span class="n">obj</span><span class="p">;</span>
+  <span class="n">obj2</span><span class="p">.</span><span class="n">at</span><span class="p">(</span><span class="s">&quot;a&quot;</span><span class="p">)</span> <span class="o">=</span> <span class="p">{</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">};</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">obj</span><span class="p">.</span><span class="n">at</span><span class="p">(</span><span class="s">&quot;a&quot;</span><span class="p">),</span> <span class="s">&quot;b&quot;</span><span class="p">);</span>
+  <span class="n">dynamic</span> <span class="n">expected</span> <span class="o">=</span> <span class="p">{</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">};</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">obj2</span><span class="p">.</span><span class="n">at</span><span class="p">(</span><span class="s">&quot;a&quot;</span><span class="p">),</span> <span class="n">expected</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">Dynamic</span><span class="p">,</span> <span class="n">Operator</span><span class="p">)</span> <span class="p">{</span>
+  <span class="kt">bool</span> <span class="n">caught</span> <span class="o">=</span> <span class="kc">false</span><span class="p">;</span>
+  <span class="k">try</span> <span class="p">{</span>
+    <span class="n">dynamic</span> <span class="n">d1</span> <span class="o">=</span> <span class="n">dynamic</span><span class="o">::</span><span class="n">object</span><span class="p">;</span>
+    <span class="n">dynamic</span> <span class="n">d2</span> <span class="o">=</span> <span class="n">dynamic</span><span class="o">::</span><span class="n">object</span><span class="p">;</span>
+    <span class="k">auto</span> <span class="n">foo</span> <span class="o">=</span> <span class="n">d1</span> <span class="o">&lt;</span> <span class="n">d2</span><span class="p">;</span>
+  <span class="p">}</span> <span class="k">catch</span> <span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">exception</span> <span class="k">const</span><span class="o">&amp;</span> <span class="n">e</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">caught</span> <span class="o">=</span> <span class="kc">true</span><span class="p">;</span>
+  <span class="p">}</span>
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">caught</span><span class="p">);</span>
+
+  <span class="n">dynamic</span> <span class="n">foo</span> <span class="o">=</span> <span class="s">&quot;asd&quot;</span><span class="p">;</span>
+  <span class="n">dynamic</span> <span class="n">bar</span> <span class="o">=</span> <span class="s">&quot;bar&quot;</span><span class="p">;</span>
+  <span class="n">dynamic</span> <span class="n">sum</span> <span class="o">=</span> <span class="n">foo</span> <span class="o">+</span> <span class="n">bar</span><span class="p">;</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">sum</span><span class="p">,</span> <span class="s">&quot;asdbar&quot;</span><span class="p">);</span>
+
+  <span class="n">dynamic</span> <span class="n">some</span> <span class="o">=</span> <span class="mi">12</span><span class="p">;</span>
+  <span class="n">dynamic</span> <span class="n">nums</span> <span class="o">=</span> <span class="mi">4</span><span class="p">;</span>
+  <span class="n">dynamic</span> <span class="n">math</span> <span class="o">=</span> <span class="n">some</span> <span class="o">/</span> <span class="n">nums</span><span class="p">;</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">math</span><span class="p">,</span> <span class="mi">3</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">Dynamic</span><span class="p">,</span> <span class="n">Conversions</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">dynamic</span> <span class="n">str</span> <span class="o">=</span> <span class="s">&quot;12.0&quot;</span><span class="p">;</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">str</span><span class="p">.</span><span class="n">asDouble</span><span class="p">(),</span> <span class="mf">12.0</span><span class="p">);</span>
+  <span class="n">EXPECT_ANY_THROW</span><span class="p">(</span><span class="n">str</span><span class="p">.</span><span class="n">asInt</span><span class="p">());</span>
+  <span class="n">EXPECT_ANY_THROW</span><span class="p">(</span><span class="n">str</span><span class="p">.</span><span class="n">asBool</span><span class="p">());</span>
+
+  <span class="n">str</span> <span class="o">=</span> <span class="s">&quot;12&quot;</span><span class="p">;</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">str</span><span class="p">.</span><span class="n">asInt</span><span class="p">(),</span> <span class="mi">12</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">str</span><span class="p">.</span><span class="n">asDouble</span><span class="p">(),</span> <span class="mf">12.0</span><span class="p">);</span>
+  <span class="n">str</span> <span class="o">=</span> <span class="s">&quot;0&quot;</span><span class="p">;</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">str</span><span class="p">.</span><span class="n">asBool</span><span class="p">(),</span> <span class="kc">false</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">str</span><span class="p">.</span><span class="n">asInt</span><span class="p">(),</span> <span class="mi">0</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">str</span><span class="p">.</span><span class="n">asDouble</span><span class="p">(),</span> <span class="mi">0</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">str</span><span class="p">.</span><span class="n">asString</span><span class="p">(),</span> <span class="s">&quot;0&quot;</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">Dynamic</span><span class="p">,</span> <span class="n">FormattedIO</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">std</span><span class="o">::</span><span class="n">ostringstream</span> <span class="n">out</span><span class="p">;</span>
+  <span class="n">dynamic</span> <span class="n">doubl</span> <span class="o">=</span> <span class="mf">123.33</span><span class="p">;</span>
+  <span class="n">dynamic</span> <span class="n">dint</span> <span class="o">=</span> <span class="mi">12</span><span class="p">;</span>
+  <span class="n">out</span> <span class="o">&lt;&lt;</span> <span class="s">&quot;0x&quot;</span> <span class="o">&lt;&lt;</span> <span class="n">std</span><span class="o">::</span><span class="n">hex</span> <span class="o">&lt;&lt;</span> <span class="o">++</span><span class="n">dint</span> <span class="o">&lt;&lt;</span> <span class="sc">&#39; &#39;</span> <span class="o">&lt;&lt;</span> <span class="n">std</span><span class="o">::</span><span class="n">setprecision</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+      <span class="o">&lt;&lt;</span> <span class="n">doubl</span> <span class="o">&lt;&lt;</span> <span class="sc">&#39;\n&#39;</span><span class="p">;</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">out</span><span class="p">.</span><span class="n">str</span><span class="p">(),</span> <span class="s">&quot;0xd 1e+02</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">);</span>
+
+  <span class="n">out</span><span class="p">.</span><span class="n">str</span><span class="p">(</span><span class="s">&quot;&quot;</span><span class="p">);</span>
+  <span class="n">dynamic</span> <span class="n">arrr</span> <span class="o">=</span> <span class="p">{</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span> <span class="p">};</span>
+  <span class="n">out</span> <span class="o">&lt;&lt;</span> <span class="n">arrr</span><span class="p">;</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">out</span><span class="p">.</span><span class="n">str</span><span class="p">(),</span> <span class="s">&quot;[1,2,3]&quot;</span><span class="p">);</span>
+
+  <span class="n">out</span><span class="p">.</span><span class="n">str</span><span class="p">(</span><span class="s">&quot;&quot;</span><span class="p">);</span>
+  <span class="n">dynamic</span> <span class="n">objy</span> <span class="o">=</span> <span class="n">dynamic</span><span class="o">::</span><span class="n">object</span><span class="p">(</span><span class="s">&quot;a&quot;</span><span class="p">,</span> <span class="mi">12</span><span class="p">);</span>
+  <span class="n">out</span> <span class="o">&lt;&lt;</span> <span class="n">objy</span><span class="p">;</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">out</span><span class="p">.</span><span class="n">str</span><span class="p">(),</span> <span class="n">R</span><span class="s">&quot;({&quot;</span><span class="n">a</span><span class="s">&quot;:12})&quot;</span><span class="p">);</span>
+
+  <span class="n">out</span><span class="p">.</span><span class="n">str</span><span class="p">(</span><span class="s">&quot;&quot;</span><span class="p">);</span>
+  <span class="n">dynamic</span> <span class="n">objy2</span> <span class="o">=</span> <span class="p">{</span> <span class="n">objy</span><span class="p">,</span> <span class="n">dynamic</span><span class="o">::</span><span class="n">object</span><span class="p">(</span><span class="mi">12</span><span class="p">,</span> <span class="s">&quot;str&quot;</span><span class="p">),</span>
+                          <span class="n">dynamic</span><span class="o">::</span><span class="n">object</span><span class="p">(</span><span class="kc">true</span><span class="p">,</span> <span class="kc">false</span><span class="p">)</span> <span class="p">};</span>
+  <span class="n">out</span> <span class="o">&lt;&lt;</span> <span class="n">objy2</span><span class="p">;</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">out</span><span class="p">.</span><span class="n">str</span><span class="p">(),</span> <span class="n">R</span><span class="s">&quot;([{&quot;</span><span class="n">a</span><span class="s">&quot;:12},{12:&quot;</span><span class="n">str</span><span class="s">&quot;},{true:false}])&quot;</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">Dynamic</span><span class="p">,</span> <span class="n">GetSetDefaultTest</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">dynamic</span> <span class="n">d1</span> <span class="o">=</span> <span class="n">dynamic</span><span class="o">::</span><span class="n">object</span><span class="p">(</span><span class="s">&quot;foo&quot;</span><span class="p">,</span> <span class="s">&quot;bar&quot;</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">d1</span><span class="p">.</span><span class="n">getDefault</span><span class="p">(</span><span class="s">&quot;foo&quot;</span><span class="p">,</span> <span class="s">&quot;baz&quot;</span><span class="p">),</span> <span class="s">&quot;bar&quot;</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">d1</span><span class="p">.</span><span class="n">getDefault</span><span class="p">(</span><span class="s">&quot;quux&quot;</span><span class="p">,</span> <span class="s">&quot;baz&quot;</span><span class="p">),</span> <span class="s">&quot;baz&quot;</span><span class="p">);</span>
+
+  <span class="n">dynamic</span> <span class="n">d2</span> <span class="o">=</span> <span class="n">dynamic</span><span class="o">::</span><span class="n">object</span><span class="p">(</span><span class="s">&quot;foo&quot;</span><span class="p">,</span> <span class="s">&quot;bar&quot;</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">d2</span><span class="p">.</span><span class="n">setDefault</span><span class="p">(</span><span class="s">&quot;foo&quot;</span><span class="p">,</span> <span class="s">&quot;quux&quot;</span><span class="p">),</span> <span class="s">&quot;bar&quot;</span><span class="p">);</span>
+  <span class="n">d2</span><span class="p">.</span><span class="n">setDefault</span><span class="p">(</span><span class="s">&quot;bar&quot;</span><span class="p">,</span> <span class="n">dynamic</span><span class="p">({})).</span><span class="n">push_back</span><span class="p">(</span><span class="mi">42</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">d2</span><span class="p">[</span><span class="s">&quot;bar&quot;</span><span class="p">][</span><span class="mi">0</span><span class="p">],</span> <span class="mi">42</span><span class="p">);</span>
+
+  <span class="n">dynamic</span> <span class="n">d3</span> <span class="o">=</span> <span class="n">dynamic</span><span class="o">::</span><span class="n">object</span><span class="p">,</span> <span class="n">empty</span> <span class="o">=</span> <span class="n">dynamic</span><span class="o">::</span><span class="n">object</span><span class="p">;</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">d3</span><span class="p">.</span><span class="n">getDefault</span><span class="p">(</span><span class="s">&quot;foo&quot;</span><span class="p">),</span> <span class="n">empty</span><span class="p">);</span>
+  <span class="n">d3</span><span class="p">.</span><span class="n">setDefault</span><span class="p">(</span><span class="s">&quot;foo&quot;</span><span class="p">)[</span><span class="s">&quot;bar&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s">&quot;baz&quot;</span><span class="p">;</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">d3</span><span class="p">[</span><span class="s">&quot;foo&quot;</span><span class="p">][</span><span class="s">&quot;bar&quot;</span><span class="p">],</span> <span class="s">&quot;baz&quot;</span><span class="p">);</span></pre></div></td></tr>
+
+
+<tr id="section-3"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-3">&#182;</a></div><p>we do not allow getDefault/setDefault on arrays</p></td><td class="code"><div class="highlight"><pre>  <span class="n">dynamic</span> <span class="n">d4</span> <span class="o">=</span> <span class="n">dynamic</span><span class="p">({});</span>
+  <span class="n">EXPECT_ANY_THROW</span><span class="p">(</span><span class="n">d4</span><span class="p">.</span><span class="n">getDefault</span><span class="p">(</span><span class="s">&quot;foo&quot;</span><span class="p">,</span> <span class="s">&quot;bar&quot;</span><span class="p">));</span>
+  <span class="n">EXPECT_ANY_THROW</span><span class="p">(</span><span class="n">d4</span><span class="p">.</span><span class="n">setDefault</span><span class="p">(</span><span class="s">&quot;foo&quot;</span><span class="p">,</span> <span class="s">&quot;bar&quot;</span><span class="p">));</span>
+<span class="p">}</span>
+
+<span class="kt">int</span> <span class="n">main</span><span class="p">(</span><span class="kt">int</span> <span class="n">argc</span><span class="p">,</span> <span class="kt">char</span><span class="o">**</span> <span class="n">argv</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">testing</span><span class="o">::</span><span class="n">InitGoogleTest</span><span class="p">(</span><span class="o">&amp;</span><span class="n">argc</span><span class="p">,</span> <span class="n">argv</span><span class="p">);</span>
+  <span class="n">google</span><span class="o">::</span><span class="n">ParseCommandLineFlags</span><span class="p">(</span><span class="o">&amp;</span><span class="n">argc</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">argv</span><span class="p">,</span> <span class="kc">true</span><span class="p">);</span>
+  <span class="k">if</span> <span class="p">(</span><span class="n">FLAGS_benchmark</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">folly</span><span class="o">::</span><span class="n">runBenchmarks</span><span class="p">();</span>
+  <span class="p">}</span>
+  <span class="k">return</span> <span class="n">RUN_ALL_TESTS</span><span class="p">();</span>
+<span class="p">}</span>
+
+</pre></div></td></tr>
+
+</tbody>
+</table>
+</div>
+
+</body>
+<script>docas={repo:"joekychen/folly",depth:2}</script>
+<script>document.write('<script src=' + ('__proto__' in {} ? 'http://cdnjs.cloudflare.com/ajax/libs/zepto/1.0rc1/zepto.min.js' : 'https://ajax.googleapis.com/ajax/libs/jquery/1.7.2/jquery.min.js')+'><\\/script>')</script>
+<script src="http://baoshan.github.com/moment/min/moment.min.js"></script>
+<script src="../../javascript/docco.min.js"></script>
+</html>

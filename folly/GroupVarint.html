@@ -1,0 +1,640 @@
+<!DOCTYPE html>
+<html><head><title>joekychen/folly » folly › GroupVarint.h
+
+</title>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+<meta name="generator" content="Docco">
+<link rel="stylesheet" media="all" href="../stylesheets/docco.min.css" />
+
+
+</head>
+<body>
+<div id="container">
+<div id="background"></div>
+<table cellpadding="0" cellspacing="0">
+<thead><tr><th class="docs"><a id="home" href="../index.html"></a><h1>GroupVarint.h</h1></th><th class="code"></th></tr></thead>
+<tbody>
+
+
+<tr id="section-1"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-1">&#182;</a></div></td><td class="code"><div class="highlight"><pre><span class="cm">/*</span>
+<span class="cm"> * Copyright 2012 Facebook, Inc.</span>
+<span class="cm"> *</span>
+<span class="cm"> * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span class="cm"> * you may not use this file except in compliance with the License.</span>
+<span class="cm"> * You may obtain a copy of the License at</span>
+<span class="cm"> *</span>
+<span class="cm"> *   http://www.apache.org/licenses/LICENSE-2.0</span>
+<span class="cm"> *</span>
+<span class="cm"> * Unless required by applicable law or agreed to in writing, software</span>
+<span class="cm"> * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span class="cm"> * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span class="cm"> * See the License for the specific language governing permissions and</span>
+<span class="cm"> * limitations under the License.</span>
+<span class="cm"> */</span>
+
+<span class="cp">#ifndef FOLLY_GROUPVARINT_H_</span>
+<span class="cp">#define FOLLY_GROUPVARINT_H_</span>
+
+<span class="cp">#ifndef __GNUC__</span>
+<span class="cp">#error GroupVarint.h requires GCC</span>
+<span class="cp">#endif</span>
+
+<span class="cp">#if !defined(__x86_64__) &amp;&amp; !defined(__i386__)</span>
+<span class="cp">#error GroupVarint.h requires x86_64 or i386</span>
+<span class="cp">#endif</span>
+
+<span class="cp">#include &lt;cstdint&gt;</span>
+<span class="cp">#include &lt;limits&gt;</span>
+<span class="cp">#include &quot;folly/detail/GroupVarintDetail.h&quot;</span>
+<span class="cp">#include &quot;folly/Bits.h&quot;</span>
+<span class="cp">#include &quot;folly/Range.h&quot;</span>
+<span class="cp">#include &lt;glog/logging.h&gt;</span>
+
+<span class="cp">#ifdef __SSSE3__</span>
+<span class="cp">#include &lt;x86intrin.h&gt;</span>
+<span class="n">namespace</span> <span class="n">folly</span> <span class="p">{</span>
+<span class="n">namespace</span> <span class="n">detail</span> <span class="p">{</span>
+<span class="k">extern</span> <span class="k">const</span> <span class="n">__m128i</span> <span class="n">groupVarintSSEMasks</span><span class="p">[];</span>
+<span class="p">}</span>  <span class="c1">// namespace detail</span>
+<span class="p">}</span>  <span class="c1">// namespace folly</span>
+<span class="cp">#endif</span>
+
+<span class="n">namespace</span> <span class="n">folly</span> <span class="p">{</span>
+<span class="n">namespace</span> <span class="n">detail</span> <span class="p">{</span>
+<span class="k">extern</span> <span class="k">const</span> <span class="kt">uint8_t</span> <span class="n">groupVarintLengths</span><span class="p">[];</span>
+<span class="p">}</span>  <span class="c1">// namespace detail</span>
+<span class="p">}</span>  <span class="c1">// namespace folly</span>
+
+<span class="n">namespace</span> <span class="n">folly</span> <span class="p">{</span>
+
+<span class="n">template</span> <span class="o">&lt;</span><span class="kr">typename</span> <span class="n">T</span><span class="o">&gt;</span>
+<span class="n">class</span> <span class="n">GroupVarint</span><span class="p">;</span>
+
+<span class="cm">/**</span>
+<span class="cm"> * GroupVarint encoding for 32-bit values.</span>
+<span class="cm"> *</span>
+<span class="cm"> * Encodes 4 32-bit integers at once, each using 1-4 bytes depending on size.</span>
+<span class="cm"> * There is one byte of overhead.  (The first byte contains the lengths of</span>
+<span class="cm"> * the four integers encoded as two bits each; 00=1 byte .. 11=4 bytes)</span>
+<span class="cm"> *</span>
+<span class="cm"> * This implementation assumes little-endian and does unaligned 32-bit</span>
+<span class="cm"> * accesses, so it&#39;s basically not portable outside of the x86[_64] world.</span>
+<span class="cm"> */</span>
+<span class="n">template</span> <span class="o">&lt;&gt;</span>
+<span class="n">class</span> <span class="n">GroupVarint</span><span class="o">&lt;</span><span class="kt">uint32_t</span><span class="o">&gt;</span> <span class="o">:</span> <span class="n">public</span> <span class="n">detail</span><span class="o">::</span><span class="n">GroupVarintBase</span><span class="o">&lt;</span><span class="kt">uint32_t</span><span class="o">&gt;</span> <span class="p">{</span>
+ <span class="nl">public:</span>
+
+  <span class="cm">/**</span>
+<span class="cm">   * Return the number of bytes used to encode these four values.</span>
+<span class="cm">   */</span>
+  <span class="k">static</span> <span class="kt">size_t</span> <span class="n">size</span><span class="p">(</span><span class="kt">uint32_t</span> <span class="n">a</span><span class="p">,</span> <span class="kt">uint32_t</span> <span class="n">b</span><span class="p">,</span> <span class="kt">uint32_t</span> <span class="n">c</span><span class="p">,</span> <span class="kt">uint32_t</span> <span class="n">d</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">return</span> <span class="n">kHeaderSize</span> <span class="o">+</span> <span class="n">kGroupSize</span> <span class="o">+</span> <span class="n">key</span><span class="p">(</span><span class="n">a</span><span class="p">)</span> <span class="o">+</span> <span class="n">key</span><span class="p">(</span><span class="n">b</span><span class="p">)</span> <span class="o">+</span> <span class="n">key</span><span class="p">(</span><span class="n">c</span><span class="p">)</span> <span class="o">+</span> <span class="n">key</span><span class="p">(</span><span class="n">d</span><span class="p">);</span>
+  <span class="p">}</span>
+
+  <span class="cm">/**</span>
+<span class="cm">   * Return the number of bytes used to encode four uint32_t values stored</span>
+<span class="cm">   * at consecutive positions in an array.</span>
+<span class="cm">   */</span>
+  <span class="k">static</span> <span class="kt">size_t</span> <span class="n">size</span><span class="p">(</span><span class="k">const</span> <span class="kt">uint32_t</span><span class="o">*</span> <span class="n">p</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">return</span> <span class="n">size</span><span class="p">(</span><span class="n">p</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">p</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">p</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span> <span class="n">p</span><span class="p">[</span><span class="mi">3</span><span class="p">]);</span>
+  <span class="p">}</span>
+
+  <span class="cm">/**</span>
+<span class="cm">   * Return the number of bytes used to encode count (&lt;= 4) values.</span>
+<span class="cm">   * If you clip a buffer after these many bytes, you can still decode</span>
+<span class="cm">   * the first &quot;count&quot; values correctly (if the remaining size() -</span>
+<span class="cm">   * partialSize() bytes are filled with garbage).</span>
+<span class="cm">   */</span>
+  <span class="k">static</span> <span class="kt">size_t</span> <span class="n">partialSize</span><span class="p">(</span><span class="k">const</span> <span class="n">type</span><span class="o">*</span> <span class="n">p</span><span class="p">,</span> <span class="kt">size_t</span> <span class="n">count</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">DCHECK_LE</span><span class="p">(</span><span class="n">count</span><span class="p">,</span> <span class="n">kGroupSize</span><span class="p">);</span>
+    <span class="kt">size_t</span> <span class="n">s</span> <span class="o">=</span> <span class="n">kHeaderSize</span> <span class="o">+</span> <span class="n">count</span><span class="p">;</span>
+    <span class="k">for</span> <span class="p">(;</span> <span class="n">count</span><span class="p">;</span> <span class="o">--</span><span class="n">count</span><span class="p">,</span> <span class="o">++</span><span class="n">p</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">s</span> <span class="o">+=</span> <span class="n">key</span><span class="p">(</span><span class="o">*</span><span class="n">p</span><span class="p">);</span>
+    <span class="p">}</span>
+    <span class="k">return</span> <span class="n">s</span><span class="p">;</span>
+  <span class="p">}</span>
+
+  <span class="cm">/**</span>
+<span class="cm">   * Return the number of values from *p that are valid from an encoded</span>
+<span class="cm">   * buffer of size bytes.</span>
+<span class="cm">   */</span>
+  <span class="k">static</span> <span class="kt">size_t</span> <span class="n">partialCount</span><span class="p">(</span><span class="k">const</span> <span class="kt">char</span><span class="o">*</span> <span class="n">p</span><span class="p">,</span> <span class="kt">size_t</span> <span class="n">size</span><span class="p">)</span> <span class="p">{</span>
+    <span class="kt">char</span> <span class="n">v</span> <span class="o">=</span> <span class="o">*</span><span class="n">p</span><span class="p">;</span>
+    <span class="kt">size_t</span> <span class="n">s</span> <span class="o">=</span> <span class="n">kHeaderSize</span><span class="p">;</span>
+    <span class="n">s</span> <span class="o">+=</span> <span class="mi">1</span> <span class="o">+</span> <span class="n">b0key</span><span class="p">(</span><span class="n">v</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">s</span> <span class="o">&gt;</span> <span class="n">size</span><span class="p">)</span> <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+    <span class="n">s</span> <span class="o">+=</span> <span class="mi">1</span> <span class="o">+</span> <span class="n">b1key</span><span class="p">(</span><span class="n">v</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">s</span> <span class="o">&gt;</span> <span class="n">size</span><span class="p">)</span> <span class="k">return</span> <span class="mi">1</span><span class="p">;</span>
+    <span class="n">s</span> <span class="o">+=</span> <span class="mi">1</span> <span class="o">+</span> <span class="n">b2key</span><span class="p">(</span><span class="n">v</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">s</span> <span class="o">&gt;</span> <span class="n">size</span><span class="p">)</span> <span class="k">return</span> <span class="mi">2</span><span class="p">;</span>
+    <span class="n">s</span> <span class="o">+=</span> <span class="mi">1</span> <span class="o">+</span> <span class="n">b3key</span><span class="p">(</span><span class="n">v</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">s</span> <span class="o">&gt;</span> <span class="n">size</span><span class="p">)</span> <span class="k">return</span> <span class="mi">3</span><span class="p">;</span>
+    <span class="k">return</span> <span class="mi">4</span><span class="p">;</span>
+  <span class="p">}</span>
+
+  <span class="cm">/**</span>
+<span class="cm">   * Given a pointer to the beginning of an GroupVarint32-encoded block,</span>
+<span class="cm">   * return the number of bytes used by the encoding.</span>
+<span class="cm">   */</span>
+  <span class="k">static</span> <span class="kt">size_t</span> <span class="n">encodedSize</span><span class="p">(</span><span class="k">const</span> <span class="kt">char</span><span class="o">*</span> <span class="n">p</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">return</span> <span class="p">(</span><span class="n">kHeaderSize</span> <span class="o">+</span> <span class="n">kGroupSize</span> <span class="o">+</span>
+            <span class="n">b0key</span><span class="p">(</span><span class="o">*</span><span class="n">p</span><span class="p">)</span> <span class="o">+</span> <span class="n">b1key</span><span class="p">(</span><span class="o">*</span><span class="n">p</span><span class="p">)</span> <span class="o">+</span> <span class="n">b2key</span><span class="p">(</span><span class="o">*</span><span class="n">p</span><span class="p">)</span> <span class="o">+</span> <span class="n">b3key</span><span class="p">(</span><span class="o">*</span><span class="n">p</span><span class="p">));</span>
+  <span class="p">}</span>
+
+  <span class="cm">/**</span>
+<span class="cm">   * Encode four uint32_t values into the buffer pointed-to by p, and return</span>
+<span class="cm">   * the next position in the buffer (that is, one character past the last</span>
+<span class="cm">   * encoded byte).  p needs to have at least size()+4 bytes available.</span>
+<span class="cm">   */</span>
+  <span class="k">static</span> <span class="kt">char</span><span class="o">*</span> <span class="n">encode</span><span class="p">(</span><span class="kt">char</span><span class="o">*</span> <span class="n">p</span><span class="p">,</span> <span class="kt">uint32_t</span> <span class="n">a</span><span class="p">,</span> <span class="kt">uint32_t</span> <span class="n">b</span><span class="p">,</span> <span class="kt">uint32_t</span> <span class="n">c</span><span class="p">,</span> <span class="kt">uint32_t</span> <span class="n">d</span><span class="p">)</span> <span class="p">{</span>
+    <span class="kt">uint8_t</span> <span class="n">b0key</span> <span class="o">=</span> <span class="n">key</span><span class="p">(</span><span class="n">a</span><span class="p">);</span>
+    <span class="kt">uint8_t</span> <span class="n">b1key</span> <span class="o">=</span> <span class="n">key</span><span class="p">(</span><span class="n">b</span><span class="p">);</span>
+    <span class="kt">uint8_t</span> <span class="n">b2key</span> <span class="o">=</span> <span class="n">key</span><span class="p">(</span><span class="n">c</span><span class="p">);</span>
+    <span class="kt">uint8_t</span> <span class="n">b3key</span> <span class="o">=</span> <span class="n">key</span><span class="p">(</span><span class="n">d</span><span class="p">);</span>
+    <span class="o">*</span><span class="n">p</span><span class="o">++</span> <span class="o">=</span> <span class="p">(</span><span class="n">b3key</span> <span class="o">&lt;&lt;</span> <span class="mi">6</span><span class="p">)</span> <span class="o">|</span> <span class="p">(</span><span class="n">b2key</span> <span class="o">&lt;&lt;</span> <span class="mi">4</span><span class="p">)</span> <span class="o">|</span> <span class="p">(</span><span class="n">b1key</span> <span class="o">&lt;&lt;</span> <span class="mi">2</span><span class="p">)</span> <span class="o">|</span> <span class="n">b0key</span><span class="p">;</span>
+    <span class="n">storeUnaligned</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="n">a</span><span class="p">);</span>
+    <span class="n">p</span> <span class="o">+=</span> <span class="n">b0key</span><span class="o">+</span><span class="mi">1</span><span class="p">;</span>
+    <span class="n">storeUnaligned</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="n">b</span><span class="p">);</span>
+    <span class="n">p</span> <span class="o">+=</span> <span class="n">b1key</span><span class="o">+</span><span class="mi">1</span><span class="p">;</span>
+    <span class="n">storeUnaligned</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="n">c</span><span class="p">);</span>
+    <span class="n">p</span> <span class="o">+=</span> <span class="n">b2key</span><span class="o">+</span><span class="mi">1</span><span class="p">;</span>
+    <span class="n">storeUnaligned</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="n">d</span><span class="p">);</span>
+    <span class="n">p</span> <span class="o">+=</span> <span class="n">b3key</span><span class="o">+</span><span class="mi">1</span><span class="p">;</span>
+    <span class="k">return</span> <span class="n">p</span><span class="p">;</span>
+  <span class="p">}</span>
+
+  <span class="cm">/**</span>
+<span class="cm">   * Encode four uint32_t values from the array pointed-to by src into the</span>
+<span class="cm">   * buffer pointed-to by p, similar to encode(p,a,b,c,d) above.</span>
+<span class="cm">   */</span>
+  <span class="k">static</span> <span class="kt">char</span><span class="o">*</span> <span class="n">encode</span><span class="p">(</span><span class="kt">char</span><span class="o">*</span> <span class="n">p</span><span class="p">,</span> <span class="k">const</span> <span class="kt">uint32_t</span><span class="o">*</span> <span class="n">src</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">return</span> <span class="n">encode</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="n">src</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">src</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">src</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span> <span class="n">src</span><span class="p">[</span><span class="mi">3</span><span class="p">]);</span>
+  <span class="p">}</span>
+
+  <span class="cm">/**</span>
+<span class="cm">   * Decode four uint32_t values from a buffer, and return the next position</span>
+<span class="cm">   * in the buffer (that is, one character past the last encoded byte).</span>
+<span class="cm">   * The buffer needs to have at least 3 extra bytes available (they</span>
+<span class="cm">   * may be read but ignored).</span>
+<span class="cm">   */</span>
+  <span class="k">static</span> <span class="k">const</span> <span class="kt">char</span><span class="o">*</span> <span class="n">decode_simple</span><span class="p">(</span><span class="k">const</span> <span class="kt">char</span><span class="o">*</span> <span class="n">p</span><span class="p">,</span> <span class="kt">uint32_t</span><span class="o">*</span> <span class="n">a</span><span class="p">,</span> <span class="kt">uint32_t</span><span class="o">*</span> <span class="n">b</span><span class="p">,</span>
+                                   <span class="kt">uint32_t</span><span class="o">*</span> <span class="n">c</span><span class="p">,</span> <span class="kt">uint32_t</span><span class="o">*</span> <span class="n">d</span><span class="p">)</span> <span class="p">{</span>
+    <span class="kt">size_t</span> <span class="n">k</span> <span class="o">=</span> <span class="n">loadUnaligned</span><span class="o">&lt;</span><span class="kt">uint8_t</span><span class="o">&gt;</span><span class="p">(</span><span class="n">p</span><span class="p">);</span>
+    <span class="k">const</span> <span class="kt">char</span><span class="o">*</span> <span class="n">end</span> <span class="o">=</span> <span class="n">p</span> <span class="o">+</span> <span class="n">detail</span><span class="o">::</span><span class="n">groupVarintLengths</span><span class="p">[</span><span class="n">k</span><span class="p">];</span>
+    <span class="o">++</span><span class="n">p</span><span class="p">;</span>
+    <span class="kt">size_t</span> <span class="n">k0</span> <span class="o">=</span> <span class="n">b0key</span><span class="p">(</span><span class="n">k</span><span class="p">);</span>
+    <span class="o">*</span><span class="n">a</span> <span class="o">=</span> <span class="n">loadUnaligned</span><span class="o">&lt;</span><span class="kt">uint32_t</span><span class="o">&gt;</span><span class="p">(</span><span class="n">p</span><span class="p">)</span> <span class="o">&amp;</span> <span class="n">kMask</span><span class="p">[</span><span class="n">k0</span><span class="p">];</span>
+    <span class="n">p</span> <span class="o">+=</span> <span class="n">k0</span><span class="o">+</span><span class="mi">1</span><span class="p">;</span>
+    <span class="kt">size_t</span> <span class="n">k1</span> <span class="o">=</span> <span class="n">b1key</span><span class="p">(</span><span class="n">k</span><span class="p">);</span>
+    <span class="o">*</span><span class="n">b</span> <span class="o">=</span> <span class="n">loadUnaligned</span><span class="o">&lt;</span><span class="kt">uint32_t</span><span class="o">&gt;</span><span class="p">(</span><span class="n">p</span><span class="p">)</span> <span class="o">&amp;</span> <span class="n">kMask</span><span class="p">[</span><span class="n">k1</span><span class="p">];</span>
+    <span class="n">p</span> <span class="o">+=</span> <span class="n">k1</span><span class="o">+</span><span class="mi">1</span><span class="p">;</span>
+    <span class="kt">size_t</span> <span class="n">k2</span> <span class="o">=</span> <span class="n">b2key</span><span class="p">(</span><span class="n">k</span><span class="p">);</span>
+    <span class="o">*</span><span class="n">c</span> <span class="o">=</span> <span class="n">loadUnaligned</span><span class="o">&lt;</span><span class="kt">uint32_t</span><span class="o">&gt;</span><span class="p">(</span><span class="n">p</span><span class="p">)</span> <span class="o">&amp;</span> <span class="n">kMask</span><span class="p">[</span><span class="n">k2</span><span class="p">];</span>
+    <span class="n">p</span> <span class="o">+=</span> <span class="n">k2</span><span class="o">+</span><span class="mi">1</span><span class="p">;</span>
+    <span class="kt">size_t</span> <span class="n">k3</span> <span class="o">=</span> <span class="n">b3key</span><span class="p">(</span><span class="n">k</span><span class="p">);</span>
+    <span class="o">*</span><span class="n">d</span> <span class="o">=</span> <span class="n">loadUnaligned</span><span class="o">&lt;</span><span class="kt">uint32_t</span><span class="o">&gt;</span><span class="p">(</span><span class="n">p</span><span class="p">)</span> <span class="o">&amp;</span> <span class="n">kMask</span><span class="p">[</span><span class="n">k3</span><span class="p">];</span>
+    <span class="n">p</span> <span class="o">+=</span> <span class="n">k3</span><span class="o">+</span><span class="mi">1</span><span class="p">;</span>
+    <span class="k">return</span> <span class="n">end</span><span class="p">;</span>
+  <span class="p">}</span>
+
+  <span class="cm">/**</span>
+<span class="cm">   * Decode four uint32_t values from a buffer and store them in the array</span>
+<span class="cm">   * pointed-to by dest, similar to decode(p,a,b,c,d) above.</span>
+<span class="cm">   */</span>
+  <span class="k">static</span> <span class="k">const</span> <span class="kt">char</span><span class="o">*</span> <span class="n">decode_simple</span><span class="p">(</span><span class="k">const</span> <span class="kt">char</span><span class="o">*</span> <span class="n">p</span><span class="p">,</span> <span class="kt">uint32_t</span><span class="o">*</span> <span class="n">dest</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">return</span> <span class="n">decode_simple</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="n">dest</span><span class="p">,</span> <span class="n">dest</span><span class="o">+</span><span class="mi">1</span><span class="p">,</span> <span class="n">dest</span><span class="o">+</span><span class="mi">2</span><span class="p">,</span> <span class="n">dest</span><span class="o">+</span><span class="mi">3</span><span class="p">);</span>
+  <span class="p">}</span>
+
+<span class="cp">#ifdef __SSSE3__</span>
+  <span class="k">static</span> <span class="k">const</span> <span class="kt">char</span><span class="o">*</span> <span class="n">decode</span><span class="p">(</span><span class="k">const</span> <span class="kt">char</span><span class="o">*</span> <span class="n">p</span><span class="p">,</span> <span class="kt">uint32_t</span><span class="o">*</span> <span class="n">dest</span><span class="p">)</span> <span class="p">{</span>
+    <span class="kt">uint8_t</span> <span class="n">key</span> <span class="o">=</span> <span class="n">p</span><span class="p">[</span><span class="mi">0</span><span class="p">];</span>
+    <span class="n">__m128i</span> <span class="n">val</span> <span class="o">=</span> <span class="n">_mm_loadu_si128</span><span class="p">((</span><span class="k">const</span> <span class="n">__m128i</span><span class="o">*</span><span class="p">)(</span><span class="n">p</span><span class="o">+</span><span class="mi">1</span><span class="p">));</span>
+    <span class="n">__m128i</span> <span class="n">mask</span> <span class="o">=</span> <span class="n">detail</span><span class="o">::</span><span class="n">groupVarintSSEMasks</span><span class="p">[</span><span class="n">key</span><span class="p">];</span>
+    <span class="n">__m128i</span> <span class="n">r</span> <span class="o">=</span> <span class="n">_mm_shuffle_epi8</span><span class="p">(</span><span class="n">val</span><span class="p">,</span> <span class="n">mask</span><span class="p">);</span>
+    <span class="n">_mm_storeu_si128</span><span class="p">((</span><span class="n">__m128i</span><span class="o">*</span><span class="p">)</span><span class="n">dest</span><span class="p">,</span> <span class="n">r</span><span class="p">);</span>
+    <span class="k">return</span> <span class="n">p</span> <span class="o">+</span> <span class="n">detail</span><span class="o">::</span><span class="n">groupVarintLengths</span><span class="p">[</span><span class="n">key</span><span class="p">];</span>
+  <span class="p">}</span>
+
+  <span class="k">static</span> <span class="k">const</span> <span class="kt">char</span><span class="o">*</span> <span class="n">decode</span><span class="p">(</span><span class="k">const</span> <span class="kt">char</span><span class="o">*</span> <span class="n">p</span><span class="p">,</span> <span class="kt">uint32_t</span><span class="o">*</span> <span class="n">a</span><span class="p">,</span> <span class="kt">uint32_t</span><span class="o">*</span> <span class="n">b</span><span class="p">,</span>
+                            <span class="kt">uint32_t</span><span class="o">*</span> <span class="n">c</span><span class="p">,</span> <span class="kt">uint32_t</span><span class="o">*</span> <span class="n">d</span><span class="p">)</span> <span class="p">{</span>
+    <span class="kt">uint8_t</span> <span class="n">key</span> <span class="o">=</span> <span class="n">p</span><span class="p">[</span><span class="mi">0</span><span class="p">];</span>
+    <span class="n">__m128i</span> <span class="n">val</span> <span class="o">=</span> <span class="n">_mm_loadu_si128</span><span class="p">((</span><span class="k">const</span> <span class="n">__m128i</span><span class="o">*</span><span class="p">)(</span><span class="n">p</span><span class="o">+</span><span class="mi">1</span><span class="p">));</span>
+    <span class="n">__m128i</span> <span class="n">mask</span> <span class="o">=</span> <span class="n">detail</span><span class="o">::</span><span class="n">groupVarintSSEMasks</span><span class="p">[</span><span class="n">key</span><span class="p">];</span>
+    <span class="n">__m128i</span> <span class="n">r</span> <span class="o">=</span> <span class="n">_mm_shuffle_epi8</span><span class="p">(</span><span class="n">val</span><span class="p">,</span> <span class="n">mask</span><span class="p">);</span></pre></div></td></tr>
+
+
+<tr id="section-2"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-2">&#182;</a></div><p>Extracting 32 bits at a time out of an XMM register is a SSE4 feature</p></td><td class="code"><div class="highlight"><pre><span class="cp">#ifdef __SSE4__</span>
+    <span class="o">*</span><span class="n">a</span> <span class="o">=</span> <span class="n">_mm_extract_epi32</span><span class="p">(</span><span class="n">r</span><span class="p">,</span> <span class="mi">0</span><span class="p">);</span>
+    <span class="o">*</span><span class="n">b</span> <span class="o">=</span> <span class="n">_mm_extract_epi32</span><span class="p">(</span><span class="n">r</span><span class="p">,</span> <span class="mi">1</span><span class="p">);</span>
+    <span class="o">*</span><span class="n">c</span> <span class="o">=</span> <span class="n">_mm_extract_epi32</span><span class="p">(</span><span class="n">r</span><span class="p">,</span> <span class="mi">2</span><span class="p">);</span>
+    <span class="o">*</span><span class="n">d</span> <span class="o">=</span> <span class="n">_mm_extract_epi32</span><span class="p">(</span><span class="n">r</span><span class="p">,</span> <span class="mi">3</span><span class="p">);</span>
+<span class="cp">#else  </span><span class="cm">/* !__SSE4__ */</span><span class="cp"></span>
+    <span class="o">*</span><span class="n">a</span> <span class="o">=</span> <span class="n">_mm_extract_epi16</span><span class="p">(</span><span class="n">r</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span> <span class="o">+</span> <span class="p">(</span><span class="n">_mm_extract_epi16</span><span class="p">(</span><span class="n">r</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span> <span class="o">&lt;&lt;</span> <span class="mi">16</span><span class="p">);</span>
+    <span class="o">*</span><span class="n">b</span> <span class="o">=</span> <span class="n">_mm_extract_epi16</span><span class="p">(</span><span class="n">r</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span> <span class="o">+</span> <span class="p">(</span><span class="n">_mm_extract_epi16</span><span class="p">(</span><span class="n">r</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span> <span class="o">&lt;&lt;</span> <span class="mi">16</span><span class="p">);</span>
+    <span class="o">*</span><span class="n">c</span> <span class="o">=</span> <span class="n">_mm_extract_epi16</span><span class="p">(</span><span class="n">r</span><span class="p">,</span> <span class="mi">4</span><span class="p">)</span> <span class="o">+</span> <span class="p">(</span><span class="n">_mm_extract_epi16</span><span class="p">(</span><span class="n">r</span><span class="p">,</span> <span class="mi">5</span><span class="p">)</span> <span class="o">&lt;&lt;</span> <span class="mi">16</span><span class="p">);</span>
+    <span class="o">*</span><span class="n">d</span> <span class="o">=</span> <span class="n">_mm_extract_epi16</span><span class="p">(</span><span class="n">r</span><span class="p">,</span> <span class="mi">6</span><span class="p">)</span> <span class="o">+</span> <span class="p">(</span><span class="n">_mm_extract_epi16</span><span class="p">(</span><span class="n">r</span><span class="p">,</span> <span class="mi">7</span><span class="p">)</span> <span class="o">&lt;&lt;</span> <span class="mi">16</span><span class="p">);</span>
+<span class="cp">#endif  </span><span class="cm">/* __SSE4__ */</span><span class="cp"></span>
+
+    <span class="k">return</span> <span class="n">p</span> <span class="o">+</span> <span class="n">detail</span><span class="o">::</span><span class="n">groupVarintLengths</span><span class="p">[</span><span class="n">key</span><span class="p">];</span>
+  <span class="p">}</span>
+
+<span class="cp">#else  </span><span class="cm">/* !__SSSE3__ */</span><span class="cp"></span>
+  <span class="k">static</span> <span class="k">const</span> <span class="kt">char</span><span class="o">*</span> <span class="n">decode</span><span class="p">(</span><span class="k">const</span> <span class="kt">char</span><span class="o">*</span> <span class="n">p</span><span class="p">,</span> <span class="kt">uint32_t</span><span class="o">*</span> <span class="n">a</span><span class="p">,</span> <span class="kt">uint32_t</span><span class="o">*</span> <span class="n">b</span><span class="p">,</span>
+                            <span class="kt">uint32_t</span><span class="o">*</span> <span class="n">c</span><span class="p">,</span> <span class="kt">uint32_t</span><span class="o">*</span> <span class="n">d</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">return</span> <span class="n">decode_simple</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">,</span> <span class="n">c</span><span class="p">,</span> <span class="n">d</span><span class="p">);</span>
+  <span class="p">}</span>
+
+  <span class="k">static</span> <span class="k">const</span> <span class="kt">char</span><span class="o">*</span> <span class="n">decode</span><span class="p">(</span><span class="k">const</span> <span class="kt">char</span><span class="o">*</span> <span class="n">p</span><span class="p">,</span> <span class="kt">uint32_t</span><span class="o">*</span> <span class="n">dest</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">return</span> <span class="n">decode_simple</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="n">dest</span><span class="p">);</span>
+  <span class="p">}</span>
+<span class="cp">#endif  </span><span class="cm">/* __SSSE3__ */</span><span class="cp"></span>
+
+ <span class="nl">private:</span>
+  <span class="k">static</span> <span class="kt">uint8_t</span> <span class="n">key</span><span class="p">(</span><span class="kt">uint32_t</span> <span class="n">x</span><span class="p">)</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-3"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-3">&#182;</a></div><p><em>_builtin</em>clz is undefined for the x==0 case</p></td><td class="code"><div class="highlight"><pre>    <span class="k">return</span> <span class="mi">3</span> <span class="o">-</span> <span class="p">(</span><span class="n">__builtin_clz</span><span class="p">(</span><span class="n">x</span><span class="o">|</span><span class="mi">1</span><span class="p">)</span> <span class="o">/</span> <span class="mi">8</span><span class="p">);</span>
+  <span class="p">}</span>
+  <span class="k">static</span> <span class="kt">size_t</span> <span class="n">b0key</span><span class="p">(</span><span class="kt">size_t</span> <span class="n">x</span><span class="p">)</span> <span class="p">{</span> <span class="k">return</span> <span class="n">x</span> <span class="o">&amp;</span> <span class="mi">3</span><span class="p">;</span> <span class="p">}</span>
+  <span class="k">static</span> <span class="kt">size_t</span> <span class="n">b1key</span><span class="p">(</span><span class="kt">size_t</span> <span class="n">x</span><span class="p">)</span> <span class="p">{</span> <span class="k">return</span> <span class="p">(</span><span class="n">x</span> <span class="o">&gt;&gt;</span> <span class="mi">2</span><span class="p">)</span> <span class="o">&amp;</span> <span class="mi">3</span><span class="p">;</span> <span class="p">}</span>
+  <span class="k">static</span> <span class="kt">size_t</span> <span class="n">b2key</span><span class="p">(</span><span class="kt">size_t</span> <span class="n">x</span><span class="p">)</span> <span class="p">{</span> <span class="k">return</span> <span class="p">(</span><span class="n">x</span> <span class="o">&gt;&gt;</span> <span class="mi">4</span><span class="p">)</span> <span class="o">&amp;</span> <span class="mi">3</span><span class="p">;</span> <span class="p">}</span>
+  <span class="k">static</span> <span class="kt">size_t</span> <span class="n">b3key</span><span class="p">(</span><span class="kt">size_t</span> <span class="n">x</span><span class="p">)</span> <span class="p">{</span> <span class="k">return</span> <span class="p">(</span><span class="n">x</span> <span class="o">&gt;&gt;</span> <span class="mi">6</span><span class="p">)</span> <span class="o">&amp;</span> <span class="mi">3</span><span class="p">;</span> <span class="p">}</span>
+
+  <span class="k">static</span> <span class="k">const</span> <span class="kt">uint32_t</span> <span class="n">kMask</span><span class="p">[];</span>
+<span class="p">};</span>
+
+
+<span class="cm">/**</span>
+<span class="cm"> * GroupVarint encoding for 64-bit values.</span>
+<span class="cm"> *</span>
+<span class="cm"> * Encodes 5 64-bit integers at once, each using 1-8 bytes depending on size.</span>
+<span class="cm"> * There are two bytes of overhead.  (The first two bytes contain the lengths</span>
+<span class="cm"> * of the five integers encoded as three bits each; 000=1 byte .. 111 = 8 bytes)</span>
+<span class="cm"> *</span>
+<span class="cm"> * This implementation assumes little-endian and does unaligned 64-bit</span>
+<span class="cm"> * accesses, so it&#39;s basically not portable outside of the x86[_64] world.</span>
+<span class="cm"> */</span>
+<span class="n">template</span> <span class="o">&lt;&gt;</span>
+<span class="n">class</span> <span class="n">GroupVarint</span><span class="o">&lt;</span><span class="kt">uint64_t</span><span class="o">&gt;</span> <span class="o">:</span> <span class="n">public</span> <span class="n">detail</span><span class="o">::</span><span class="n">GroupVarintBase</span><span class="o">&lt;</span><span class="kt">uint64_t</span><span class="o">&gt;</span> <span class="p">{</span>
+ <span class="nl">public:</span>
+  <span class="cm">/**</span>
+<span class="cm">   * Return the number of bytes used to encode these five values.</span>
+<span class="cm">   */</span>
+  <span class="k">static</span> <span class="kt">size_t</span> <span class="n">size</span><span class="p">(</span><span class="kt">uint64_t</span> <span class="n">a</span><span class="p">,</span> <span class="kt">uint64_t</span> <span class="n">b</span><span class="p">,</span> <span class="kt">uint64_t</span> <span class="n">c</span><span class="p">,</span> <span class="kt">uint64_t</span> <span class="n">d</span><span class="p">,</span>
+                     <span class="kt">uint64_t</span> <span class="n">e</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">return</span> <span class="p">(</span><span class="n">kHeaderSize</span> <span class="o">+</span> <span class="n">kGroupSize</span> <span class="o">+</span>
+            <span class="n">key</span><span class="p">(</span><span class="n">a</span><span class="p">)</span> <span class="o">+</span> <span class="n">key</span><span class="p">(</span><span class="n">b</span><span class="p">)</span> <span class="o">+</span> <span class="n">key</span><span class="p">(</span><span class="n">c</span><span class="p">)</span> <span class="o">+</span> <span class="n">key</span><span class="p">(</span><span class="n">d</span><span class="p">)</span> <span class="o">+</span> <span class="n">key</span><span class="p">(</span><span class="n">e</span><span class="p">));</span>
+  <span class="p">}</span>
+
+  <span class="cm">/**</span>
+<span class="cm">   * Return the number of bytes used to encode five uint64_t values stored</span>
+<span class="cm">   * at consecutive positions in an array.</span>
+<span class="cm">   */</span>
+  <span class="k">static</span> <span class="kt">size_t</span> <span class="n">size</span><span class="p">(</span><span class="k">const</span> <span class="kt">uint64_t</span><span class="o">*</span> <span class="n">p</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">return</span> <span class="n">size</span><span class="p">(</span><span class="n">p</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">p</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">p</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span> <span class="n">p</span><span class="p">[</span><span class="mi">3</span><span class="p">],</span> <span class="n">p</span><span class="p">[</span><span class="mi">4</span><span class="p">]);</span>
+  <span class="p">}</span>
+
+  <span class="cm">/**</span>
+<span class="cm">   * Return the number of bytes used to encode count (&lt;= 4) values.</span>
+<span class="cm">   * If you clip a buffer after these many bytes, you can still decode</span>
+<span class="cm">   * the first &quot;count&quot; values correctly (if the remaining size() -</span>
+<span class="cm">   * partialSize() bytes are filled with garbage).</span>
+<span class="cm">   */</span>
+  <span class="k">static</span> <span class="kt">size_t</span> <span class="n">partialSize</span><span class="p">(</span><span class="k">const</span> <span class="n">type</span><span class="o">*</span> <span class="n">p</span><span class="p">,</span> <span class="kt">size_t</span> <span class="n">count</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">DCHECK_LE</span><span class="p">(</span><span class="n">count</span><span class="p">,</span> <span class="n">kGroupSize</span><span class="p">);</span>
+    <span class="kt">size_t</span> <span class="n">s</span> <span class="o">=</span> <span class="n">kHeaderSize</span> <span class="o">+</span> <span class="n">count</span><span class="p">;</span>
+    <span class="k">for</span> <span class="p">(;</span> <span class="n">count</span><span class="p">;</span> <span class="o">--</span><span class="n">count</span><span class="p">,</span> <span class="o">++</span><span class="n">p</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">s</span> <span class="o">+=</span> <span class="n">key</span><span class="p">(</span><span class="o">*</span><span class="n">p</span><span class="p">);</span>
+    <span class="p">}</span>
+    <span class="k">return</span> <span class="n">s</span><span class="p">;</span>
+  <span class="p">}</span>
+
+  <span class="cm">/**</span>
+<span class="cm">   * Return the number of values from *p that are valid from an encoded</span>
+<span class="cm">   * buffer of size bytes.</span>
+<span class="cm">   */</span>
+  <span class="k">static</span> <span class="kt">size_t</span> <span class="n">partialCount</span><span class="p">(</span><span class="k">const</span> <span class="kt">char</span><span class="o">*</span> <span class="n">p</span><span class="p">,</span> <span class="kt">size_t</span> <span class="n">size</span><span class="p">)</span> <span class="p">{</span>
+    <span class="kt">uint16_t</span> <span class="n">v</span> <span class="o">=</span> <span class="n">loadUnaligned</span><span class="o">&lt;</span><span class="kt">uint16_t</span><span class="o">&gt;</span><span class="p">(</span><span class="n">p</span><span class="p">);</span>
+    <span class="kt">size_t</span> <span class="n">s</span> <span class="o">=</span> <span class="n">kHeaderSize</span><span class="p">;</span>
+    <span class="n">s</span> <span class="o">+=</span> <span class="mi">1</span> <span class="o">+</span> <span class="n">b0key</span><span class="p">(</span><span class="n">v</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">s</span> <span class="o">&gt;</span> <span class="n">size</span><span class="p">)</span> <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+    <span class="n">s</span> <span class="o">+=</span> <span class="mi">1</span> <span class="o">+</span> <span class="n">b1key</span><span class="p">(</span><span class="n">v</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">s</span> <span class="o">&gt;</span> <span class="n">size</span><span class="p">)</span> <span class="k">return</span> <span class="mi">1</span><span class="p">;</span>
+    <span class="n">s</span> <span class="o">+=</span> <span class="mi">1</span> <span class="o">+</span> <span class="n">b2key</span><span class="p">(</span><span class="n">v</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">s</span> <span class="o">&gt;</span> <span class="n">size</span><span class="p">)</span> <span class="k">return</span> <span class="mi">2</span><span class="p">;</span>
+    <span class="n">s</span> <span class="o">+=</span> <span class="mi">1</span> <span class="o">+</span> <span class="n">b3key</span><span class="p">(</span><span class="n">v</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">s</span> <span class="o">&gt;</span> <span class="n">size</span><span class="p">)</span> <span class="k">return</span> <span class="mi">3</span><span class="p">;</span>
+    <span class="n">s</span> <span class="o">+=</span> <span class="mi">1</span> <span class="o">+</span> <span class="n">b4key</span><span class="p">(</span><span class="n">v</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">s</span> <span class="o">&gt;</span> <span class="n">size</span><span class="p">)</span> <span class="k">return</span> <span class="mi">4</span><span class="p">;</span>
+    <span class="k">return</span> <span class="mi">5</span><span class="p">;</span>
+  <span class="p">}</span>
+
+  <span class="cm">/**</span>
+<span class="cm">   * Given a pointer to the beginning of an GroupVarint64-encoded block,</span>
+<span class="cm">   * return the number of bytes used by the encoding.</span>
+<span class="cm">   */</span>
+  <span class="k">static</span> <span class="kt">size_t</span> <span class="n">encodedSize</span><span class="p">(</span><span class="k">const</span> <span class="kt">char</span><span class="o">*</span> <span class="n">p</span><span class="p">)</span> <span class="p">{</span>
+    <span class="kt">uint16_t</span> <span class="n">n</span> <span class="o">=</span> <span class="n">loadUnaligned</span><span class="o">&lt;</span><span class="kt">uint16_t</span><span class="o">&gt;</span><span class="p">(</span><span class="n">p</span><span class="p">);</span>
+    <span class="k">return</span> <span class="p">(</span><span class="n">kHeaderSize</span> <span class="o">+</span> <span class="n">kGroupSize</span> <span class="o">+</span>
+            <span class="n">b0key</span><span class="p">(</span><span class="n">n</span><span class="p">)</span> <span class="o">+</span> <span class="n">b1key</span><span class="p">(</span><span class="n">n</span><span class="p">)</span> <span class="o">+</span> <span class="n">b2key</span><span class="p">(</span><span class="n">n</span><span class="p">)</span> <span class="o">+</span> <span class="n">b3key</span><span class="p">(</span><span class="n">n</span><span class="p">)</span> <span class="o">+</span> <span class="n">b4key</span><span class="p">(</span><span class="n">n</span><span class="p">));</span>
+  <span class="p">}</span>
+
+  <span class="cm">/**</span>
+<span class="cm">   * Encode five uint64_t values into the buffer pointed-to by p, and return</span>
+<span class="cm">   * the next position in the buffer (that is, one character past the last</span>
+<span class="cm">   * encoded byte).  p needs to have at least size()+8 bytes available.</span>
+<span class="cm">   */</span>
+  <span class="k">static</span> <span class="kt">char</span><span class="o">*</span> <span class="n">encode</span><span class="p">(</span><span class="kt">char</span><span class="o">*</span> <span class="n">p</span><span class="p">,</span> <span class="kt">uint64_t</span> <span class="n">a</span><span class="p">,</span> <span class="kt">uint64_t</span> <span class="n">b</span><span class="p">,</span> <span class="kt">uint64_t</span> <span class="n">c</span><span class="p">,</span>
+                      <span class="kt">uint64_t</span> <span class="n">d</span><span class="p">,</span> <span class="kt">uint64_t</span> <span class="n">e</span><span class="p">)</span> <span class="p">{</span>
+    <span class="kt">uint8_t</span> <span class="n">b0key</span> <span class="o">=</span> <span class="n">key</span><span class="p">(</span><span class="n">a</span><span class="p">);</span>
+    <span class="kt">uint8_t</span> <span class="n">b1key</span> <span class="o">=</span> <span class="n">key</span><span class="p">(</span><span class="n">b</span><span class="p">);</span>
+    <span class="kt">uint8_t</span> <span class="n">b2key</span> <span class="o">=</span> <span class="n">key</span><span class="p">(</span><span class="n">c</span><span class="p">);</span>
+    <span class="kt">uint8_t</span> <span class="n">b3key</span> <span class="o">=</span> <span class="n">key</span><span class="p">(</span><span class="n">d</span><span class="p">);</span>
+    <span class="kt">uint8_t</span> <span class="n">b4key</span> <span class="o">=</span> <span class="n">key</span><span class="p">(</span><span class="n">e</span><span class="p">);</span>
+    <span class="n">storeUnaligned</span><span class="o">&lt;</span><span class="kt">uint16_t</span><span class="o">&gt;</span><span class="p">(</span>
+        <span class="n">p</span><span class="p">,</span>
+        <span class="p">(</span><span class="n">b4key</span> <span class="o">&lt;&lt;</span> <span class="mi">12</span><span class="p">)</span> <span class="o">|</span> <span class="p">(</span><span class="n">b3key</span> <span class="o">&lt;&lt;</span> <span class="mi">9</span><span class="p">)</span> <span class="o">|</span> <span class="p">(</span><span class="n">b2key</span> <span class="o">&lt;&lt;</span> <span class="mi">6</span><span class="p">)</span> <span class="o">|</span> <span class="p">(</span><span class="n">b1key</span> <span class="o">&lt;&lt;</span> <span class="mi">3</span><span class="p">)</span> <span class="o">|</span> <span class="n">b0key</span><span class="p">);</span>
+    <span class="n">p</span> <span class="o">+=</span> <span class="mi">2</span><span class="p">;</span>
+    <span class="n">storeUnaligned</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="n">a</span><span class="p">);</span>
+    <span class="n">p</span> <span class="o">+=</span> <span class="n">b0key</span><span class="o">+</span><span class="mi">1</span><span class="p">;</span>
+    <span class="n">storeUnaligned</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="n">b</span><span class="p">);</span>
+    <span class="n">p</span> <span class="o">+=</span> <span class="n">b1key</span><span class="o">+</span><span class="mi">1</span><span class="p">;</span>
+    <span class="n">storeUnaligned</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="n">c</span><span class="p">);</span>
+    <span class="n">p</span> <span class="o">+=</span> <span class="n">b2key</span><span class="o">+</span><span class="mi">1</span><span class="p">;</span>
+    <span class="n">storeUnaligned</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="n">d</span><span class="p">);</span>
+    <span class="n">p</span> <span class="o">+=</span> <span class="n">b3key</span><span class="o">+</span><span class="mi">1</span><span class="p">;</span>
+    <span class="n">storeUnaligned</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="n">e</span><span class="p">);</span>
+    <span class="n">p</span> <span class="o">+=</span> <span class="n">b4key</span><span class="o">+</span><span class="mi">1</span><span class="p">;</span>
+    <span class="k">return</span> <span class="n">p</span><span class="p">;</span>
+  <span class="p">}</span>
+
+  <span class="cm">/**</span>
+<span class="cm">   * Encode five uint64_t values from the array pointed-to by src into the</span>
+<span class="cm">   * buffer pointed-to by p, similar to encode(p,a,b,c,d,e) above.</span>
+<span class="cm">   */</span>
+  <span class="k">static</span> <span class="kt">char</span><span class="o">*</span> <span class="n">encode</span><span class="p">(</span><span class="kt">char</span><span class="o">*</span> <span class="n">p</span><span class="p">,</span> <span class="k">const</span> <span class="kt">uint64_t</span><span class="o">*</span> <span class="n">src</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">return</span> <span class="n">encode</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="n">src</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">src</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">src</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span> <span class="n">src</span><span class="p">[</span><span class="mi">3</span><span class="p">],</span> <span class="n">src</span><span class="p">[</span><span class="mi">4</span><span class="p">]);</span>
+  <span class="p">}</span>
+
+  <span class="cm">/**</span>
+<span class="cm">   * Decode five uint64_t values from a buffer, and return the next position</span>
+<span class="cm">   * in the buffer (that is, one character past the last encoded byte).</span>
+<span class="cm">   * The buffer needs to have at least 7 bytes available (they may be read</span>
+<span class="cm">   * but ignored).</span>
+<span class="cm">   */</span>
+  <span class="k">static</span> <span class="k">const</span> <span class="kt">char</span><span class="o">*</span> <span class="n">decode</span><span class="p">(</span><span class="k">const</span> <span class="kt">char</span><span class="o">*</span> <span class="n">p</span><span class="p">,</span> <span class="kt">uint64_t</span><span class="o">*</span> <span class="n">a</span><span class="p">,</span> <span class="kt">uint64_t</span><span class="o">*</span> <span class="n">b</span><span class="p">,</span>
+                            <span class="kt">uint64_t</span><span class="o">*</span> <span class="n">c</span><span class="p">,</span> <span class="kt">uint64_t</span><span class="o">*</span> <span class="n">d</span><span class="p">,</span> <span class="kt">uint64_t</span><span class="o">*</span> <span class="n">e</span><span class="p">)</span> <span class="p">{</span>
+    <span class="kt">uint16_t</span> <span class="n">k</span> <span class="o">=</span> <span class="n">loadUnaligned</span><span class="o">&lt;</span><span class="kt">uint16_t</span><span class="o">&gt;</span><span class="p">(</span><span class="n">p</span><span class="p">);</span>
+    <span class="n">p</span> <span class="o">+=</span> <span class="mi">2</span><span class="p">;</span>
+    <span class="kt">uint8_t</span> <span class="n">k0</span> <span class="o">=</span> <span class="n">b0key</span><span class="p">(</span><span class="n">k</span><span class="p">);</span>
+    <span class="o">*</span><span class="n">a</span> <span class="o">=</span> <span class="n">loadUnaligned</span><span class="o">&lt;</span><span class="kt">uint64_t</span><span class="o">&gt;</span><span class="p">(</span><span class="n">p</span><span class="p">)</span> <span class="o">&amp;</span> <span class="n">kMask</span><span class="p">[</span><span class="n">k0</span><span class="p">];</span>
+    <span class="n">p</span> <span class="o">+=</span> <span class="n">k0</span><span class="o">+</span><span class="mi">1</span><span class="p">;</span>
+    <span class="kt">uint8_t</span> <span class="n">k1</span> <span class="o">=</span> <span class="n">b1key</span><span class="p">(</span><span class="n">k</span><span class="p">);</span>
+    <span class="o">*</span><span class="n">b</span> <span class="o">=</span> <span class="n">loadUnaligned</span><span class="o">&lt;</span><span class="kt">uint64_t</span><span class="o">&gt;</span><span class="p">(</span><span class="n">p</span><span class="p">)</span> <span class="o">&amp;</span> <span class="n">kMask</span><span class="p">[</span><span class="n">k1</span><span class="p">];</span>
+    <span class="n">p</span> <span class="o">+=</span> <span class="n">k1</span><span class="o">+</span><span class="mi">1</span><span class="p">;</span>
+    <span class="kt">uint8_t</span> <span class="n">k2</span> <span class="o">=</span> <span class="n">b2key</span><span class="p">(</span><span class="n">k</span><span class="p">);</span>
+    <span class="o">*</span><span class="n">c</span> <span class="o">=</span> <span class="n">loadUnaligned</span><span class="o">&lt;</span><span class="kt">uint64_t</span><span class="o">&gt;</span><span class="p">(</span><span class="n">p</span><span class="p">)</span> <span class="o">&amp;</span> <span class="n">kMask</span><span class="p">[</span><span class="n">k2</span><span class="p">];</span>
+    <span class="n">p</span> <span class="o">+=</span> <span class="n">k2</span><span class="o">+</span><span class="mi">1</span><span class="p">;</span>
+    <span class="kt">uint8_t</span> <span class="n">k3</span> <span class="o">=</span> <span class="n">b3key</span><span class="p">(</span><span class="n">k</span><span class="p">);</span>
+    <span class="o">*</span><span class="n">d</span> <span class="o">=</span> <span class="n">loadUnaligned</span><span class="o">&lt;</span><span class="kt">uint64_t</span><span class="o">&gt;</span><span class="p">(</span><span class="n">p</span><span class="p">)</span> <span class="o">&amp;</span> <span class="n">kMask</span><span class="p">[</span><span class="n">k3</span><span class="p">];</span>
+    <span class="n">p</span> <span class="o">+=</span> <span class="n">k3</span><span class="o">+</span><span class="mi">1</span><span class="p">;</span>
+    <span class="kt">uint8_t</span> <span class="n">k4</span> <span class="o">=</span> <span class="n">b4key</span><span class="p">(</span><span class="n">k</span><span class="p">);</span>
+    <span class="o">*</span><span class="n">e</span> <span class="o">=</span> <span class="n">loadUnaligned</span><span class="o">&lt;</span><span class="kt">uint64_t</span><span class="o">&gt;</span><span class="p">(</span><span class="n">p</span><span class="p">)</span> <span class="o">&amp;</span> <span class="n">kMask</span><span class="p">[</span><span class="n">k4</span><span class="p">];</span>
+    <span class="n">p</span> <span class="o">+=</span> <span class="n">k4</span><span class="o">+</span><span class="mi">1</span><span class="p">;</span>
+    <span class="k">return</span> <span class="n">p</span><span class="p">;</span>
+  <span class="p">}</span>
+
+  <span class="cm">/**</span>
+<span class="cm">   * Decode five uint64_t values from a buffer and store them in the array</span>
+<span class="cm">   * pointed-to by dest, similar to decode(p,a,b,c,d,e) above.</span>
+<span class="cm">   */</span>
+  <span class="k">static</span> <span class="k">const</span> <span class="kt">char</span><span class="o">*</span> <span class="n">decode</span><span class="p">(</span><span class="k">const</span> <span class="kt">char</span><span class="o">*</span> <span class="n">p</span><span class="p">,</span> <span class="kt">uint64_t</span><span class="o">*</span> <span class="n">dest</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">return</span> <span class="n">decode</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="n">dest</span><span class="p">,</span> <span class="n">dest</span><span class="o">+</span><span class="mi">1</span><span class="p">,</span> <span class="n">dest</span><span class="o">+</span><span class="mi">2</span><span class="p">,</span> <span class="n">dest</span><span class="o">+</span><span class="mi">3</span><span class="p">,</span> <span class="n">dest</span><span class="o">+</span><span class="mi">4</span><span class="p">);</span>
+  <span class="p">}</span>
+
+ <span class="nl">private:</span>
+  <span class="k">enum</span> <span class="p">{</span> <span class="n">kHeaderBytes</span> <span class="o">=</span> <span class="mi">2</span> <span class="p">};</span>
+
+  <span class="k">static</span> <span class="kt">uint8_t</span> <span class="nf">key</span><span class="p">(</span><span class="kt">uint64_t</span> <span class="n">x</span><span class="p">)</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-4"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-4">&#182;</a></div><p><em>_builtin</em>clzll is undefined for the x==0 case</p></td><td class="code"><div class="highlight"><pre>    <span class="k">return</span> <span class="mi">7</span> <span class="o">-</span> <span class="p">(</span><span class="n">__builtin_clzll</span><span class="p">(</span><span class="n">x</span><span class="o">|</span><span class="mi">1</span><span class="p">)</span> <span class="o">/</span> <span class="mi">8</span><span class="p">);</span>
+  <span class="p">}</span>
+
+  <span class="k">static</span> <span class="kt">uint8_t</span> <span class="nf">b0key</span><span class="p">(</span><span class="kt">uint16_t</span> <span class="n">x</span><span class="p">)</span> <span class="p">{</span> <span class="k">return</span> <span class="n">x</span> <span class="o">&amp;</span> <span class="mi">7</span><span class="p">;</span> <span class="p">}</span>
+  <span class="k">static</span> <span class="kt">uint8_t</span> <span class="nf">b1key</span><span class="p">(</span><span class="kt">uint16_t</span> <span class="n">x</span><span class="p">)</span> <span class="p">{</span> <span class="k">return</span> <span class="p">(</span><span class="n">x</span> <span class="o">&gt;&gt;</span> <span class="mi">3</span><span class="p">)</span> <span class="o">&amp;</span> <span class="mi">7</span><span class="p">;</span> <span class="p">}</span>
+  <span class="k">static</span> <span class="kt">uint8_t</span> <span class="nf">b2key</span><span class="p">(</span><span class="kt">uint16_t</span> <span class="n">x</span><span class="p">)</span> <span class="p">{</span> <span class="k">return</span> <span class="p">(</span><span class="n">x</span> <span class="o">&gt;&gt;</span> <span class="mi">6</span><span class="p">)</span> <span class="o">&amp;</span> <span class="mi">7</span><span class="p">;</span> <span class="p">}</span>
+  <span class="k">static</span> <span class="kt">uint8_t</span> <span class="nf">b3key</span><span class="p">(</span><span class="kt">uint16_t</span> <span class="n">x</span><span class="p">)</span> <span class="p">{</span> <span class="k">return</span> <span class="p">(</span><span class="n">x</span> <span class="o">&gt;&gt;</span> <span class="mi">9</span><span class="p">)</span> <span class="o">&amp;</span> <span class="mi">7</span><span class="p">;</span> <span class="p">}</span>
+  <span class="k">static</span> <span class="kt">uint8_t</span> <span class="nf">b4key</span><span class="p">(</span><span class="kt">uint16_t</span> <span class="n">x</span><span class="p">)</span> <span class="p">{</span> <span class="k">return</span> <span class="p">(</span><span class="n">x</span> <span class="o">&gt;&gt;</span> <span class="mi">12</span><span class="p">)</span> <span class="o">&amp;</span> <span class="mi">7</span><span class="p">;</span> <span class="p">}</span>
+
+  <span class="k">static</span> <span class="k">const</span> <span class="kt">uint64_t</span> <span class="n">kMask</span><span class="p">[];</span>
+<span class="p">};</span>
+
+<span class="k">typedef</span> <span class="n">GroupVarint</span><span class="o">&lt;</span><span class="kt">uint32_t</span><span class="o">&gt;</span> <span class="n">GroupVarint32</span><span class="p">;</span>
+<span class="k">typedef</span> <span class="n">GroupVarint</span><span class="o">&lt;</span><span class="kt">uint64_t</span><span class="o">&gt;</span> <span class="n">GroupVarint64</span><span class="p">;</span>
+
+<span class="cm">/**</span>
+<span class="cm"> * Simplify use of GroupVarint* for the case where data is available one</span>
+<span class="cm"> * entry at a time (instead of one group at a time).  Handles buffering</span>
+<span class="cm"> * and an incomplete last chunk.</span>
+<span class="cm"> *</span>
+<span class="cm"> * Output is a function object that accepts character ranges:</span>
+<span class="cm"> * out(StringPiece) appends the given character range to the output.</span>
+<span class="cm"> */</span>
+<span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">T</span><span class="p">,</span> <span class="n">class</span> <span class="n">Output</span><span class="o">&gt;</span>
+<span class="n">class</span> <span class="n">GroupVarintEncoder</span> <span class="p">{</span>
+ <span class="nl">public:</span>
+  <span class="k">typedef</span> <span class="n">GroupVarint</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;</span> <span class="n">Base</span><span class="p">;</span>
+  <span class="k">typedef</span> <span class="n">T</span> <span class="n">type</span><span class="p">;</span>
+
+  <span class="n">explicit</span> <span class="nf">GroupVarintEncoder</span><span class="p">(</span><span class="n">Output</span> <span class="n">out</span><span class="p">)</span>
+    <span class="o">:</span> <span class="n">out_</span><span class="p">(</span><span class="n">out</span><span class="p">),</span>
+      <span class="n">count_</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+  <span class="p">}</span>
+
+  <span class="o">~</span><span class="n">GroupVarintEncoder</span><span class="p">()</span> <span class="p">{</span>
+    <span class="n">finish</span><span class="p">();</span>
+  <span class="p">}</span>
+
+  <span class="cm">/**</span>
+<span class="cm">   * Add a value to the encoder.</span>
+<span class="cm">   */</span>
+  <span class="kt">void</span> <span class="n">add</span><span class="p">(</span><span class="n">type</span> <span class="n">val</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">buf_</span><span class="p">[</span><span class="n">count_</span><span class="o">++</span><span class="p">]</span> <span class="o">=</span> <span class="n">val</span><span class="p">;</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">count_</span> <span class="o">==</span> <span class="n">Base</span><span class="o">::</span><span class="n">kGroupSize</span><span class="p">)</span> <span class="p">{</span>
+      <span class="kt">char</span><span class="o">*</span> <span class="n">p</span> <span class="o">=</span> <span class="n">Base</span><span class="o">::</span><span class="n">encode</span><span class="p">(</span><span class="n">tmp_</span><span class="p">,</span> <span class="n">buf_</span><span class="p">);</span>
+      <span class="n">out_</span><span class="p">(</span><span class="n">StringPiece</span><span class="p">(</span><span class="n">tmp_</span><span class="p">,</span> <span class="n">p</span><span class="p">));</span>
+      <span class="n">count_</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+    <span class="p">}</span>
+  <span class="p">}</span>
+
+  <span class="cm">/**</span>
+<span class="cm">   * Finish encoding, flushing any buffered values if necessary.</span>
+<span class="cm">   * After finish(), the encoder is immediately ready to encode more data</span>
+<span class="cm">   * to the same output.</span>
+<span class="cm">   */</span>
+  <span class="kt">void</span> <span class="n">finish</span><span class="p">()</span> <span class="p">{</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">count_</span><span class="p">)</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-5"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-5">&#182;</a></div><p>This is not strictly necessary, but it makes testing easy;
+uninitialized bytes are guaranteed to be recorded as taking one byte
+(not more).</p></td><td class="code"><div class="highlight"><pre>      <span class="k">for</span> <span class="p">(</span><span class="kt">size_t</span> <span class="n">i</span> <span class="o">=</span> <span class="n">count_</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">Base</span><span class="o">::</span><span class="n">kGroupSize</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">buf_</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+      <span class="p">}</span>
+      <span class="n">Base</span><span class="o">::</span><span class="n">encode</span><span class="p">(</span><span class="n">tmp_</span><span class="p">,</span> <span class="n">buf_</span><span class="p">);</span>
+      <span class="n">out_</span><span class="p">(</span><span class="n">StringPiece</span><span class="p">(</span><span class="n">tmp_</span><span class="p">,</span> <span class="n">Base</span><span class="o">::</span><span class="n">partialSize</span><span class="p">(</span><span class="n">buf_</span><span class="p">,</span> <span class="n">count_</span><span class="p">)));</span>
+      <span class="n">count_</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+    <span class="p">}</span>
+  <span class="p">}</span>
+
+  <span class="cm">/**</span>
+<span class="cm">   * Return the appender that was used.</span>
+<span class="cm">   */</span>
+  <span class="n">Output</span><span class="o">&amp;</span> <span class="n">output</span><span class="p">()</span> <span class="p">{</span>
+    <span class="k">return</span> <span class="n">out_</span><span class="p">;</span>
+  <span class="p">}</span>
+  <span class="k">const</span> <span class="n">Output</span><span class="o">&amp;</span> <span class="n">output</span><span class="p">()</span> <span class="k">const</span> <span class="p">{</span>
+    <span class="k">return</span> <span class="n">out_</span><span class="p">;</span>
+  <span class="p">}</span>
+
+  <span class="cm">/**</span>
+<span class="cm">   * Reset the encoder, disregarding any state (except what was already</span>
+<span class="cm">   * flushed to the output, of course).</span>
+<span class="cm">   */</span>
+  <span class="kt">void</span> <span class="n">clear</span><span class="p">()</span> <span class="p">{</span>
+    <span class="n">count_</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+  <span class="p">}</span>
+
+ <span class="nl">private:</span>
+  <span class="n">Output</span> <span class="n">out_</span><span class="p">;</span>
+  <span class="kt">char</span> <span class="n">tmp_</span><span class="p">[</span><span class="n">Base</span><span class="o">::</span><span class="n">kMaxSize</span><span class="p">];</span>
+  <span class="n">type</span> <span class="n">buf_</span><span class="p">[</span><span class="n">Base</span><span class="o">::</span><span class="n">kGroupSize</span><span class="p">];</span>
+  <span class="kt">size_t</span> <span class="n">count_</span><span class="p">;</span>
+<span class="p">};</span>
+
+<span class="cm">/**</span>
+<span class="cm"> * Simplify use of GroupVarint* for the case where the last group in the</span>
+<span class="cm"> * input may be incomplete (but the exact size of the input is known).</span>
+<span class="cm"> * Allows for extracting values one at a time.</span>
+<span class="cm"> */</span>
+<span class="n">template</span> <span class="o">&lt;</span><span class="kr">typename</span> <span class="n">T</span><span class="o">&gt;</span>
+<span class="n">class</span> <span class="n">GroupVarintDecoder</span> <span class="p">{</span>
+ <span class="nl">public:</span>
+  <span class="k">typedef</span> <span class="n">GroupVarint</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;</span> <span class="n">Base</span><span class="p">;</span>
+  <span class="k">typedef</span> <span class="n">T</span> <span class="n">type</span><span class="p">;</span>
+
+  <span class="n">GroupVarintDecoder</span><span class="p">()</span> <span class="p">{</span> <span class="p">}</span>
+
+  <span class="n">explicit</span> <span class="n">GroupVarintDecoder</span><span class="p">(</span><span class="n">StringPiece</span> <span class="n">data</span><span class="p">,</span>
+                              <span class="kt">size_t</span> <span class="n">maxCount</span> <span class="o">=</span> <span class="p">(</span><span class="kt">size_t</span><span class="p">)</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+    <span class="o">:</span> <span class="n">p_</span><span class="p">(</span><span class="n">data</span><span class="p">.</span><span class="n">data</span><span class="p">()),</span>
+      <span class="n">end_</span><span class="p">(</span><span class="n">data</span><span class="p">.</span><span class="n">data</span><span class="p">()</span> <span class="o">+</span> <span class="n">data</span><span class="p">.</span><span class="n">size</span><span class="p">()),</span>
+      <span class="n">pos_</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span>
+      <span class="n">count_</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span>
+      <span class="n">remaining_</span><span class="p">(</span><span class="n">maxCount</span><span class="p">)</span> <span class="p">{</span>
+  <span class="p">}</span>
+
+  <span class="kt">void</span> <span class="n">reset</span><span class="p">(</span><span class="n">StringPiece</span> <span class="n">data</span><span class="p">,</span> <span class="kt">size_t</span> <span class="n">maxCount</span><span class="o">=</span><span class="p">(</span><span class="kt">size_t</span><span class="p">)</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">p_</span> <span class="o">=</span> <span class="n">data</span><span class="p">.</span><span class="n">data</span><span class="p">();</span>
+    <span class="n">end_</span> <span class="o">=</span> <span class="n">data</span><span class="p">.</span><span class="n">data</span><span class="p">()</span> <span class="o">+</span> <span class="n">data</span><span class="p">.</span><span class="n">size</span><span class="p">();</span>
+    <span class="n">pos_</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+    <span class="n">count_</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+    <span class="n">remaining_</span> <span class="o">=</span> <span class="n">maxCount</span><span class="p">;</span>
+  <span class="p">}</span>
+
+  <span class="cm">/**</span>
+<span class="cm">   * Read and return the next value.</span>
+<span class="cm">   */</span>
+  <span class="n">bool</span> <span class="n">next</span><span class="p">(</span><span class="n">type</span><span class="o">*</span> <span class="n">val</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">pos_</span> <span class="o">==</span> <span class="n">count_</span><span class="p">)</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-6"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-6">&#182;</a></div><p>refill</p></td><td class="code"><div class="highlight"><pre>      <span class="kt">size_t</span> <span class="n">rem</span> <span class="o">=</span> <span class="n">end_</span> <span class="o">-</span> <span class="n">p_</span><span class="p">;</span>
+      <span class="k">if</span> <span class="p">(</span><span class="n">rem</span> <span class="o">==</span> <span class="mi">0</span> <span class="o">||</span> <span class="n">remaining_</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+        <span class="k">return</span> <span class="nb">false</span><span class="p">;</span>
+      <span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-7"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-7">&#182;</a></div><p>next() attempts to read one full group at a time, and so we must have
+at least enough bytes readable after its end to handle the case if the
+last group is full.</p>
+
+<p>The best way to ensure this is to ensure that data has at least
+Base::kMaxSize - 1 bytes readable <em>after</em> the end, otherwise we'll copy
+into a temporary buffer.</p></td><td class="code"><div class="highlight"><pre>      <span class="k">if</span> <span class="p">(</span><span class="n">rem</span> <span class="o">&lt;</span> <span class="n">Base</span><span class="o">::</span><span class="n">kMaxSize</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">memcpy</span><span class="p">(</span><span class="n">tmp_</span><span class="p">,</span> <span class="n">p_</span><span class="p">,</span> <span class="n">rem</span><span class="p">);</span>
+        <span class="n">p_</span> <span class="o">=</span> <span class="n">tmp_</span><span class="p">;</span>
+        <span class="n">end_</span> <span class="o">=</span> <span class="n">p_</span> <span class="o">+</span> <span class="n">rem</span><span class="p">;</span>
+      <span class="p">}</span>
+      <span class="n">pos_</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+      <span class="k">const</span> <span class="kt">char</span><span class="o">*</span> <span class="n">n</span> <span class="o">=</span> <span class="n">Base</span><span class="o">::</span><span class="n">decode</span><span class="p">(</span><span class="n">p_</span><span class="p">,</span> <span class="n">buf_</span><span class="p">);</span>
+      <span class="k">if</span> <span class="p">(</span><span class="n">n</span> <span class="o">&lt;=</span> <span class="n">end_</span><span class="p">)</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-8"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-8">&#182;</a></div><p>Full group could be decoded</p></td><td class="code"><div class="highlight"><pre>        <span class="k">if</span> <span class="p">(</span><span class="n">remaining_</span> <span class="o">&gt;=</span> <span class="n">Base</span><span class="o">::</span><span class="n">kGroupSize</span><span class="p">)</span> <span class="p">{</span>
+          <span class="n">remaining_</span> <span class="o">-=</span> <span class="n">Base</span><span class="o">::</span><span class="n">kGroupSize</span><span class="p">;</span>
+          <span class="n">count_</span> <span class="o">=</span> <span class="n">Base</span><span class="o">::</span><span class="n">kGroupSize</span><span class="p">;</span>
+          <span class="n">p_</span> <span class="o">=</span> <span class="n">n</span><span class="p">;</span>
+        <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+          <span class="n">count_</span> <span class="o">=</span> <span class="n">remaining_</span><span class="p">;</span>
+          <span class="n">remaining_</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+          <span class="n">p_</span> <span class="o">+=</span> <span class="n">Base</span><span class="o">::</span><span class="n">partialSize</span><span class="p">(</span><span class="n">buf_</span><span class="p">,</span> <span class="n">count_</span><span class="p">);</span>
+        <span class="p">}</span>
+      <span class="p">}</span> <span class="k">else</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-9"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-9">&#182;</a></div><p>Can't decode a full group</p></td><td class="code"><div class="highlight"><pre>        <span class="n">count_</span> <span class="o">=</span> <span class="n">Base</span><span class="o">::</span><span class="n">partialCount</span><span class="p">(</span><span class="n">p_</span><span class="p">,</span> <span class="n">end_</span> <span class="o">-</span> <span class="n">p_</span><span class="p">);</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">remaining_</span> <span class="o">&gt;=</span> <span class="n">count_</span><span class="p">)</span> <span class="p">{</span>
+          <span class="n">remaining_</span> <span class="o">-=</span> <span class="n">count_</span><span class="p">;</span>
+          <span class="n">p_</span> <span class="o">=</span> <span class="n">end_</span><span class="p">;</span>
+        <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+          <span class="n">count_</span> <span class="o">=</span> <span class="n">remaining_</span><span class="p">;</span>
+          <span class="n">remaining_</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+          <span class="n">p_</span> <span class="o">+=</span> <span class="n">Base</span><span class="o">::</span><span class="n">partialSize</span><span class="p">(</span><span class="n">buf_</span><span class="p">,</span> <span class="n">count_</span><span class="p">);</span>
+        <span class="p">}</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">count_</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+          <span class="k">return</span> <span class="nb">false</span><span class="p">;</span>
+        <span class="p">}</span>
+      <span class="p">}</span>
+    <span class="p">}</span>
+    <span class="o">*</span><span class="n">val</span> <span class="o">=</span> <span class="n">buf_</span><span class="p">[</span><span class="n">pos_</span><span class="o">++</span><span class="p">];</span>
+    <span class="k">return</span> <span class="nb">true</span><span class="p">;</span>
+  <span class="p">}</span>
+
+  <span class="n">StringPiece</span> <span class="n">rest</span><span class="p">()</span> <span class="k">const</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-10"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-10">&#182;</a></div><p>This is only valid after next() returned false</p></td><td class="code"><div class="highlight"><pre>    <span class="n">CHECK</span><span class="p">(</span><span class="n">pos_</span> <span class="o">==</span> <span class="n">count_</span> <span class="o">&amp;&amp;</span> <span class="p">(</span><span class="n">p_</span> <span class="o">==</span> <span class="n">end_</span> <span class="o">||</span> <span class="n">remaining_</span> <span class="o">==</span> <span class="mi">0</span><span class="p">));</span>
+    <span class="k">return</span> <span class="n">StringPiece</span><span class="p">(</span><span class="n">p_</span><span class="p">,</span> <span class="n">end_</span> <span class="o">-</span> <span class="n">p_</span><span class="p">);</span>
+  <span class="p">}</span>
+
+ <span class="nl">private:</span>
+  <span class="k">const</span> <span class="kt">char</span><span class="o">*</span> <span class="n">p_</span><span class="p">;</span>
+  <span class="k">const</span> <span class="kt">char</span><span class="o">*</span> <span class="n">end_</span><span class="p">;</span>
+  <span class="kt">char</span> <span class="n">tmp_</span><span class="p">[</span><span class="n">Base</span><span class="o">::</span><span class="n">kMaxSize</span><span class="p">];</span>
+  <span class="n">type</span> <span class="n">buf_</span><span class="p">[</span><span class="n">Base</span><span class="o">::</span><span class="n">kGroupSize</span><span class="p">];</span>
+  <span class="kt">size_t</span> <span class="n">pos_</span><span class="p">;</span>
+  <span class="kt">size_t</span> <span class="n">count_</span><span class="p">;</span>
+  <span class="kt">size_t</span> <span class="n">remaining_</span><span class="p">;</span>
+<span class="p">};</span>
+
+<span class="k">typedef</span> <span class="n">GroupVarintDecoder</span><span class="o">&lt;</span><span class="kt">uint32_t</span><span class="o">&gt;</span> <span class="n">GroupVarint32Decoder</span><span class="p">;</span>
+<span class="k">typedef</span> <span class="n">GroupVarintDecoder</span><span class="o">&lt;</span><span class="kt">uint64_t</span><span class="o">&gt;</span> <span class="n">GroupVarint64Decoder</span><span class="p">;</span>
+
+<span class="p">}</span>  <span class="c1">// namespace folly</span>
+
+<span class="cp">#endif </span><span class="cm">/* FOLLY_GROUPVARINT_H_ */</span><span class="cp"></span>
+
+</pre></div></td></tr>
+
+</tbody>
+</table>
+</div>
+
+</body>
+<script>docas={repo:"joekychen/folly",depth:1}</script>
+<script>document.write('<script src=' + ('__proto__' in {} ? 'http://cdnjs.cloudflare.com/ajax/libs/zepto/1.0rc1/zepto.min.js' : 'https://ajax.googleapis.com/ajax/libs/jquery/1.7.2/jquery.min.js')+'><\\/script>')</script>
+<script src="http://baoshan.github.com/moment/min/moment.min.js"></script>
+<script src="../javascript/docco.min.js"></script>
+</html>

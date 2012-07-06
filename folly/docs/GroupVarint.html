@@ -1,0 +1,40 @@
+<h2><code>folly/GroupVarint.h</code></h2>
+
+<p><code>folly/GroupVarint.h</code> is an implementation of variable-length encoding for 32-
+and 64-bit integers using the Group Varint encoding scheme as described in
+Jeff Dean's <a href="http://research.google.com/people/jeff/WSDM09-keynote.pdf">WSDM 2009 talk</a> and in <a href="http://www.ir.uwaterloo.ca/book/addenda-06-index-compression.html">Information Retrieval: Implementing
+and Evaluating Search Engines</a>.</p>
+
+<p>Briefly, a group of four 32-bit integers is encoded as a sequence of variable
+length, between 5 and 17 bytes; the first byte encodes the length (in bytes)
+of each integer in the group.  A group of five 64-bit integers is encoded as a
+sequence of variable length, between 7 and 42 bytes; the first two bytes
+encode the length (in bytes) of each integer in the group.</p>
+
+<p><code>GroupVarint.h</code> defines a few classes:</p>
+
+<ul>
+<li><p><code>GroupVarint&lt;T&gt;</code>, where <code>T</code> is <code>uint32_t</code> or <code>uint64_t</code>:</p>
+
+<p>Basic encoding / decoding interface, mainly aimed at encoding / decoding
+one group at a time.</p></li>
+<li><p><code>GroupVarintEncoder&lt;T, Output&gt;</code>, where <code>T</code> is <code>uint32_t</code> or <code>uint64_t</code>,
+and <code>Output</code> is a functor that accepts <code>StringPiece</code> objects as arguments:</p>
+
+<p>Streaming encoder: add values one at a time, and they will be
+flushed to the output one group at a time.  Handles the case where
+the last group is incomplete (the number of integers to encode isn't
+a multiple of the group size)</p></li>
+<li><p><code>GroupVarintDecoder&lt;T&gt;</code>, where <code>T</code> is <code>uint32_t</code> or <code>uint64_t</code>:</p>
+
+<p>Streaming decoder: extract values one at a time.  Handles the case where
+the last group is incomplete.</p></li>
+</ul>
+
+<p>The 32-bit implementation is significantly faster than the 64-bit
+implementation; on platforms supporting the SSSE3 instruction set, we
+use the PSHUFB instruction to speed up lookup, as described in <a href="http://www.stepanovpapers.com/CIKM_2011.pdf">SIMD-Based
+Decoding of Posting Lists</a> (CIKM 2011).</p>
+
+<p>For more details, see the header file <code>folly/GroupVarint.h</code> and the
+associated test file <code>folly/test/GroupVarintTest.cpp</code>.</p>

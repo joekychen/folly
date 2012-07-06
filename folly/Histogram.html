@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html><head><title>joekychen/folly » folly › Histogram.h
+
+</title>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+<meta name="generator" content="Docco">
+<link rel="stylesheet" media="all" href="../stylesheets/docco.min.css" />
+
+
+</head>
+<body>
+<div id="container">
+<div id="background"></div>
+<table cellpadding="0" cellspacing="0">
+<thead><tr><th class="docs"><a id="home" href="../index.html"></a><h1>Histogram.h</h1></th><th class="code"></th></tr></thead>
+<tbody>
+
+
+<tr id="section-1"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-1">&#182;</a></div></td><td class="code"><div class="highlight"><pre><span class="cm">/*</span>
+<span class="cm"> * Copyright 2012 Facebook, Inc.</span>
+<span class="cm"> *</span>
+<span class="cm"> * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span class="cm"> * you may not use this file except in compliance with the License.</span>
+<span class="cm"> * You may obtain a copy of the License at</span>
+<span class="cm"> *</span>
+<span class="cm"> *   http://www.apache.org/licenses/LICENSE-2.0</span>
+<span class="cm"> *</span>
+<span class="cm"> * Unless required by applicable law or agreed to in writing, software</span>
+<span class="cm"> * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span class="cm"> * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span class="cm"> * See the License for the specific language governing permissions and</span>
+<span class="cm"> * limitations under the License.</span>
+<span class="cm"> */</span>
+
+<span class="cp">#ifndef FOLLY_HISTOGRAM_H_</span>
+<span class="cp">#define FOLLY_HISTOGRAM_H_</span>
+
+<span class="cp">#include &lt;cstddef&gt;</span>
+<span class="cp">#include &lt;cstdint&gt;</span>
+<span class="cp">#include &lt;limits&gt;</span>
+<span class="cp">#include &lt;string&gt;</span>
+<span class="cp">#include &lt;vector&gt;</span>
+
+<span class="n">namespace</span> <span class="n">folly</span> <span class="p">{</span>
+
+<span class="n">namespace</span> <span class="n">detail</span> <span class="p">{</span>
+
+<span class="cm">/*</span>
+<span class="cm"> * A helper class to manage a set of histogram buckets.</span>
+<span class="cm"> */</span>
+<span class="n">template</span> <span class="o">&lt;</span><span class="kr">typename</span> <span class="n">T</span><span class="p">,</span> <span class="kr">typename</span> <span class="n">BucketT</span><span class="o">&gt;</span>
+<span class="n">class</span> <span class="n">HistogramBuckets</span> <span class="p">{</span>
+ <span class="nl">public:</span>
+  <span class="k">typedef</span> <span class="n">T</span> <span class="n">ValueType</span><span class="p">;</span>
+  <span class="k">typedef</span> <span class="n">BucketT</span> <span class="n">BucketType</span><span class="p">;</span>
+
+  <span class="cm">/*</span>
+<span class="cm">   * Create a set of histogram buckets.</span>
+<span class="cm">   *</span>
+<span class="cm">   * One bucket will be created for each bucketSize interval of values within</span>
+<span class="cm">   * the specified range.  Additionally, one bucket will be created to track</span>
+<span class="cm">   * all values that fall below the specified minimum, and one bucket will be</span>
+<span class="cm">   * created for all values above the specified maximum.</span>
+<span class="cm">   *</span>
+<span class="cm">   * If (max - min) is not a multiple of bucketSize, the last bucket will cover</span>
+<span class="cm">   * a smaller range of values than the other buckets.</span>
+<span class="cm">   *</span>
+<span class="cm">   * (max - min) must be larger than or equal to bucketSize.</span>
+<span class="cm">   */</span>
+  <span class="n">HistogramBuckets</span><span class="p">(</span><span class="n">ValueType</span> <span class="n">bucketSize</span><span class="p">,</span> <span class="n">ValueType</span> <span class="n">min</span><span class="p">,</span> <span class="n">ValueType</span> <span class="n">max</span><span class="p">,</span>
+                   <span class="k">const</span> <span class="n">BucketType</span><span class="o">&amp;</span> <span class="n">defaultBucket</span><span class="p">);</span>
+
+  <span class="cm">/* Returns the bucket size of each bucket in the histogram. */</span>
+  <span class="n">ValueType</span> <span class="n">getBucketSize</span><span class="p">()</span> <span class="k">const</span> <span class="p">{</span>
+    <span class="k">return</span> <span class="n">bucketSize_</span><span class="p">;</span>
+  <span class="p">}</span>
+
+  <span class="cm">/* Returns the min value at which bucketing begins. */</span>
+  <span class="n">ValueType</span> <span class="n">getMin</span><span class="p">()</span> <span class="k">const</span> <span class="p">{</span>
+    <span class="k">return</span> <span class="n">min_</span><span class="p">;</span>
+  <span class="p">}</span>
+
+  <span class="cm">/* Returns the max value at which bucketing ends. */</span>
+  <span class="n">ValueType</span> <span class="n">getMax</span><span class="p">()</span> <span class="k">const</span> <span class="p">{</span>
+    <span class="k">return</span> <span class="n">max_</span><span class="p">;</span>
+  <span class="p">}</span>
+
+  <span class="cm">/*</span>
+<span class="cm">   * Returns the number of buckets.</span>
+<span class="cm">   *</span>
+<span class="cm">   * This includes the total number of buckets for the [min, max) range,</span>
+<span class="cm">   * plus 2 extra buckets, one for handling values less than min, and one for</span>
+<span class="cm">   * values greater than max.</span>
+<span class="cm">   */</span>
+  <span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">getNumBuckets</span><span class="p">()</span> <span class="k">const</span> <span class="p">{</span>
+    <span class="k">return</span> <span class="n">buckets_</span><span class="p">.</span><span class="n">size</span><span class="p">();</span>
+  <span class="p">}</span>
+
+  <span class="cm">/* Returns the bucket index into which the given value would fall. */</span>
+  <span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">getBucketIdx</span><span class="p">(</span><span class="n">ValueType</span> <span class="n">value</span><span class="p">)</span> <span class="k">const</span><span class="p">;</span>
+
+  <span class="cm">/* Returns the bucket for the specified value */</span>
+  <span class="n">BucketType</span><span class="o">&amp;</span> <span class="n">getByValue</span><span class="p">(</span><span class="n">ValueType</span> <span class="n">value</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">return</span> <span class="n">buckets_</span><span class="p">[</span><span class="n">getBucketIdx</span><span class="p">(</span><span class="n">value</span><span class="p">)];</span>
+  <span class="p">}</span>
+
+  <span class="cm">/* Returns the bucket for the specified value */</span>
+  <span class="k">const</span> <span class="n">BucketType</span><span class="o">&amp;</span> <span class="n">getByValue</span><span class="p">(</span><span class="n">ValueType</span> <span class="n">value</span><span class="p">)</span> <span class="k">const</span> <span class="p">{</span>
+    <span class="k">return</span> <span class="n">buckets_</span><span class="p">[</span><span class="n">getBucketIdx</span><span class="p">(</span><span class="n">value</span><span class="p">)];</span>
+  <span class="p">}</span>
+
+  <span class="cm">/*</span>
+<span class="cm">   * Returns the bucket at the specified index.</span>
+<span class="cm">   *</span>
+<span class="cm">   * Note that index 0 is the bucket for all values less than the specified</span>
+<span class="cm">   * minimum.  Index 1 is the first bucket in the specified bucket range.</span>
+<span class="cm">   */</span>
+  <span class="n">BucketType</span><span class="o">&amp;</span> <span class="n">getByIndex</span><span class="p">(</span><span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">idx</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">return</span> <span class="n">buckets_</span><span class="p">[</span><span class="n">idx</span><span class="p">];</span>
+  <span class="p">}</span>
+
+  <span class="cm">/* Returns the bucket at the specified index. */</span>
+  <span class="k">const</span> <span class="n">BucketType</span><span class="o">&amp;</span> <span class="n">getByIndex</span><span class="p">(</span><span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">idx</span><span class="p">)</span> <span class="k">const</span> <span class="p">{</span>
+    <span class="k">return</span> <span class="n">buckets_</span><span class="p">[</span><span class="n">idx</span><span class="p">];</span>
+  <span class="p">}</span>
+
+  <span class="cm">/*</span>
+<span class="cm">   * Returns the minimum threshold for the bucket at the given index.</span>
+<span class="cm">   *</span>
+<span class="cm">   * The bucket at the specified index will store values in the range</span>
+<span class="cm">   * [bucketMin, bucketMin + bucketSize), or [bucketMin, max), if the overall</span>
+<span class="cm">   * max is smaller than bucketMin + bucketSize.</span>
+<span class="cm">   */</span>
+  <span class="n">ValueType</span> <span class="n">getBucketMin</span><span class="p">(</span><span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">idx</span><span class="p">)</span> <span class="k">const</span> <span class="p">{</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">idx</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+      <span class="k">return</span> <span class="n">std</span><span class="o">::</span><span class="n">numeric_limits</span><span class="o">&lt;</span><span class="n">ValueType</span><span class="o">&gt;::</span><span class="n">min</span><span class="p">();</span>
+    <span class="p">}</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">idx</span> <span class="o">==</span> <span class="n">buckets_</span><span class="p">.</span><span class="n">size</span><span class="p">()</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span> <span class="p">{</span>
+      <span class="k">return</span> <span class="n">max_</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="k">return</span> <span class="n">min_</span> <span class="o">+</span> <span class="p">((</span><span class="n">idx</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span> <span class="o">*</span> <span class="n">bucketSize_</span><span class="p">);</span>
+  <span class="p">}</span>
+
+  <span class="cm">/*</span>
+<span class="cm">   * Returns the maximum threshold for the bucket at the given index.</span>
+<span class="cm">   *</span>
+<span class="cm">   * The bucket at the specified index will store values in the range</span>
+<span class="cm">   * [bucketMin, bucketMin + bucketSize), or [bucketMin, max), if the overall</span>
+<span class="cm">   * max is smaller than bucketMin + bucketSize.</span>
+<span class="cm">   */</span>
+  <span class="n">ValueType</span> <span class="n">getBucketMax</span><span class="p">(</span><span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">idx</span><span class="p">)</span> <span class="k">const</span> <span class="p">{</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">idx</span> <span class="o">==</span> <span class="n">buckets_</span><span class="p">.</span><span class="n">size</span><span class="p">()</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span> <span class="p">{</span>
+      <span class="k">return</span> <span class="n">std</span><span class="o">::</span><span class="n">numeric_limits</span><span class="o">&lt;</span><span class="n">ValueType</span><span class="o">&gt;::</span><span class="n">max</span><span class="p">();</span>
+    <span class="p">}</span>
+
+    <span class="k">return</span> <span class="n">min_</span> <span class="o">+</span> <span class="p">(</span><span class="n">idx</span> <span class="o">*</span> <span class="n">bucketSize_</span><span class="p">);</span>
+  <span class="p">}</span>
+
+  <span class="cm">/**</span>
+<span class="cm">   * Determine which bucket the specified percentile falls into.</span>
+<span class="cm">   *</span>
+<span class="cm">   * Looks for the bucket that contains the Nth percentile data point.</span>
+<span class="cm">   *</span>
+<span class="cm">   * @param pct     The desired percentile to find, as a value from 0.0 to 1.0.</span>
+<span class="cm">   * @param countFn A function that takes a const BucketType&amp;, and returns the</span>
+<span class="cm">   *                number of values in that bucket.</span>
+<span class="cm">   * @param lowPct  The lowest percentile stored in the selected bucket will be</span>
+<span class="cm">   *                returned via this parameter.</span>
+<span class="cm">   * @param highPct The highest percentile stored in the selected bucket will</span>
+<span class="cm">   *                be returned via this parameter.</span>
+<span class="cm">   *</span>
+<span class="cm">   * @return Returns the index of the bucket that contains the Nth percentile</span>
+<span class="cm">   *         data point.</span>
+<span class="cm">   */</span>
+  <span class="n">template</span> <span class="o">&lt;</span><span class="kr">typename</span> <span class="n">CountFn</span><span class="o">&gt;</span>
+  <span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">getPercentileBucketIdx</span><span class="p">(</span><span class="kt">double</span> <span class="n">pct</span><span class="p">,</span>
+                                      <span class="n">CountFn</span> <span class="n">countFromBucket</span><span class="p">,</span>
+                                      <span class="kt">double</span><span class="o">*</span> <span class="n">lowPct</span> <span class="o">=</span> <span class="nb">NULL</span><span class="p">,</span>
+                                      <span class="kt">double</span><span class="o">*</span> <span class="n">highPct</span> <span class="o">=</span> <span class="nb">NULL</span><span class="p">)</span> <span class="k">const</span><span class="p">;</span>
+
+  <span class="cm">/**</span>
+<span class="cm">   * Estimate the value at the specified percentile.</span>
+<span class="cm">   *</span>
+<span class="cm">   * @param pct     The desired percentile to find, as a value from 0.0 to 1.0.</span>
+<span class="cm">   * @param countFn A function that takes a const BucketType&amp;, and returns the</span>
+<span class="cm">   *                number of values in that bucket.</span>
+<span class="cm">   * @param avgFn   A function that takes a const BucketType&amp;, and returns the</span>
+<span class="cm">   *                average of all the values in that bucket.</span>
+<span class="cm">   *</span>
+<span class="cm">   * @return Returns an estimate for N, where N is the number where exactly pct</span>
+<span class="cm">   *         percentage of the data points in the histogram are less than N.</span>
+<span class="cm">   */</span>
+  <span class="n">template</span> <span class="o">&lt;</span><span class="kr">typename</span> <span class="n">CountFn</span><span class="p">,</span> <span class="kr">typename</span> <span class="n">AvgFn</span><span class="o">&gt;</span>
+  <span class="n">ValueType</span> <span class="n">getPercentileEstimate</span><span class="p">(</span><span class="kt">double</span> <span class="n">pct</span><span class="p">,</span>
+                                  <span class="n">CountFn</span> <span class="n">countFromBucket</span><span class="p">,</span>
+                                  <span class="n">AvgFn</span> <span class="n">avgFromBucket</span><span class="p">)</span> <span class="k">const</span><span class="p">;</span>
+
+  <span class="cm">/*</span>
+<span class="cm">   * Iterator access to the buckets.</span>
+<span class="cm">   *</span>
+<span class="cm">   * Note that the first bucket is for all values less than min, and the last</span>
+<span class="cm">   * bucket is for all values greater than max.  The buckets tracking values in</span>
+<span class="cm">   * the [min, max) actually start at the second bucket.</span>
+<span class="cm">   */</span>
+  <span class="kr">typename</span> <span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="n">BucketType</span><span class="o">&gt;::</span><span class="n">const_iterator</span> <span class="n">begin</span><span class="p">()</span> <span class="k">const</span> <span class="p">{</span>
+    <span class="k">return</span> <span class="n">buckets_</span><span class="p">.</span><span class="n">begin</span><span class="p">();</span>
+  <span class="p">}</span>
+  <span class="kr">typename</span> <span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="n">BucketType</span><span class="o">&gt;::</span><span class="n">iterator</span> <span class="n">begin</span><span class="p">()</span> <span class="p">{</span>
+    <span class="k">return</span> <span class="n">buckets_</span><span class="p">.</span><span class="n">begin</span><span class="p">();</span>
+  <span class="p">}</span>
+  <span class="kr">typename</span> <span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="n">BucketType</span><span class="o">&gt;::</span><span class="n">const_iterator</span> <span class="n">end</span><span class="p">()</span> <span class="k">const</span> <span class="p">{</span>
+    <span class="k">return</span> <span class="n">buckets_</span><span class="p">.</span><span class="n">end</span><span class="p">();</span>
+  <span class="p">}</span>
+  <span class="kr">typename</span> <span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="n">BucketType</span><span class="o">&gt;::</span><span class="n">iterator</span> <span class="n">end</span><span class="p">()</span> <span class="p">{</span>
+    <span class="k">return</span> <span class="n">buckets_</span><span class="p">.</span><span class="n">end</span><span class="p">();</span>
+  <span class="p">}</span>
+
+ <span class="nl">private:</span>
+  <span class="k">const</span> <span class="n">ValueType</span> <span class="n">bucketSize_</span><span class="p">;</span>
+  <span class="k">const</span> <span class="n">ValueType</span> <span class="n">min_</span><span class="p">;</span>
+  <span class="k">const</span> <span class="n">ValueType</span> <span class="n">max_</span><span class="p">;</span>
+  <span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="n">BucketType</span><span class="o">&gt;</span> <span class="n">buckets_</span><span class="p">;</span>
+<span class="p">};</span>
+
+<span class="p">}</span> <span class="c1">// detail</span>
+
+
+<span class="cm">/*</span>
+<span class="cm"> * A basic histogram class.</span>
+<span class="cm"> *</span>
+<span class="cm"> * Groups data points into equally-sized buckets, and stores the overall sum of</span>
+<span class="cm"> * the data points in each bucket, as well as the number of data points in the</span>
+<span class="cm"> * bucket.</span>
+<span class="cm"> *</span>
+<span class="cm"> * The caller must specify the minimum and maximum data points to expect ahead</span>
+<span class="cm"> * of time, as well as the bucket width.</span>
+<span class="cm"> */</span>
+<span class="n">template</span> <span class="o">&lt;</span><span class="kr">typename</span> <span class="n">T</span><span class="o">&gt;</span>
+<span class="n">class</span> <span class="n">Histogram</span> <span class="p">{</span>
+ <span class="nl">public:</span>
+  <span class="k">typedef</span> <span class="n">T</span> <span class="n">ValueType</span><span class="p">;</span>
+
+  <span class="k">struct</span> <span class="n">Bucket</span> <span class="p">{</span>
+    <span class="n">Bucket</span><span class="p">()</span>
+      <span class="o">:</span> <span class="n">sum</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span>
+        <span class="n">count</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span> <span class="p">{}</span>
+
+    <span class="kt">void</span> <span class="n">clear</span><span class="p">()</span> <span class="p">{</span>
+      <span class="n">sum</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+      <span class="n">count</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="n">ValueType</span> <span class="n">sum</span><span class="p">;</span>
+    <span class="kt">uint64_t</span> <span class="n">count</span><span class="p">;</span>
+  <span class="p">};</span>
+
+  <span class="n">Histogram</span><span class="p">(</span><span class="n">ValueType</span> <span class="n">bucketSize</span><span class="p">,</span> <span class="n">ValueType</span> <span class="n">min</span><span class="p">,</span> <span class="n">ValueType</span> <span class="n">max</span><span class="p">)</span>
+    <span class="o">:</span> <span class="n">buckets_</span><span class="p">(</span><span class="n">bucketSize</span><span class="p">,</span> <span class="n">min</span><span class="p">,</span> <span class="n">max</span><span class="p">,</span> <span class="n">Bucket</span><span class="p">())</span> <span class="p">{}</span>
+
+  <span class="cm">/* Add a data point to the histogram */</span>
+  <span class="kt">void</span> <span class="n">addValue</span><span class="p">(</span><span class="n">ValueType</span> <span class="n">value</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">Bucket</span><span class="o">&amp;</span> <span class="n">bucket</span> <span class="o">=</span> <span class="n">buckets_</span><span class="p">.</span><span class="n">getByValue</span><span class="p">(</span><span class="n">value</span><span class="p">);</span></pre></div></td></tr>
+
+
+<tr id="section-2"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-2">&#182;</a></div><p>TODO: It would be nice to handle overflow here.</p></td><td class="code"><div class="highlight"><pre>    <span class="n">bucket</span><span class="p">.</span><span class="n">sum</span> <span class="o">+=</span> <span class="n">value</span><span class="p">;</span>
+    <span class="n">bucket</span><span class="p">.</span><span class="n">count</span> <span class="o">+=</span> <span class="mi">1</span><span class="p">;</span>
+  <span class="p">}</span>
+
+  <span class="cm">/*</span>
+<span class="cm">   * Remove a data point to the histogram</span>
+<span class="cm">   *</span>
+<span class="cm">   * Note that this method does not actually verify that this exact data point</span>
+<span class="cm">   * had previously been added to the histogram; it merely subtracts the</span>
+<span class="cm">   * requested value from the appropriate bucket&#39;s sum.</span>
+<span class="cm">   */</span>
+  <span class="kt">void</span> <span class="n">removeValue</span><span class="p">(</span><span class="n">ValueType</span> <span class="n">value</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">Bucket</span><span class="o">&amp;</span> <span class="n">bucket</span> <span class="o">=</span> <span class="n">buckets_</span><span class="p">.</span><span class="n">getByValue</span><span class="p">(</span><span class="n">value</span><span class="p">);</span></pre></div></td></tr>
+
+
+<tr id="section-3"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-3">&#182;</a></div><p>TODO: It would be nice to handle overflow here.</p></td><td class="code"><div class="highlight"><pre>    <span class="n">bucket</span><span class="p">.</span><span class="n">sum</span> <span class="o">-=</span> <span class="n">value</span><span class="p">;</span>
+    <span class="n">bucket</span><span class="p">.</span><span class="n">count</span> <span class="o">-=</span> <span class="mi">1</span><span class="p">;</span>
+  <span class="p">}</span>
+
+  <span class="cm">/* Remove all data points from the histogram */</span>
+  <span class="kt">void</span> <span class="n">clear</span><span class="p">()</span> <span class="p">{</span>
+    <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">buckets_</span><span class="p">.</span><span class="n">getNumBuckets</span><span class="p">();</span> <span class="n">i</span><span class="o">++</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">buckets_</span><span class="p">.</span><span class="n">getByIndex</span><span class="p">(</span><span class="n">i</span><span class="p">).</span><span class="n">clear</span><span class="p">();</span>
+    <span class="p">}</span>
+  <span class="p">}</span>
+
+  <span class="cm">/* Returns the bucket size of each bucket in the histogram. */</span>
+  <span class="n">ValueType</span> <span class="n">getBucketSize</span><span class="p">()</span> <span class="k">const</span> <span class="p">{</span>
+    <span class="k">return</span> <span class="n">buckets_</span><span class="p">.</span><span class="n">getBucketSize</span><span class="p">();</span>
+  <span class="p">}</span>
+  <span class="cm">/* Returns the min value at which bucketing begins. */</span>
+  <span class="n">ValueType</span> <span class="n">getMin</span><span class="p">()</span> <span class="k">const</span> <span class="p">{</span>
+    <span class="k">return</span> <span class="n">buckets_</span><span class="p">.</span><span class="n">getMin</span><span class="p">();</span>
+  <span class="p">}</span>
+  <span class="cm">/* Returns the max value at which bucketing ends. */</span>
+  <span class="n">ValueType</span> <span class="n">getMax</span><span class="p">()</span> <span class="k">const</span> <span class="p">{</span>
+    <span class="k">return</span> <span class="n">buckets_</span><span class="p">.</span><span class="n">getMax</span><span class="p">();</span>
+  <span class="p">}</span>
+  <span class="cm">/* Returns the number of buckets */</span>
+  <span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">getNumBuckets</span><span class="p">()</span> <span class="k">const</span> <span class="p">{</span>
+    <span class="k">return</span> <span class="n">buckets_</span><span class="p">.</span><span class="n">getNumBuckets</span><span class="p">();</span>
+  <span class="p">}</span>
+
+  <span class="cm">/* Returns the specified bucket (for reading only!) */</span>
+  <span class="k">const</span> <span class="n">Bucket</span><span class="o">&amp;</span> <span class="n">getBucketByIndex</span><span class="p">(</span><span class="kt">int</span> <span class="n">idx</span><span class="p">)</span> <span class="k">const</span> <span class="p">{</span>
+    <span class="k">return</span> <span class="n">buckets_</span><span class="p">.</span><span class="n">getByIndex</span><span class="p">(</span><span class="n">idx</span><span class="p">);</span>
+  <span class="p">}</span>
+
+  <span class="cm">/*</span>
+<span class="cm">   * Returns the minimum threshold for the bucket at the given index.</span>
+<span class="cm">   *</span>
+<span class="cm">   * The bucket at the specified index will store values in the range</span>
+<span class="cm">   * [bucketMin, bucketMin + bucketSize), or [bucketMin, max), if the overall</span>
+<span class="cm">   * max is smaller than bucketMin + bucketSize.</span>
+<span class="cm">   */</span>
+  <span class="n">ValueType</span> <span class="n">getBucketMin</span><span class="p">(</span><span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">idx</span><span class="p">)</span> <span class="k">const</span> <span class="p">{</span>
+    <span class="k">return</span> <span class="n">buckets_</span><span class="p">.</span><span class="n">getBucketMin</span><span class="p">(</span><span class="n">idx</span><span class="p">);</span>
+  <span class="p">}</span>
+
+  <span class="cm">/*</span>
+<span class="cm">   * Returns the maximum threshold for the bucket at the given index.</span>
+<span class="cm">   *</span>
+<span class="cm">   * The bucket at the specified index will store values in the range</span>
+<span class="cm">   * [bucketMin, bucketMin + bucketSize), or [bucketMin, max), if the overall</span>
+<span class="cm">   * max is smaller than bucketMin + bucketSize.</span>
+<span class="cm">   */</span>
+  <span class="n">ValueType</span> <span class="n">getBucketMax</span><span class="p">(</span><span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">idx</span><span class="p">)</span> <span class="k">const</span> <span class="p">{</span>
+    <span class="k">return</span> <span class="n">buckets_</span><span class="p">.</span><span class="n">getBucketMax</span><span class="p">(</span><span class="n">idx</span><span class="p">);</span>
+  <span class="p">}</span>
+
+  <span class="cm">/*</span>
+<span class="cm">   * Get the bucket that the specified percentile falls into</span>
+<span class="cm">   *</span>
+<span class="cm">   * The lowest and highest percentile data points in returned bucket will be</span>
+<span class="cm">   * returned in the lowPct and highPct arguments, if they are non-NULL.</span>
+<span class="cm">   */</span>
+  <span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">getPercentileBucketIdx</span><span class="p">(</span><span class="kt">double</span> <span class="n">pct</span><span class="p">,</span>
+                                      <span class="kt">double</span><span class="o">*</span> <span class="n">lowPct</span> <span class="o">=</span> <span class="nb">NULL</span><span class="p">,</span>
+                                      <span class="kt">double</span><span class="o">*</span> <span class="n">highPct</span> <span class="o">=</span> <span class="nb">NULL</span><span class="p">)</span> <span class="k">const</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-4"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-4">&#182;</a></div><p>We unfortunately can't use lambdas here yet;
+Some users of this code are still built with gcc-4.4.</p></td><td class="code"><div class="highlight"><pre>    <span class="n">CountFromBucket</span> <span class="n">countFn</span><span class="p">;</span>
+    <span class="k">return</span> <span class="n">buckets_</span><span class="p">.</span><span class="n">getPercentileBucketIdx</span><span class="p">(</span><span class="n">pct</span><span class="p">,</span> <span class="n">countFn</span><span class="p">,</span> <span class="n">lowPct</span><span class="p">,</span> <span class="n">highPct</span><span class="p">);</span>
+  <span class="p">}</span>
+
+  <span class="cm">/**</span>
+<span class="cm">   * Estimate the value at the specified percentile.</span>
+<span class="cm">   *</span>
+<span class="cm">   * @param pct     The desired percentile to find, as a value from 0.0 to 1.0.</span>
+<span class="cm">   *</span>
+<span class="cm">   * @return Returns an estimate for N, where N is the number where exactly pct</span>
+<span class="cm">   *         percentage of the data points in the histogram are less than N.</span>
+<span class="cm">   */</span>
+  <span class="n">ValueType</span> <span class="n">getPercentileEstimate</span><span class="p">(</span><span class="kt">double</span> <span class="n">pct</span><span class="p">)</span> <span class="k">const</span> <span class="p">{</span>
+    <span class="n">CountFromBucket</span> <span class="n">countFn</span><span class="p">;</span>
+    <span class="n">AvgFromBucket</span> <span class="n">avgFn</span><span class="p">;</span>
+    <span class="k">return</span> <span class="n">buckets_</span><span class="p">.</span><span class="n">getPercentileEstimate</span><span class="p">(</span><span class="n">pct</span><span class="p">,</span> <span class="n">countFn</span><span class="p">,</span> <span class="n">avgFn</span><span class="p">);</span>
+  <span class="p">}</span>
+
+  <span class="cm">/*</span>
+<span class="cm">   * Get a human-readable string describing the histogram contents</span>
+<span class="cm">   */</span>
+  <span class="n">std</span><span class="o">::</span><span class="n">string</span> <span class="n">debugString</span><span class="p">()</span> <span class="k">const</span><span class="p">;</span>
+
+ <span class="nl">private:</span>
+  <span class="k">struct</span> <span class="n">CountFromBucket</span> <span class="p">{</span>
+    <span class="kt">uint64_t</span> <span class="n">operator</span><span class="p">()(</span><span class="k">const</span> <span class="n">Bucket</span><span class="o">&amp;</span> <span class="n">bucket</span><span class="p">)</span> <span class="k">const</span> <span class="p">{</span>
+      <span class="k">return</span> <span class="n">bucket</span><span class="p">.</span><span class="n">count</span><span class="p">;</span>
+    <span class="p">}</span>
+  <span class="p">};</span>
+  <span class="k">struct</span> <span class="n">AvgFromBucket</span> <span class="p">{</span>
+    <span class="n">ValueType</span> <span class="n">operator</span><span class="p">()(</span><span class="k">const</span> <span class="n">Bucket</span><span class="o">&amp;</span> <span class="n">bucket</span><span class="p">)</span> <span class="k">const</span> <span class="p">{</span>
+      <span class="k">if</span> <span class="p">(</span><span class="n">bucket</span><span class="p">.</span><span class="n">count</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+        <span class="k">return</span> <span class="n">ValueType</span><span class="p">(</span><span class="mi">0</span><span class="p">);</span>
+      <span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-5"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-5">&#182;</a></div><p>Cast bucket.count to a signed integer type.  This ensures that we
+perform division properly here: If bucket.sum is a signed integer
+type but we divide by an unsigned number, unsigned division will be
+performed and bucket.sum will be converted to unsigned first.
+If bucket.sum is unsigned, the code will still do unsigned division
+correctly.</p>
+
+<p>The only downside is if bucket.count is large enough to be negative
+when treated as signed.  That should be extremely unlikely, though.</p></td><td class="code"><div class="highlight"><pre>      <span class="k">return</span> <span class="n">bucket</span><span class="p">.</span><span class="n">sum</span> <span class="o">/</span> <span class="n">static_cast</span><span class="o">&lt;</span><span class="kt">int64_t</span><span class="o">&gt;</span><span class="p">(</span><span class="n">bucket</span><span class="p">.</span><span class="n">count</span><span class="p">);</span>
+    <span class="p">}</span>
+  <span class="p">};</span>
+
+  <span class="n">detail</span><span class="o">::</span><span class="n">HistogramBuckets</span><span class="o">&lt;</span><span class="n">ValueType</span><span class="p">,</span> <span class="n">Bucket</span><span class="o">&gt;</span> <span class="n">buckets_</span><span class="p">;</span>
+<span class="p">};</span>
+
+<span class="p">}</span> <span class="c1">// folly</span>
+
+<span class="cp">#include &quot;folly/Histogram-inl.h&quot;</span>
+
+<span class="cp">#endif </span><span class="c1">// FOLLY_HISTOGRAM_H_</span>
+
+</pre></div></td></tr>
+
+</tbody>
+</table>
+</div>
+
+</body>
+<script>docas={repo:"joekychen/folly",depth:1}</script>
+<script>document.write('<script src=' + ('__proto__' in {} ? 'http://cdnjs.cloudflare.com/ajax/libs/zepto/1.0rc1/zepto.min.js' : 'https://ajax.googleapis.com/ajax/libs/jquery/1.7.2/jquery.min.js')+'><\\/script>')</script>
+<script src="http://baoshan.github.com/moment/min/moment.min.js"></script>
+<script src="../javascript/docco.min.js"></script>
+</html>

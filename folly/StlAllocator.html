@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html><head><title>joekychen/folly » folly › StlAllocator.h
+
+</title>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+<meta name="generator" content="Docco">
+<link rel="stylesheet" media="all" href="../stylesheets/docco.min.css" />
+
+
+</head>
+<body>
+<div id="container">
+<div id="background"></div>
+<table cellpadding="0" cellspacing="0">
+<thead><tr><th class="docs"><a id="home" href="../index.html"></a><h1>StlAllocator.h</h1></th><th class="code"></th></tr></thead>
+<tbody>
+
+
+<tr id="section-1"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-1">&#182;</a></div></td><td class="code"><div class="highlight"><pre><span class="cm">/*</span>
+<span class="cm"> * Copyright 2012 Facebook, Inc.</span>
+<span class="cm"> *</span>
+<span class="cm"> * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span class="cm"> * you may not use this file except in compliance with the License.</span>
+<span class="cm"> * You may obtain a copy of the License at</span>
+<span class="cm"> *</span>
+<span class="cm"> *   http://www.apache.org/licenses/LICENSE-2.0</span>
+<span class="cm"> *</span>
+<span class="cm"> * Unless required by applicable law or agreed to in writing, software</span>
+<span class="cm"> * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span class="cm"> * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span class="cm"> * See the License for the specific language governing permissions and</span>
+<span class="cm"> * limitations under the License.</span>
+<span class="cm"> */</span>
+
+<span class="cp">#ifndef FOLLY_STLALLOCATOR_H_</span>
+<span class="cp">#define FOLLY_STLALLOCATOR_H_</span>
+
+<span class="cp">#include &lt;memory&gt;</span>
+
+<span class="n">namespace</span> <span class="n">folly</span> <span class="p">{</span>
+
+<span class="cm">/**</span>
+<span class="cm"> * Wrap a simple allocator into a STL-compliant allocator.</span>
+<span class="cm"> *</span>
+<span class="cm"> * The simple allocator must provide two methods:</span>
+<span class="cm"> *    void* allocate(size_t size);</span>
+<span class="cm"> *    void deallocate(void* ptr, size_t size);</span>
+<span class="cm"> * which, respectively, allocate a block of size bytes (aligned to the maximum</span>
+<span class="cm"> * alignment required on your system), throwing std::bad_alloc if the</span>
+<span class="cm"> * allocation can&#39;t be satisfied, and free a previously allocated block.</span>
+<span class="cm"> *</span>
+<span class="cm"> * Note that the following allocator resembles the standard allocator</span>
+<span class="cm"> * quite well:</span>
+<span class="cm"> *</span>
+<span class="cm"> * class MallocAllocator {</span>
+<span class="cm"> *  public:</span>
+<span class="cm"> *   void* allocate(size_t size) {</span>
+<span class="cm"> *     void* p = malloc(size);</span>
+<span class="cm"> *     if (!p) throw std::bad_alloc();</span>
+<span class="cm"> *     return p;</span>
+<span class="cm"> *   }</span>
+<span class="cm"> *   void deallocate(void* p) {</span>
+<span class="cm"> *     free(p);</span>
+<span class="cm"> *   }</span>
+<span class="cm"> * };</span>
+<span class="cm"> */</span></pre></div></td></tr>
+
+
+<tr id="section-2"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-2">&#182;</a></div><p>This would be so much simpler with std::allocator_traits, but gcc 4.6.2
+doesn't support it</p></td><td class="code"><div class="highlight"><pre><span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">Alloc</span><span class="p">,</span> <span class="n">class</span> <span class="n">T</span><span class="o">&gt;</span> <span class="n">class</span> <span class="n">StlAllocator</span><span class="p">;</span>
+
+<span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">Alloc</span><span class="o">&gt;</span> <span class="n">class</span> <span class="n">StlAllocator</span><span class="o">&lt;</span><span class="n">Alloc</span><span class="p">,</span> <span class="kt">void</span><span class="o">&gt;</span> <span class="p">{</span>
+ <span class="nl">public:</span>
+  <span class="k">typedef</span> <span class="kt">void</span> <span class="n">value_type</span><span class="p">;</span>
+  <span class="k">typedef</span> <span class="kt">void</span><span class="o">*</span> <span class="n">pointer</span><span class="p">;</span>
+  <span class="k">typedef</span> <span class="k">const</span> <span class="kt">void</span><span class="o">*</span> <span class="n">const_pointer</span><span class="p">;</span>
+  <span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">U</span><span class="o">&gt;</span> <span class="k">struct</span> <span class="n">rebind</span> <span class="p">{</span>
+    <span class="k">typedef</span> <span class="n">StlAllocator</span><span class="o">&lt;</span><span class="n">Alloc</span><span class="p">,</span> <span class="n">U</span><span class="o">&gt;</span> <span class="n">other</span><span class="p">;</span>
+  <span class="p">};</span>
+<span class="p">};</span>
+
+<span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">Alloc</span><span class="p">,</span> <span class="n">class</span> <span class="n">T</span><span class="o">&gt;</span>
+<span class="n">class</span> <span class="n">StlAllocator</span> <span class="p">{</span>
+ <span class="nl">public:</span>
+  <span class="k">typedef</span> <span class="n">T</span> <span class="n">value_type</span><span class="p">;</span>
+  <span class="k">typedef</span> <span class="n">T</span><span class="o">*</span> <span class="n">pointer</span><span class="p">;</span>
+  <span class="k">typedef</span> <span class="k">const</span> <span class="n">T</span><span class="o">*</span> <span class="n">const_pointer</span><span class="p">;</span>
+  <span class="k">typedef</span> <span class="n">T</span><span class="o">&amp;</span> <span class="n">reference</span><span class="p">;</span>
+  <span class="k">typedef</span> <span class="k">const</span> <span class="n">T</span><span class="o">&amp;</span> <span class="n">const_reference</span><span class="p">;</span>
+
+  <span class="k">typedef</span> <span class="kt">ptrdiff_t</span> <span class="n">difference_type</span><span class="p">;</span>
+  <span class="k">typedef</span> <span class="kt">size_t</span> <span class="n">size_type</span><span class="p">;</span>
+
+  <span class="n">StlAllocator</span><span class="p">()</span> <span class="o">:</span> <span class="n">alloc_</span><span class="p">(</span><span class="n">nullptr</span><span class="p">)</span> <span class="p">{</span> <span class="p">}</span>
+  <span class="n">explicit</span> <span class="n">StlAllocator</span><span class="p">(</span><span class="n">Alloc</span><span class="o">*</span> <span class="n">alloc</span><span class="p">)</span> <span class="o">:</span> <span class="n">alloc_</span><span class="p">(</span><span class="n">alloc</span><span class="p">)</span> <span class="p">{</span> <span class="p">}</span>
+
+  <span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">U</span><span class="o">&gt;</span> <span class="n">StlAllocator</span><span class="p">(</span><span class="k">const</span> <span class="n">StlAllocator</span><span class="o">&lt;</span><span class="n">Alloc</span><span class="p">,</span> <span class="n">U</span><span class="o">&gt;&amp;</span> <span class="n">other</span><span class="p">)</span>
+    <span class="o">:</span> <span class="n">alloc_</span><span class="p">(</span><span class="n">other</span><span class="p">.</span><span class="n">alloc</span><span class="p">())</span> <span class="p">{</span> <span class="p">}</span>
+
+  <span class="n">T</span><span class="o">*</span> <span class="n">allocate</span><span class="p">(</span><span class="kt">size_t</span> <span class="n">n</span><span class="p">,</span> <span class="k">const</span> <span class="kt">void</span><span class="o">*</span> <span class="n">hint</span> <span class="o">=</span> <span class="n">nullptr</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">return</span> <span class="n">static_cast</span><span class="o">&lt;</span><span class="n">T</span><span class="o">*&gt;</span><span class="p">(</span><span class="n">alloc_</span><span class="o">-&gt;</span><span class="n">allocate</span><span class="p">(</span><span class="n">n</span> <span class="o">*</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">T</span><span class="p">)));</span>
+  <span class="p">}</span>
+
+  <span class="kt">void</span> <span class="n">deallocate</span><span class="p">(</span><span class="n">T</span><span class="o">*</span> <span class="n">p</span><span class="p">,</span> <span class="kt">size_t</span> <span class="n">n</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">alloc_</span><span class="o">-&gt;</span><span class="n">deallocate</span><span class="p">(</span><span class="n">p</span><span class="p">);</span>
+  <span class="p">}</span>
+
+  <span class="kt">size_t</span> <span class="n">max_size</span><span class="p">()</span> <span class="k">const</span> <span class="p">{</span>
+    <span class="k">return</span> <span class="n">std</span><span class="o">::</span><span class="n">numeric_limits</span><span class="o">&lt;</span><span class="kt">size_t</span><span class="o">&gt;::</span><span class="n">max</span><span class="p">();</span>
+  <span class="p">}</span>
+
+  <span class="n">T</span><span class="o">*</span> <span class="n">address</span><span class="p">(</span><span class="n">T</span><span class="o">&amp;</span> <span class="n">x</span><span class="p">)</span> <span class="k">const</span> <span class="p">{</span>
+    <span class="k">return</span> <span class="n">std</span><span class="o">::</span><span class="n">addressof</span><span class="p">(</span><span class="n">x</span><span class="p">);</span>
+  <span class="p">}</span>
+
+  <span class="k">const</span> <span class="n">T</span><span class="o">*</span> <span class="n">address</span><span class="p">(</span><span class="k">const</span> <span class="n">T</span><span class="o">&amp;</span> <span class="n">x</span><span class="p">)</span> <span class="k">const</span> <span class="p">{</span>
+    <span class="k">return</span> <span class="n">std</span><span class="o">::</span><span class="n">addressof</span><span class="p">(</span><span class="n">x</span><span class="p">);</span>
+  <span class="p">}</span>
+
+  <span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span><span class="p">...</span> <span class="n">Args</span><span class="o">&gt;</span>
+  <span class="kt">void</span> <span class="n">construct</span><span class="p">(</span><span class="n">T</span><span class="o">*</span> <span class="n">p</span><span class="p">,</span> <span class="n">Args</span><span class="o">&amp;&amp;</span><span class="p">...</span> <span class="n">args</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">new</span> <span class="p">(</span><span class="n">p</span><span class="p">)</span> <span class="n">T</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">forward</span><span class="o">&lt;</span><span class="n">Args</span><span class="o">&gt;</span><span class="p">(</span><span class="n">args</span><span class="p">)...);</span>
+  <span class="p">}</span>
+
+  <span class="kt">void</span> <span class="n">destroy</span><span class="p">(</span><span class="n">T</span><span class="o">*</span> <span class="n">p</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">p</span><span class="o">-&gt;~</span><span class="n">T</span><span class="p">();</span>
+  <span class="p">}</span>
+
+  <span class="n">Alloc</span><span class="o">*</span> <span class="n">alloc</span><span class="p">()</span> <span class="k">const</span> <span class="p">{</span>
+    <span class="k">return</span> <span class="n">alloc_</span><span class="p">;</span>
+  <span class="p">}</span>
+
+  <span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">U</span><span class="o">&gt;</span> <span class="k">struct</span> <span class="n">rebind</span> <span class="p">{</span>
+    <span class="k">typedef</span> <span class="n">StlAllocator</span><span class="o">&lt;</span><span class="n">Alloc</span><span class="p">,</span> <span class="n">U</span><span class="o">&gt;</span> <span class="n">other</span><span class="p">;</span>
+  <span class="p">};</span>
+
+ <span class="nl">private:</span>
+  <span class="n">Alloc</span><span class="o">*</span> <span class="n">alloc_</span><span class="p">;</span>
+<span class="p">};</span>
+
+<span class="p">}</span>  <span class="c1">// namespace folly</span>
+
+<span class="cp">#endif </span><span class="cm">/* FOLLY_STLALLOCATOR_H_ */</span><span class="cp"></span>
+
+</pre></div></td></tr>
+
+</tbody>
+</table>
+</div>
+
+</body>
+<script>docas={repo:"joekychen/folly",depth:1}</script>
+<script>document.write('<script src=' + ('__proto__' in {} ? 'http://cdnjs.cloudflare.com/ajax/libs/zepto/1.0rc1/zepto.min.js' : 'https://ajax.googleapis.com/ajax/libs/jquery/1.7.2/jquery.min.js')+'><\\/script>')</script>
+<script src="http://baoshan.github.com/moment/min/moment.min.js"></script>
+<script src="../javascript/docco.min.js"></script>
+</html>

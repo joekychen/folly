@@ -1,0 +1,755 @@
+<!DOCTYPE html>
+<html><head><title>joekychen/folly » folly › test › StringTest.cpp
+
+</title>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+<meta name="generator" content="Docco">
+<link rel="stylesheet" media="all" href="../../stylesheets/docco.min.css" />
+
+
+</head>
+<body>
+<div id="container">
+<div id="background"></div>
+<table cellpadding="0" cellspacing="0">
+<thead><tr><th class="docs"><a id="home" href="../../index.html"></a><h1>StringTest.cpp</h1></th><th class="code"></th></tr></thead>
+<tbody>
+
+
+<tr id="section-1"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-1">&#182;</a></div></td><td class="code"><div class="highlight"><pre><span class="cm">/*</span>
+<span class="cm"> * Copyright 2012 Facebook, Inc.</span>
+<span class="cm"> *</span>
+<span class="cm"> * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span class="cm"> * you may not use this file except in compliance with the License.</span>
+<span class="cm"> * You may obtain a copy of the License at</span>
+<span class="cm"> *</span>
+<span class="cm"> *   http://www.apache.org/licenses/LICENSE-2.0</span>
+<span class="cm"> *</span>
+<span class="cm"> * Unless required by applicable law or agreed to in writing, software</span>
+<span class="cm"> * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span class="cm"> * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span class="cm"> * See the License for the specific language governing permissions and</span>
+<span class="cm"> * limitations under the License.</span>
+<span class="cm"> */</span>
+
+<span class="cp">#include &quot;folly/String.h&quot;</span>
+
+<span class="cp">#include &lt;random&gt;</span>
+<span class="cp">#include &lt;boost/algorithm/string.hpp&gt;</span>
+<span class="cp">#include &lt;gtest/gtest.h&gt;</span>
+
+<span class="cp">#include &quot;folly/Benchmark.h&quot;</span>
+
+<span class="k">using</span> <span class="k">namespace</span> <span class="n">folly</span><span class="p">;</span>
+<span class="k">using</span> <span class="k">namespace</span> <span class="n">std</span><span class="p">;</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">StringPrintf</span><span class="p">,</span> <span class="n">BasicTest</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;abc&quot;</span><span class="p">,</span> <span class="n">stringPrintf</span><span class="p">(</span><span class="s">&quot;%s&quot;</span><span class="p">,</span> <span class="s">&quot;abc&quot;</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;abc&quot;</span><span class="p">,</span> <span class="n">stringPrintf</span><span class="p">(</span><span class="s">&quot;%sbc&quot;</span><span class="p">,</span> <span class="s">&quot;a&quot;</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;abc&quot;</span><span class="p">,</span> <span class="n">stringPrintf</span><span class="p">(</span><span class="s">&quot;a%sc&quot;</span><span class="p">,</span> <span class="s">&quot;b&quot;</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;abc&quot;</span><span class="p">,</span> <span class="n">stringPrintf</span><span class="p">(</span><span class="s">&quot;ab%s&quot;</span><span class="p">,</span> <span class="s">&quot;c&quot;</span><span class="p">));</span>
+
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;abc&quot;</span><span class="p">,</span> <span class="n">stringPrintf</span><span class="p">(</span><span class="s">&quot;abc&quot;</span><span class="p">));</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">StringPrintf</span><span class="p">,</span> <span class="n">NumericFormats</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;12&quot;</span><span class="p">,</span> <span class="n">stringPrintf</span><span class="p">(</span><span class="s">&quot;%d&quot;</span><span class="p">,</span> <span class="mi">12</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;5000000000&quot;</span><span class="p">,</span> <span class="n">stringPrintf</span><span class="p">(</span><span class="s">&quot;%ld&quot;</span><span class="p">,</span> <span class="mi">5000000000UL</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;5000000000&quot;</span><span class="p">,</span> <span class="n">stringPrintf</span><span class="p">(</span><span class="s">&quot;%ld&quot;</span><span class="p">,</span> <span class="mi">5000000000L</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;-5000000000&quot;</span><span class="p">,</span> <span class="n">stringPrintf</span><span class="p">(</span><span class="s">&quot;%ld&quot;</span><span class="p">,</span> <span class="o">-</span><span class="mi">5000000000L</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;-1&quot;</span><span class="p">,</span> <span class="n">stringPrintf</span><span class="p">(</span><span class="s">&quot;%d&quot;</span><span class="p">,</span> <span class="mh">0xffffffff</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;-1&quot;</span><span class="p">,</span> <span class="n">stringPrintf</span><span class="p">(</span><span class="s">&quot;%ld&quot;</span><span class="p">,</span> <span class="mh">0xffffffffffffffff</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;-1&quot;</span><span class="p">,</span> <span class="n">stringPrintf</span><span class="p">(</span><span class="s">&quot;%ld&quot;</span><span class="p">,</span> <span class="mh">0xffffffffffffffffUL</span><span class="p">));</span>
+
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;7.7&quot;</span><span class="p">,</span> <span class="n">stringPrintf</span><span class="p">(</span><span class="s">&quot;%1.1f&quot;</span><span class="p">,</span> <span class="mf">7.7</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;7.7&quot;</span><span class="p">,</span> <span class="n">stringPrintf</span><span class="p">(</span><span class="s">&quot;%1.1lf&quot;</span><span class="p">,</span> <span class="mf">7.7</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;7.70000000000000018&quot;</span><span class="p">,</span>
+            <span class="n">stringPrintf</span><span class="p">(</span><span class="s">&quot;%.17f&quot;</span><span class="p">,</span> <span class="mf">7.7</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;7.70000000000000018&quot;</span><span class="p">,</span>
+            <span class="n">stringPrintf</span><span class="p">(</span><span class="s">&quot;%.17lf&quot;</span><span class="p">,</span> <span class="mf">7.7</span><span class="p">));</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">StringPrintf</span><span class="p">,</span> <span class="n">Appending</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">string</span> <span class="n">s</span><span class="p">;</span>
+  <span class="n">stringAppendf</span><span class="p">(</span><span class="o">&amp;</span><span class="n">s</span><span class="p">,</span> <span class="s">&quot;a%s&quot;</span><span class="p">,</span> <span class="s">&quot;b&quot;</span><span class="p">);</span>
+  <span class="n">stringAppendf</span><span class="p">(</span><span class="o">&amp;</span><span class="n">s</span><span class="p">,</span> <span class="s">&quot;%c&quot;</span><span class="p">,</span> <span class="sc">&#39;c&#39;</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">s</span><span class="p">,</span> <span class="s">&quot;abc&quot;</span><span class="p">);</span>
+  <span class="n">stringAppendf</span><span class="p">(</span><span class="o">&amp;</span><span class="n">s</span><span class="p">,</span> <span class="s">&quot; %d&quot;</span><span class="p">,</span> <span class="mi">123</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">s</span><span class="p">,</span> <span class="s">&quot;abc 123&quot;</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">StringPrintf</span><span class="p">,</span> <span class="n">VariousSizes</span><span class="p">)</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-2"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-2">&#182;</a></div><p>Test a wide variety of output sizes</p></td><td class="code"><div class="highlight"><pre>  <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="mi">100</span><span class="p">;</span> <span class="o">++</span><span class="n">i</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">string</span> <span class="n">expected</span><span class="p">(</span><span class="n">i</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="sc">&#39;a&#39;</span><span class="p">);</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;X&quot;</span> <span class="o">+</span> <span class="n">expected</span> <span class="o">+</span> <span class="s">&quot;X&quot;</span><span class="p">,</span> <span class="n">stringPrintf</span><span class="p">(</span><span class="s">&quot;X%sX&quot;</span><span class="p">,</span> <span class="n">expected</span><span class="p">.</span><span class="n">c_str</span><span class="p">()));</span>
+  <span class="p">}</span>
+
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;abc12345678910111213141516171819202122232425xyz&quot;</span><span class="p">,</span>
+            <span class="n">stringPrintf</span><span class="p">(</span><span class="s">&quot;abc%d%d%d%d%d%d%d%d%d%d%d%d%d%d&quot;</span>
+                         <span class="s">&quot;%d%d%d%d%d%d%d%d%d%d%dxyz&quot;</span><span class="p">,</span>
+                         <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">6</span><span class="p">,</span> <span class="mi">7</span><span class="p">,</span> <span class="mi">8</span><span class="p">,</span> <span class="mi">9</span><span class="p">,</span> <span class="mi">10</span><span class="p">,</span> <span class="mi">11</span><span class="p">,</span> <span class="mi">12</span><span class="p">,</span> <span class="mi">13</span><span class="p">,</span> <span class="mi">14</span><span class="p">,</span> <span class="mi">15</span><span class="p">,</span> <span class="mi">16</span><span class="p">,</span>
+                         <span class="mi">17</span><span class="p">,</span> <span class="mi">18</span><span class="p">,</span> <span class="mi">19</span><span class="p">,</span> <span class="mi">20</span><span class="p">,</span> <span class="mi">21</span><span class="p">,</span> <span class="mi">22</span><span class="p">,</span> <span class="mi">23</span><span class="p">,</span> <span class="mi">24</span><span class="p">,</span> <span class="mi">25</span><span class="p">));</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">StringPrintf</span><span class="p">,</span> <span class="n">oldStringPrintfTests</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">string</span><span class="p">(</span><span class="s">&quot;a/b/c/d&quot;</span><span class="p">),</span>
+            <span class="n">stringPrintf</span><span class="p">(</span><span class="s">&quot;%s/%s/%s/%s&quot;</span><span class="p">,</span> <span class="s">&quot;a&quot;</span><span class="p">,</span> <span class="s">&quot;b&quot;</span><span class="p">,</span> <span class="s">&quot;c&quot;</span><span class="p">,</span> <span class="s">&quot;d&quot;</span><span class="p">));</span>
+
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">string</span><span class="p">(</span><span class="s">&quot;    5    10&quot;</span><span class="p">),</span>
+            <span class="n">stringPrintf</span><span class="p">(</span><span class="s">&quot;%5d %5d&quot;</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">10</span><span class="p">));</span></pre></div></td></tr>
+
+
+<tr id="section-3"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-3">&#182;</a></div><p>check printing w/ a big buffer</p></td><td class="code"><div class="highlight"><pre>  <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">size</span> <span class="o">=</span> <span class="p">(</span><span class="mi">1</span> <span class="o">&lt;&lt;</span> <span class="mi">8</span><span class="p">);</span> <span class="n">size</span> <span class="o">&lt;=</span> <span class="p">(</span><span class="mi">1</span> <span class="o">&lt;&lt;</span> <span class="mi">15</span><span class="p">);</span> <span class="n">size</span> <span class="o">&lt;&lt;=</span> <span class="mi">1</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">string</span> <span class="n">a</span><span class="p">(</span><span class="n">size</span><span class="p">,</span> <span class="sc">&#39;z&#39;</span><span class="p">);</span>
+    <span class="n">string</span> <span class="n">b</span> <span class="o">=</span> <span class="n">stringPrintf</span><span class="p">(</span><span class="s">&quot;%s&quot;</span><span class="p">,</span> <span class="n">a</span><span class="p">.</span><span class="n">c_str</span><span class="p">());</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">a</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="n">b</span><span class="p">.</span><span class="n">size</span><span class="p">());</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">StringPrintf</span><span class="p">,</span> <span class="n">oldStringAppendf</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">string</span> <span class="n">s</span> <span class="o">=</span> <span class="s">&quot;hello&quot;</span><span class="p">;</span>
+  <span class="n">stringAppendf</span><span class="p">(</span><span class="o">&amp;</span><span class="n">s</span><span class="p">,</span> <span class="s">&quot;%s/%s/%s/%s&quot;</span><span class="p">,</span> <span class="s">&quot;a&quot;</span><span class="p">,</span> <span class="s">&quot;b&quot;</span><span class="p">,</span> <span class="s">&quot;c&quot;</span><span class="p">,</span> <span class="s">&quot;d&quot;</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">string</span><span class="p">(</span><span class="s">&quot;helloa/b/c/d&quot;</span><span class="p">),</span> <span class="n">s</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="n">BENCHMARK</span><span class="p">(</span><span class="n">new_stringPrintfSmall</span><span class="p">,</span> <span class="n">iters</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">for</span> <span class="p">(</span><span class="n">int64_t</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">iters</span><span class="p">;</span> <span class="o">++</span><span class="n">i</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">int32_t</span> <span class="n">x</span> <span class="o">=</span> <span class="n">int32_t</span><span class="p">(</span><span class="n">i</span><span class="p">);</span>
+    <span class="n">int32_t</span> <span class="n">y</span> <span class="o">=</span> <span class="n">int32_t</span><span class="p">(</span><span class="n">i</span> <span class="o">+</span> <span class="mi">1</span><span class="p">);</span>
+    <span class="n">string</span> <span class="n">s</span> <span class="o">=</span>
+      <span class="n">stringPrintf</span><span class="p">(</span><span class="s">&quot;msg msg msg msg msg msg msg msg:  %d, %d, %s&quot;</span><span class="p">,</span>
+                   <span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="s">&quot;hello&quot;</span><span class="p">);</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">Escape</span><span class="p">,</span> <span class="n">cEscape</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;hello world&quot;</span><span class="p">,</span> <span class="n">cEscape</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="o">&gt;</span><span class="p">(</span><span class="s">&quot;hello world&quot;</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;hello </span><span class="se">\\\\</span><span class="s">world</span><span class="se">\\\&quot;</span><span class="s"> goodbye&quot;</span><span class="p">,</span>
+            <span class="n">cEscape</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="o">&gt;</span><span class="p">(</span><span class="s">&quot;hello </span><span class="se">\\</span><span class="s">world</span><span class="se">\&quot;</span><span class="s"> goodbye&quot;</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;hello</span><span class="se">\\</span><span class="s">nworld&quot;</span><span class="p">,</span> <span class="n">cEscape</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="o">&gt;</span><span class="p">(</span><span class="s">&quot;hello</span><span class="se">\n</span><span class="s">world&quot;</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;hello</span><span class="se">\\</span><span class="s">377</span><span class="se">\\</span><span class="s">376&quot;</span><span class="p">,</span> <span class="n">cEscape</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="o">&gt;</span><span class="p">(</span><span class="s">&quot;hello</span><span class="se">\xff\xfe</span><span class="s">&quot;</span><span class="p">));</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">Escape</span><span class="p">,</span> <span class="n">cUnescape</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;hello world&quot;</span><span class="p">,</span> <span class="n">cUnescape</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="o">&gt;</span><span class="p">(</span><span class="s">&quot;hello world&quot;</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;hello </span><span class="se">\\</span><span class="s">world</span><span class="se">\&quot;</span><span class="s"> goodbye&quot;</span><span class="p">,</span>
+            <span class="n">cUnescape</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="o">&gt;</span><span class="p">(</span><span class="s">&quot;hello </span><span class="se">\\\\</span><span class="s">world</span><span class="se">\\\&quot;</span><span class="s"> goodbye&quot;</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;hello</span><span class="se">\n</span><span class="s">world&quot;</span><span class="p">,</span> <span class="n">cUnescape</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="o">&gt;</span><span class="p">(</span><span class="s">&quot;hello</span><span class="se">\\</span><span class="s">nworld&quot;</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;hello</span><span class="se">\n</span><span class="s">world&quot;</span><span class="p">,</span> <span class="n">cUnescape</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="o">&gt;</span><span class="p">(</span><span class="s">&quot;hello</span><span class="se">\\</span><span class="s">012world&quot;</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;hello</span><span class="se">\n</span><span class="s">world&quot;</span><span class="p">,</span> <span class="n">cUnescape</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="o">&gt;</span><span class="p">(</span><span class="s">&quot;hello</span><span class="se">\\</span><span class="s">x0aworld&quot;</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;hello</span><span class="se">\xff\xfe</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">cUnescape</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="o">&gt;</span><span class="p">(</span><span class="s">&quot;hello</span><span class="se">\\</span><span class="s">377</span><span class="se">\\</span><span class="s">376&quot;</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;hello</span><span class="se">\xff\xfe</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">cUnescape</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="o">&gt;</span><span class="p">(</span><span class="s">&quot;hello</span><span class="se">\\</span><span class="s">xff</span><span class="se">\\</span><span class="s">xfe&quot;</span><span class="p">));</span>
+
+  <span class="n">EXPECT_THROW</span><span class="p">({</span><span class="n">cUnescape</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="o">&gt;</span><span class="p">(</span><span class="s">&quot;hello</span><span class="se">\\</span><span class="s">&quot;</span><span class="p">);},</span>
+               <span class="n">std</span><span class="o">::</span><span class="n">invalid_argument</span><span class="p">);</span>
+  <span class="n">EXPECT_THROW</span><span class="p">({</span><span class="n">cUnescape</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="o">&gt;</span><span class="p">(</span><span class="s">&quot;hello</span><span class="se">\\</span><span class="s">x&quot;</span><span class="p">);},</span>
+               <span class="n">std</span><span class="o">::</span><span class="n">invalid_argument</span><span class="p">);</span>
+  <span class="n">EXPECT_THROW</span><span class="p">({</span><span class="n">cUnescape</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="o">&gt;</span><span class="p">(</span><span class="s">&quot;hello</span><span class="se">\\</span><span class="s">q&quot;</span><span class="p">);},</span>
+               <span class="n">std</span><span class="o">::</span><span class="n">invalid_argument</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="k">namespace</span> <span class="p">{</span>
+<span class="n">fbstring</span> <span class="n">bmString</span><span class="p">;</span>
+<span class="n">fbstring</span> <span class="n">bmEscapedString</span><span class="p">;</span>
+<span class="n">fbstring</span> <span class="n">escapedString</span><span class="p">;</span>
+<span class="n">fbstring</span> <span class="n">unescapedString</span><span class="p">;</span>
+<span class="k">const</span> <span class="n">size_t</span> <span class="n">kBmStringLength</span> <span class="o">=</span> <span class="mi">64</span> <span class="o">&lt;&lt;</span> <span class="mi">10</span><span class="p">;</span>
+<span class="k">const</span> <span class="n">uint32_t</span> <span class="n">kPrintablePercentage</span> <span class="o">=</span> <span class="mi">90</span><span class="p">;</span>
+
+<span class="kt">void</span> <span class="n">initBenchmark</span><span class="p">()</span> <span class="p">{</span>
+  <span class="n">bmString</span><span class="p">.</span><span class="n">reserve</span><span class="p">(</span><span class="n">kBmStringLength</span><span class="p">);</span>
+
+  <span class="n">std</span><span class="o">::</span><span class="n">mt19937</span> <span class="n">rnd</span><span class="p">;</span>
+  <span class="n">std</span><span class="o">::</span><span class="n">uniform_int_distribution</span><span class="o">&lt;</span><span class="n">uint32_t</span><span class="o">&gt;</span> <span class="n">printable</span><span class="p">(</span><span class="mi">32</span><span class="p">,</span> <span class="mi">126</span><span class="p">);</span>
+  <span class="n">std</span><span class="o">::</span><span class="n">uniform_int_distribution</span><span class="o">&lt;</span><span class="n">uint32_t</span><span class="o">&gt;</span> <span class="n">nonPrintable</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">160</span><span class="p">);</span>
+  <span class="n">std</span><span class="o">::</span><span class="n">uniform_int_distribution</span><span class="o">&lt;</span><span class="n">uint32_t</span><span class="o">&gt;</span> <span class="n">percentage</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">99</span><span class="p">);</span>
+
+  <span class="k">for</span> <span class="p">(</span><span class="n">size_t</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">kBmStringLength</span><span class="p">;</span> <span class="o">++</span><span class="n">i</span><span class="p">)</span> <span class="p">{</span>
+    <span class="kt">unsigned</span> <span class="kt">char</span> <span class="n">c</span><span class="p">;</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">percentage</span><span class="p">(</span><span class="n">rnd</span><span class="p">)</span> <span class="o">&lt;</span> <span class="n">kPrintablePercentage</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">c</span> <span class="o">=</span> <span class="n">printable</span><span class="p">(</span><span class="n">rnd</span><span class="p">);</span>
+    <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+      <span class="n">c</span> <span class="o">=</span> <span class="n">nonPrintable</span><span class="p">(</span><span class="n">rnd</span><span class="p">);</span></pre></div></td></tr>
+
+
+<tr id="section-4"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-4">&#182;</a></div><p>Generate characters in both non-printable ranges:
+0..31 and 127..255</p></td><td class="code"><div class="highlight"><pre>      <span class="k">if</span> <span class="p">(</span><span class="n">c</span> <span class="o">&gt;=</span> <span class="mi">32</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">c</span> <span class="o">+=</span> <span class="p">(</span><span class="mi">126</span> <span class="o">-</span> <span class="mi">32</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span><span class="p">;</span>
+      <span class="p">}</span>
+    <span class="p">}</span>
+    <span class="n">bmString</span><span class="p">.</span><span class="n">push_back</span><span class="p">(</span><span class="n">c</span><span class="p">);</span>
+  <span class="p">}</span>
+
+  <span class="n">bmEscapedString</span> <span class="o">=</span> <span class="n">cEscape</span><span class="o">&lt;</span><span class="n">fbstring</span><span class="o">&gt;</span><span class="p">(</span><span class="n">bmString</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="n">BENCHMARK</span><span class="p">(</span><span class="n">BM_cEscape</span><span class="p">,</span> <span class="n">iters</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">while</span> <span class="p">(</span><span class="n">iters</span><span class="o">--</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">escapedString</span> <span class="o">=</span> <span class="n">cEscape</span><span class="o">&lt;</span><span class="n">fbstring</span><span class="o">&gt;</span><span class="p">(</span><span class="n">bmString</span><span class="p">);</span>
+    <span class="n">doNotOptimizeAway</span><span class="p">(</span><span class="n">escapedString</span><span class="p">.</span><span class="n">size</span><span class="p">());</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="n">BENCHMARK</span><span class="p">(</span><span class="n">BM_cUnescape</span><span class="p">,</span> <span class="n">iters</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">while</span> <span class="p">(</span><span class="n">iters</span><span class="o">--</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">unescapedString</span> <span class="o">=</span> <span class="n">cUnescape</span><span class="o">&lt;</span><span class="n">fbstring</span><span class="o">&gt;</span><span class="p">(</span><span class="n">bmEscapedString</span><span class="p">);</span>
+    <span class="n">doNotOptimizeAway</span><span class="p">(</span><span class="n">unescapedString</span><span class="p">.</span><span class="n">size</span><span class="p">());</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="p">}</span>  <span class="c1">// namespace</span>
+
+<span class="k">namespace</span> <span class="p">{</span>
+
+<span class="kt">double</span> <span class="n">pow2</span><span class="p">(</span><span class="kt">int</span> <span class="n">exponent</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">return</span> <span class="kt">double</span><span class="p">(</span><span class="n">int64_t</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span> <span class="o">&lt;&lt;</span> <span class="n">exponent</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="p">}</span>  <span class="c1">// namespace</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">PrettyPrint</span><span class="p">,</span> <span class="n">Basic</span><span class="p">)</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-5"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-5">&#182;</a></div><p>check time printing</p></td><td class="code"><div class="highlight"><pre>  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">string</span><span class="p">(</span><span class="s">&quot;8.53e+07 s &quot;</span><span class="p">),</span> <span class="n">prettyPrint</span><span class="p">(</span><span class="mf">85.3e6</span><span class="p">,</span> <span class="n">PRETTY_TIME</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">string</span><span class="p">(</span><span class="s">&quot;85.3 s &quot;</span><span class="p">),</span> <span class="n">prettyPrint</span><span class="p">(</span><span class="mf">85.3</span><span class="p">,</span> <span class="n">PRETTY_TIME</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">string</span><span class="p">(</span><span class="s">&quot;85.3 ms&quot;</span><span class="p">),</span> <span class="n">prettyPrint</span><span class="p">(</span><span class="mf">85.3e-3</span><span class="p">,</span> <span class="n">PRETTY_TIME</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">string</span><span class="p">(</span><span class="s">&quot;85.3 us&quot;</span><span class="p">),</span> <span class="n">prettyPrint</span><span class="p">(</span><span class="mf">85.3e-6</span><span class="p">,</span> <span class="n">PRETTY_TIME</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">string</span><span class="p">(</span><span class="s">&quot;85.3 ns&quot;</span><span class="p">),</span> <span class="n">prettyPrint</span><span class="p">(</span><span class="mf">85.3e-9</span><span class="p">,</span> <span class="n">PRETTY_TIME</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">string</span><span class="p">(</span><span class="s">&quot;85.3 ps&quot;</span><span class="p">),</span> <span class="n">prettyPrint</span><span class="p">(</span><span class="mf">85.3e-12</span><span class="p">,</span> <span class="n">PRETTY_TIME</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">string</span><span class="p">(</span><span class="s">&quot;8.53e-14 s &quot;</span><span class="p">),</span> <span class="n">prettyPrint</span><span class="p">(</span><span class="mf">85.3e-15</span><span class="p">,</span> <span class="n">PRETTY_TIME</span><span class="p">));</span>
+
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">string</span><span class="p">(</span><span class="s">&quot;0 s &quot;</span><span class="p">),</span> <span class="n">prettyPrint</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">PRETTY_TIME</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">string</span><span class="p">(</span><span class="s">&quot;1 s &quot;</span><span class="p">),</span> <span class="n">prettyPrint</span><span class="p">(</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">PRETTY_TIME</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">string</span><span class="p">(</span><span class="s">&quot;1 ms&quot;</span><span class="p">),</span> <span class="n">prettyPrint</span><span class="p">(</span><span class="mf">1.0e-3</span><span class="p">,</span> <span class="n">PRETTY_TIME</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">string</span><span class="p">(</span><span class="s">&quot;1 us&quot;</span><span class="p">),</span> <span class="n">prettyPrint</span><span class="p">(</span><span class="mf">1.0e-6</span><span class="p">,</span> <span class="n">PRETTY_TIME</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">string</span><span class="p">(</span><span class="s">&quot;1 ns&quot;</span><span class="p">),</span> <span class="n">prettyPrint</span><span class="p">(</span><span class="mf">1.0e-9</span><span class="p">,</span> <span class="n">PRETTY_TIME</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">string</span><span class="p">(</span><span class="s">&quot;1 ps&quot;</span><span class="p">),</span> <span class="n">prettyPrint</span><span class="p">(</span><span class="mf">1.0e-12</span><span class="p">,</span> <span class="n">PRETTY_TIME</span><span class="p">));</span></pre></div></td></tr>
+
+
+<tr id="section-6"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-6">&#182;</a></div><p>check bytes printing</p></td><td class="code"><div class="highlight"><pre>  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">string</span><span class="p">(</span><span class="s">&quot;853 B &quot;</span><span class="p">),</span> <span class="n">prettyPrint</span><span class="p">(</span><span class="mf">853.</span><span class="p">,</span> <span class="n">PRETTY_BYTES</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">string</span><span class="p">(</span><span class="s">&quot;833 kB&quot;</span><span class="p">),</span> <span class="n">prettyPrint</span><span class="p">(</span><span class="mf">853.e3</span><span class="p">,</span> <span class="n">PRETTY_BYTES</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">string</span><span class="p">(</span><span class="s">&quot;813.5 MB&quot;</span><span class="p">),</span> <span class="n">prettyPrint</span><span class="p">(</span><span class="mf">853.e6</span><span class="p">,</span> <span class="n">PRETTY_BYTES</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">string</span><span class="p">(</span><span class="s">&quot;7.944 GB&quot;</span><span class="p">),</span> <span class="n">prettyPrint</span><span class="p">(</span><span class="mf">8.53e9</span><span class="p">,</span> <span class="n">PRETTY_BYTES</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">string</span><span class="p">(</span><span class="s">&quot;794.4 GB&quot;</span><span class="p">),</span> <span class="n">prettyPrint</span><span class="p">(</span><span class="mf">853.e9</span><span class="p">,</span> <span class="n">PRETTY_BYTES</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">string</span><span class="p">(</span><span class="s">&quot;775.8 TB&quot;</span><span class="p">),</span> <span class="n">prettyPrint</span><span class="p">(</span><span class="mf">853.e12</span><span class="p">,</span> <span class="n">PRETTY_BYTES</span><span class="p">));</span>
+
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">string</span><span class="p">(</span><span class="s">&quot;0 B &quot;</span><span class="p">),</span> <span class="n">prettyPrint</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">PRETTY_BYTES</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">string</span><span class="p">(</span><span class="s">&quot;1 B &quot;</span><span class="p">),</span> <span class="n">prettyPrint</span><span class="p">(</span><span class="n">pow2</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span> <span class="n">PRETTY_BYTES</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">string</span><span class="p">(</span><span class="s">&quot;1 kB&quot;</span><span class="p">),</span> <span class="n">prettyPrint</span><span class="p">(</span><span class="n">pow2</span><span class="p">(</span><span class="mi">10</span><span class="p">),</span> <span class="n">PRETTY_BYTES</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">string</span><span class="p">(</span><span class="s">&quot;1 MB&quot;</span><span class="p">),</span> <span class="n">prettyPrint</span><span class="p">(</span><span class="n">pow2</span><span class="p">(</span><span class="mi">20</span><span class="p">),</span> <span class="n">PRETTY_BYTES</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">string</span><span class="p">(</span><span class="s">&quot;1 GB&quot;</span><span class="p">),</span> <span class="n">prettyPrint</span><span class="p">(</span><span class="n">pow2</span><span class="p">(</span><span class="mi">30</span><span class="p">),</span> <span class="n">PRETTY_BYTES</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">string</span><span class="p">(</span><span class="s">&quot;1 TB&quot;</span><span class="p">),</span> <span class="n">prettyPrint</span><span class="p">(</span><span class="n">pow2</span><span class="p">(</span><span class="mi">40</span><span class="p">),</span> <span class="n">PRETTY_BYTES</span><span class="p">));</span></pre></div></td></tr>
+
+
+<tr id="section-7"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-7">&#182;</a></div><p>check bytes metric printing</p></td><td class="code"><div class="highlight"><pre>  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">string</span><span class="p">(</span><span class="s">&quot;853 B &quot;</span><span class="p">),</span> <span class="n">prettyPrint</span><span class="p">(</span><span class="mf">853.</span><span class="p">,</span> <span class="n">PRETTY_BYTES_METRIC</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">string</span><span class="p">(</span><span class="s">&quot;853 kB&quot;</span><span class="p">),</span> <span class="n">prettyPrint</span><span class="p">(</span><span class="mf">853.e3</span><span class="p">,</span> <span class="n">PRETTY_BYTES_METRIC</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">string</span><span class="p">(</span><span class="s">&quot;853 MB&quot;</span><span class="p">),</span> <span class="n">prettyPrint</span><span class="p">(</span><span class="mf">853.e6</span><span class="p">,</span> <span class="n">PRETTY_BYTES_METRIC</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">string</span><span class="p">(</span><span class="s">&quot;8.53 GB&quot;</span><span class="p">),</span> <span class="n">prettyPrint</span><span class="p">(</span><span class="mf">8.53e9</span><span class="p">,</span> <span class="n">PRETTY_BYTES_METRIC</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">string</span><span class="p">(</span><span class="s">&quot;853 GB&quot;</span><span class="p">),</span> <span class="n">prettyPrint</span><span class="p">(</span><span class="mf">853.e9</span><span class="p">,</span> <span class="n">PRETTY_BYTES_METRIC</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">string</span><span class="p">(</span><span class="s">&quot;853 TB&quot;</span><span class="p">),</span> <span class="n">prettyPrint</span><span class="p">(</span><span class="mf">853.e12</span><span class="p">,</span> <span class="n">PRETTY_BYTES_METRIC</span><span class="p">));</span>
+
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">string</span><span class="p">(</span><span class="s">&quot;0 B &quot;</span><span class="p">),</span> <span class="n">prettyPrint</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">PRETTY_BYTES_METRIC</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">string</span><span class="p">(</span><span class="s">&quot;1 B &quot;</span><span class="p">),</span> <span class="n">prettyPrint</span><span class="p">(</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">PRETTY_BYTES_METRIC</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">string</span><span class="p">(</span><span class="s">&quot;1 kB&quot;</span><span class="p">),</span> <span class="n">prettyPrint</span><span class="p">(</span><span class="mf">1.0e+3</span><span class="p">,</span> <span class="n">PRETTY_BYTES_METRIC</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">string</span><span class="p">(</span><span class="s">&quot;1 MB&quot;</span><span class="p">),</span> <span class="n">prettyPrint</span><span class="p">(</span><span class="mf">1.0e+6</span><span class="p">,</span> <span class="n">PRETTY_BYTES_METRIC</span><span class="p">));</span>
+
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">string</span><span class="p">(</span><span class="s">&quot;1 GB&quot;</span><span class="p">),</span> <span class="n">prettyPrint</span><span class="p">(</span><span class="mf">1.0e+9</span><span class="p">,</span> <span class="n">PRETTY_BYTES_METRIC</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">string</span><span class="p">(</span><span class="s">&quot;1 TB&quot;</span><span class="p">),</span> <span class="n">prettyPrint</span><span class="p">(</span><span class="mf">1.0e+12</span><span class="p">,</span> <span class="n">PRETTY_BYTES_METRIC</span><span class="p">));</span></pre></div></td></tr>
+
+
+<tr id="section-8"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-8">&#182;</a></div><p>check metric-units (powers of 1000) printing</p></td><td class="code"><div class="highlight"><pre>  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">string</span><span class="p">(</span><span class="s">&quot;853  &quot;</span><span class="p">),</span> <span class="n">prettyPrint</span><span class="p">(</span><span class="mf">853.</span><span class="p">,</span> <span class="n">PRETTY_UNITS_METRIC</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">string</span><span class="p">(</span><span class="s">&quot;853 k&quot;</span><span class="p">),</span> <span class="n">prettyPrint</span><span class="p">(</span><span class="mf">853.e3</span><span class="p">,</span> <span class="n">PRETTY_UNITS_METRIC</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">string</span><span class="p">(</span><span class="s">&quot;853 M&quot;</span><span class="p">),</span> <span class="n">prettyPrint</span><span class="p">(</span><span class="mf">853.e6</span><span class="p">,</span> <span class="n">PRETTY_UNITS_METRIC</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">string</span><span class="p">(</span><span class="s">&quot;8.53 bil&quot;</span><span class="p">),</span> <span class="n">prettyPrint</span><span class="p">(</span><span class="mf">8.53e9</span><span class="p">,</span> <span class="n">PRETTY_UNITS_METRIC</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">string</span><span class="p">(</span><span class="s">&quot;853 bil&quot;</span><span class="p">),</span> <span class="n">prettyPrint</span><span class="p">(</span><span class="mf">853.e9</span><span class="p">,</span> <span class="n">PRETTY_UNITS_METRIC</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">string</span><span class="p">(</span><span class="s">&quot;853 tril&quot;</span><span class="p">),</span> <span class="n">prettyPrint</span><span class="p">(</span><span class="mf">853.e12</span><span class="p">,</span> <span class="n">PRETTY_UNITS_METRIC</span><span class="p">));</span></pre></div></td></tr>
+
+
+<tr id="section-9"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-9">&#182;</a></div><p>check binary-units (powers of 1024) printing</p></td><td class="code"><div class="highlight"><pre>  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">string</span><span class="p">(</span><span class="s">&quot;0  &quot;</span><span class="p">),</span> <span class="n">prettyPrint</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">PRETTY_UNITS_BINARY</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">string</span><span class="p">(</span><span class="s">&quot;1  &quot;</span><span class="p">),</span> <span class="n">prettyPrint</span><span class="p">(</span><span class="n">pow2</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span> <span class="n">PRETTY_UNITS_BINARY</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">string</span><span class="p">(</span><span class="s">&quot;1 k&quot;</span><span class="p">),</span> <span class="n">prettyPrint</span><span class="p">(</span><span class="n">pow2</span><span class="p">(</span><span class="mi">10</span><span class="p">),</span> <span class="n">PRETTY_UNITS_BINARY</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">string</span><span class="p">(</span><span class="s">&quot;1 M&quot;</span><span class="p">),</span> <span class="n">prettyPrint</span><span class="p">(</span><span class="n">pow2</span><span class="p">(</span><span class="mi">20</span><span class="p">),</span> <span class="n">PRETTY_UNITS_BINARY</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">string</span><span class="p">(</span><span class="s">&quot;1 G&quot;</span><span class="p">),</span> <span class="n">prettyPrint</span><span class="p">(</span><span class="n">pow2</span><span class="p">(</span><span class="mi">30</span><span class="p">),</span> <span class="n">PRETTY_UNITS_BINARY</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">string</span><span class="p">(</span><span class="s">&quot;1 T&quot;</span><span class="p">),</span> <span class="n">prettyPrint</span><span class="p">(</span><span class="n">pow2</span><span class="p">(</span><span class="mi">40</span><span class="p">),</span> <span class="n">PRETTY_UNITS_BINARY</span><span class="p">));</span>
+
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">string</span><span class="p">(</span><span class="s">&quot;1023  &quot;</span><span class="p">),</span>
+      <span class="n">prettyPrint</span><span class="p">(</span><span class="n">pow2</span><span class="p">(</span><span class="mi">10</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span><span class="p">,</span> <span class="n">PRETTY_UNITS_BINARY</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">string</span><span class="p">(</span><span class="s">&quot;1024 k&quot;</span><span class="p">),</span>
+      <span class="n">prettyPrint</span><span class="p">(</span><span class="n">pow2</span><span class="p">(</span><span class="mi">20</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span><span class="p">,</span> <span class="n">PRETTY_UNITS_BINARY</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">string</span><span class="p">(</span><span class="s">&quot;1024 M&quot;</span><span class="p">),</span>
+      <span class="n">prettyPrint</span><span class="p">(</span><span class="n">pow2</span><span class="p">(</span><span class="mi">30</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span><span class="p">,</span> <span class="n">PRETTY_UNITS_BINARY</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">string</span><span class="p">(</span><span class="s">&quot;1024 G&quot;</span><span class="p">),</span>
+      <span class="n">prettyPrint</span><span class="p">(</span><span class="n">pow2</span><span class="p">(</span><span class="mi">40</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span><span class="p">,</span> <span class="n">PRETTY_UNITS_BINARY</span><span class="p">));</span></pre></div></td></tr>
+
+
+<tr id="section-10"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-10">&#182;</a></div><p>check that negative values work</p></td><td class="code"><div class="highlight"><pre>  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">string</span><span class="p">(</span><span class="s">&quot;-85.3 s &quot;</span><span class="p">),</span> <span class="n">prettyPrint</span><span class="p">(</span><span class="o">-</span><span class="mf">85.3</span><span class="p">,</span> <span class="n">PRETTY_TIME</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">string</span><span class="p">(</span><span class="s">&quot;-85.3 ms&quot;</span><span class="p">),</span> <span class="n">prettyPrint</span><span class="p">(</span><span class="o">-</span><span class="mf">85.3e-3</span><span class="p">,</span> <span class="n">PRETTY_TIME</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">string</span><span class="p">(</span><span class="s">&quot;-85.3 us&quot;</span><span class="p">),</span> <span class="n">prettyPrint</span><span class="p">(</span><span class="o">-</span><span class="mf">85.3e-6</span><span class="p">,</span> <span class="n">PRETTY_TIME</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">string</span><span class="p">(</span><span class="s">&quot;-85.3 ns&quot;</span><span class="p">),</span> <span class="n">prettyPrint</span><span class="p">(</span><span class="o">-</span><span class="mf">85.3e-9</span><span class="p">,</span> <span class="n">PRETTY_TIME</span><span class="p">));</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">PrettyPrint</span><span class="p">,</span> <span class="n">HexDump</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">std</span><span class="o">::</span><span class="n">string</span> <span class="n">a</span><span class="p">(</span><span class="s">&quot;abc</span><span class="se">\x00\x02\xa0</span><span class="s">&quot;</span><span class="p">,</span> <span class="mi">6</span><span class="p">);</span>  <span class="c1">// embedded NUL</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span>
+    <span class="s">&quot;00000000  61 62 63 00 02 a0                                 &quot;</span>
+    <span class="s">&quot;|abc...          |</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">,</span>
+    <span class="n">hexDump</span><span class="p">(</span><span class="n">a</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span> <span class="n">a</span><span class="p">.</span><span class="n">size</span><span class="p">()));</span>
+
+  <span class="n">a</span> <span class="o">=</span> <span class="s">&quot;abcdefghijklmnopqrstuvwxyz&quot;</span><span class="p">;</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span>
+    <span class="s">&quot;00000000  61 62 63 64 65 66 67 68  69 6a 6b 6c 6d 6e 6f 70  &quot;</span>
+    <span class="s">&quot;|abcdefghijklmnop|</span><span class="se">\n</span><span class="s">&quot;</span>
+    <span class="s">&quot;00000010  71 72 73 74 75 76 77 78  79 7a                    &quot;</span>
+    <span class="s">&quot;|qrstuvwxyz      |</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">,</span>
+    <span class="n">hexDump</span><span class="p">(</span><span class="n">a</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span> <span class="n">a</span><span class="p">.</span><span class="n">size</span><span class="p">()));</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">System</span><span class="p">,</span> <span class="n">errnoStr</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">errno</span> <span class="o">=</span> <span class="n">EACCES</span><span class="p">;</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">EACCES</span><span class="p">,</span> <span class="n">errno</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">EACCES</span><span class="p">,</span> <span class="n">errno</span><span class="p">);</span>  <span class="c1">// twice to make sure EXPECT_EQ doesn&#39;t change it</span>
+
+  <span class="n">fbstring</span> <span class="n">expected</span> <span class="o">=</span> <span class="n">strerror</span><span class="p">(</span><span class="n">ENOENT</span><span class="p">);</span>
+
+  <span class="n">errno</span> <span class="o">=</span> <span class="n">EACCES</span><span class="p">;</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">expected</span><span class="p">,</span> <span class="n">errnoStr</span><span class="p">(</span><span class="n">ENOENT</span><span class="p">));</span></pre></div></td></tr>
+
+
+<tr id="section-11"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-11">&#182;</a></div><p>Ensure that errno isn't changed</p></td><td class="code"><div class="highlight"><pre>  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">EACCES</span><span class="p">,</span> <span class="n">errno</span><span class="p">);</span></pre></div></td></tr>
+
+
+<tr id="section-12"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-12">&#182;</a></div><p>Per POSIX, all errno values are positive, so -1 is invalid</p></td><td class="code"><div class="highlight"><pre>  <span class="n">errnoStr</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">);</span></pre></div></td></tr>
+
+
+<tr id="section-13"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-13">&#182;</a></div><p>Ensure that errno isn't changed</p></td><td class="code"><div class="highlight"><pre>  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">EACCES</span><span class="p">,</span> <span class="n">errno</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="k">namespace</span> <span class="n">folly_test</span> <span class="p">{</span>
+<span class="k">struct</span> <span class="n">ThisIsAVeryLongStructureName</span> <span class="p">{</span>
+<span class="p">};</span>
+<span class="p">}</span>  <span class="c1">// namespace folly_test</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">System</span><span class="p">,</span> <span class="n">demangle</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;folly_test::ThisIsAVeryLongStructureName&quot;</span><span class="p">,</span>
+            <span class="n">demangle</span><span class="p">(</span><span class="k">typeid</span><span class="p">(</span><span class="n">folly_test</span><span class="o">::</span><span class="n">ThisIsAVeryLongStructureName</span><span class="p">)));</span>
+<span class="p">}</span>
+
+<span class="k">namespace</span> <span class="p">{</span>
+
+<span class="k">template</span><span class="o">&lt;</span><span class="k">template</span><span class="o">&lt;</span><span class="n">class</span><span class="p">,</span><span class="n">class</span><span class="o">&gt;</span> <span class="k">class</span> <span class="nc">VectorType</span><span class="o">&gt;</span>
+<span class="kt">void</span> <span class="n">splitTest</span><span class="p">()</span> <span class="p">{</span>
+  <span class="n">VectorType</span><span class="o">&lt;</span><span class="n">string</span><span class="p">,</span><span class="n">std</span><span class="o">::</span><span class="n">allocator</span><span class="o">&lt;</span><span class="n">string</span><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="n">parts</span><span class="p">;</span>
+
+  <span class="n">folly</span><span class="o">::</span><span class="n">split</span><span class="p">(</span><span class="sc">&#39;,&#39;</span><span class="p">,</span> <span class="s">&quot;a,b,c&quot;</span><span class="p">,</span> <span class="n">parts</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">parts</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="mi">3</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">parts</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="s">&quot;a&quot;</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">parts</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="s">&quot;b&quot;</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">parts</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span> <span class="s">&quot;c&quot;</span><span class="p">);</span>
+  <span class="n">parts</span><span class="p">.</span><span class="n">clear</span><span class="p">();</span>
+
+  <span class="n">folly</span><span class="o">::</span><span class="n">split</span><span class="p">(</span><span class="sc">&#39;,&#39;</span><span class="p">,</span> <span class="n">string</span><span class="p">(</span><span class="s">&quot;a,b,c&quot;</span><span class="p">),</span> <span class="n">parts</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">parts</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="mi">3</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">parts</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="s">&quot;a&quot;</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">parts</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="s">&quot;b&quot;</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">parts</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span> <span class="s">&quot;c&quot;</span><span class="p">);</span>
+  <span class="n">parts</span><span class="p">.</span><span class="n">clear</span><span class="p">();</span>
+
+  <span class="n">folly</span><span class="o">::</span><span class="n">split</span><span class="p">(</span><span class="sc">&#39;,&#39;</span><span class="p">,</span> <span class="s">&quot;a,,c&quot;</span><span class="p">,</span> <span class="n">parts</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">parts</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="mi">3</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">parts</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="s">&quot;a&quot;</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">parts</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="s">&quot;&quot;</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">parts</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span> <span class="s">&quot;c&quot;</span><span class="p">);</span>
+  <span class="n">parts</span><span class="p">.</span><span class="n">clear</span><span class="p">();</span>
+
+  <span class="n">folly</span><span class="o">::</span><span class="n">split</span><span class="p">(</span><span class="sc">&#39;,&#39;</span><span class="p">,</span> <span class="n">string</span><span class="p">(</span><span class="s">&quot;a,,c&quot;</span><span class="p">),</span> <span class="n">parts</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">parts</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="mi">3</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">parts</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="s">&quot;a&quot;</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">parts</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="s">&quot;&quot;</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">parts</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span> <span class="s">&quot;c&quot;</span><span class="p">);</span>
+  <span class="n">parts</span><span class="p">.</span><span class="n">clear</span><span class="p">();</span>
+
+  <span class="n">folly</span><span class="o">::</span><span class="n">split</span><span class="p">(</span><span class="sc">&#39;,&#39;</span><span class="p">,</span> <span class="s">&quot;a,,c&quot;</span><span class="p">,</span> <span class="n">parts</span><span class="p">,</span> <span class="kc">true</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">parts</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="mi">2</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">parts</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="s">&quot;a&quot;</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">parts</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="s">&quot;c&quot;</span><span class="p">);</span>
+  <span class="n">parts</span><span class="p">.</span><span class="n">clear</span><span class="p">();</span>
+
+  <span class="n">folly</span><span class="o">::</span><span class="n">split</span><span class="p">(</span><span class="sc">&#39;,&#39;</span><span class="p">,</span> <span class="n">string</span><span class="p">(</span><span class="s">&quot;a,,c&quot;</span><span class="p">),</span> <span class="n">parts</span><span class="p">,</span> <span class="kc">true</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">parts</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="mi">2</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">parts</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="s">&quot;a&quot;</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">parts</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="s">&quot;c&quot;</span><span class="p">);</span>
+  <span class="n">parts</span><span class="p">.</span><span class="n">clear</span><span class="p">();</span>
+
+  <span class="n">folly</span><span class="o">::</span><span class="n">split</span><span class="p">(</span><span class="sc">&#39;,&#39;</span><span class="p">,</span> <span class="n">string</span><span class="p">(</span><span class="s">&quot;,,a,,c,,,&quot;</span><span class="p">),</span> <span class="n">parts</span><span class="p">,</span> <span class="kc">true</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">parts</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="mi">2</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">parts</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="s">&quot;a&quot;</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">parts</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="s">&quot;c&quot;</span><span class="p">);</span>
+  <span class="n">parts</span><span class="p">.</span><span class="n">clear</span><span class="p">();</span></pre></div></td></tr>
+
+
+<tr id="section-14"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-14">&#182;</a></div><p>test multiple split w/o clear</p></td><td class="code"><div class="highlight"><pre>  <span class="n">folly</span><span class="o">::</span><span class="n">split</span><span class="p">(</span><span class="sc">&#39;,&#39;</span><span class="p">,</span> <span class="s">&quot;,,a,,c,,,&quot;</span><span class="p">,</span> <span class="n">parts</span><span class="p">,</span> <span class="kc">true</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">parts</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="mi">2</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">parts</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="s">&quot;a&quot;</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">parts</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="s">&quot;c&quot;</span><span class="p">);</span>
+  <span class="n">folly</span><span class="o">::</span><span class="n">split</span><span class="p">(</span><span class="sc">&#39;,&#39;</span><span class="p">,</span> <span class="s">&quot;,,a,,c,,,&quot;</span><span class="p">,</span> <span class="n">parts</span><span class="p">,</span> <span class="kc">true</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">parts</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="mi">4</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">parts</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span> <span class="s">&quot;a&quot;</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">parts</span><span class="p">[</span><span class="mi">3</span><span class="p">],</span> <span class="s">&quot;c&quot;</span><span class="p">);</span>
+  <span class="n">parts</span><span class="p">.</span><span class="n">clear</span><span class="p">();</span></pre></div></td></tr>
+
+
+<tr id="section-15"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-15">&#182;</a></div><p>test splits that with multi-line delimiter</p></td><td class="code"><div class="highlight"><pre>  <span class="n">folly</span><span class="o">::</span><span class="n">split</span><span class="p">(</span><span class="s">&quot;ab&quot;</span><span class="p">,</span> <span class="s">&quot;dabcabkdbkab&quot;</span><span class="p">,</span> <span class="n">parts</span><span class="p">,</span> <span class="kc">true</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">parts</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="mi">3</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">parts</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="s">&quot;d&quot;</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">parts</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="s">&quot;c&quot;</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">parts</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span> <span class="s">&quot;kdbk&quot;</span><span class="p">);</span>
+  <span class="n">parts</span><span class="p">.</span><span class="n">clear</span><span class="p">();</span>
+
+  <span class="n">string</span> <span class="n">orig</span> <span class="o">=</span> <span class="s">&quot;ab2342asdfv~~!&quot;</span><span class="p">;</span>
+  <span class="n">folly</span><span class="o">::</span><span class="n">split</span><span class="p">(</span><span class="s">&quot;&quot;</span><span class="p">,</span> <span class="n">orig</span><span class="p">,</span> <span class="n">parts</span><span class="p">,</span> <span class="kc">true</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">parts</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="mi">1</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">parts</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">orig</span><span class="p">);</span>
+  <span class="n">parts</span><span class="p">.</span><span class="n">clear</span><span class="p">();</span>
+
+  <span class="n">folly</span><span class="o">::</span><span class="n">split</span><span class="p">(</span><span class="s">&quot;452x;o38asfsajsdlfdf.j&quot;</span><span class="p">,</span> <span class="s">&quot;asfds&quot;</span><span class="p">,</span> <span class="n">parts</span><span class="p">,</span> <span class="kc">true</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">parts</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="mi">1</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">parts</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="s">&quot;asfds&quot;</span><span class="p">);</span>
+  <span class="n">parts</span><span class="p">.</span><span class="n">clear</span><span class="p">();</span>
+
+  <span class="n">folly</span><span class="o">::</span><span class="n">split</span><span class="p">(</span><span class="s">&quot;a&quot;</span><span class="p">,</span> <span class="s">&quot;&quot;</span><span class="p">,</span> <span class="n">parts</span><span class="p">,</span> <span class="kc">true</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">parts</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="mi">0</span><span class="p">);</span>
+  <span class="n">parts</span><span class="p">.</span><span class="n">clear</span><span class="p">();</span>
+
+  <span class="n">folly</span><span class="o">::</span><span class="n">split</span><span class="p">(</span><span class="s">&quot;a&quot;</span><span class="p">,</span> <span class="s">&quot;&quot;</span><span class="p">,</span> <span class="n">parts</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">parts</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="mi">1</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">parts</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="s">&quot;&quot;</span><span class="p">);</span>
+  <span class="n">parts</span><span class="p">.</span><span class="n">clear</span><span class="p">();</span>
+
+  <span class="n">folly</span><span class="o">::</span><span class="n">split</span><span class="p">(</span><span class="s">&quot;a&quot;</span><span class="p">,</span> <span class="s">&quot;abcdefg&quot;</span><span class="p">,</span> <span class="n">parts</span><span class="p">,</span> <span class="kc">true</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">parts</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="mi">1</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">parts</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="s">&quot;bcdefg&quot;</span><span class="p">);</span>
+  <span class="n">parts</span><span class="p">.</span><span class="n">clear</span><span class="p">();</span>
+
+  <span class="n">orig</span> <span class="o">=</span> <span class="s">&quot;All, , your bases, are , , belong to us&quot;</span><span class="p">;</span>
+  <span class="n">folly</span><span class="o">::</span><span class="n">split</span><span class="p">(</span><span class="s">&quot;, &quot;</span><span class="p">,</span> <span class="n">orig</span><span class="p">,</span> <span class="n">parts</span><span class="p">,</span> <span class="kc">true</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">parts</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="mi">4</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">parts</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="s">&quot;All&quot;</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">parts</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="s">&quot;your bases&quot;</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">parts</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span> <span class="s">&quot;are &quot;</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">parts</span><span class="p">[</span><span class="mi">3</span><span class="p">],</span> <span class="s">&quot;belong to us&quot;</span><span class="p">);</span>
+  <span class="n">parts</span><span class="p">.</span><span class="n">clear</span><span class="p">();</span>
+  <span class="n">folly</span><span class="o">::</span><span class="n">split</span><span class="p">(</span><span class="s">&quot;, &quot;</span><span class="p">,</span> <span class="n">orig</span><span class="p">,</span> <span class="n">parts</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">parts</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="mi">6</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">parts</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="s">&quot;All&quot;</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">parts</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="s">&quot;&quot;</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">parts</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span> <span class="s">&quot;your bases&quot;</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">parts</span><span class="p">[</span><span class="mi">3</span><span class="p">],</span> <span class="s">&quot;are &quot;</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">parts</span><span class="p">[</span><span class="mi">4</span><span class="p">],</span> <span class="s">&quot;&quot;</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">parts</span><span class="p">[</span><span class="mi">5</span><span class="p">],</span> <span class="s">&quot;belong to us&quot;</span><span class="p">);</span>
+  <span class="n">parts</span><span class="p">.</span><span class="n">clear</span><span class="p">();</span>
+
+  <span class="n">orig</span> <span class="o">=</span> <span class="s">&quot;, Facebook, rul,es!, &quot;</span><span class="p">;</span>
+  <span class="n">folly</span><span class="o">::</span><span class="n">split</span><span class="p">(</span><span class="s">&quot;, &quot;</span><span class="p">,</span> <span class="n">orig</span><span class="p">,</span> <span class="n">parts</span><span class="p">,</span> <span class="kc">true</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">parts</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="mi">2</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">parts</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="s">&quot;Facebook&quot;</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">parts</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="s">&quot;rul,es!&quot;</span><span class="p">);</span>
+  <span class="n">parts</span><span class="p">.</span><span class="n">clear</span><span class="p">();</span>
+  <span class="n">folly</span><span class="o">::</span><span class="n">split</span><span class="p">(</span><span class="s">&quot;, &quot;</span><span class="p">,</span> <span class="n">orig</span><span class="p">,</span> <span class="n">parts</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">parts</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="mi">4</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">parts</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="s">&quot;&quot;</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">parts</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="s">&quot;Facebook&quot;</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">parts</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span> <span class="s">&quot;rul,es!&quot;</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">parts</span><span class="p">[</span><span class="mi">3</span><span class="p">],</span> <span class="s">&quot;&quot;</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="k">template</span><span class="o">&lt;</span><span class="k">template</span><span class="o">&lt;</span><span class="n">class</span><span class="p">,</span><span class="n">class</span><span class="o">&gt;</span> <span class="k">class</span> <span class="nc">VectorType</span><span class="o">&gt;</span>
+<span class="kt">void</span> <span class="n">piecesTest</span><span class="p">()</span> <span class="p">{</span>
+  <span class="n">VectorType</span><span class="o">&lt;</span><span class="n">StringPiece</span><span class="p">,</span><span class="n">std</span><span class="o">::</span><span class="n">allocator</span><span class="o">&lt;</span><span class="n">StringPiece</span><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="n">pieces</span><span class="p">;</span>
+  <span class="n">VectorType</span><span class="o">&lt;</span><span class="n">StringPiece</span><span class="p">,</span><span class="n">std</span><span class="o">::</span><span class="n">allocator</span><span class="o">&lt;</span><span class="n">StringPiece</span><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="n">pieces2</span><span class="p">;</span>
+
+  <span class="n">folly</span><span class="o">::</span><span class="n">split</span><span class="p">(</span><span class="sc">&#39;,&#39;</span><span class="p">,</span> <span class="s">&quot;a,b,c&quot;</span><span class="p">,</span> <span class="n">pieces</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">pieces</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="mi">3</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">pieces</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="s">&quot;a&quot;</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">pieces</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="s">&quot;b&quot;</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">pieces</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span> <span class="s">&quot;c&quot;</span><span class="p">);</span>
+
+  <span class="n">pieces</span><span class="p">.</span><span class="n">clear</span><span class="p">();</span>
+
+  <span class="n">folly</span><span class="o">::</span><span class="n">split</span><span class="p">(</span><span class="sc">&#39;,&#39;</span><span class="p">,</span> <span class="s">&quot;a,,c&quot;</span><span class="p">,</span> <span class="n">pieces</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">pieces</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="mi">3</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">pieces</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="s">&quot;a&quot;</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">pieces</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="s">&quot;&quot;</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">pieces</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span> <span class="s">&quot;c&quot;</span><span class="p">);</span>
+  <span class="n">pieces</span><span class="p">.</span><span class="n">clear</span><span class="p">();</span>
+
+  <span class="n">folly</span><span class="o">::</span><span class="n">split</span><span class="p">(</span><span class="sc">&#39;,&#39;</span><span class="p">,</span> <span class="s">&quot;a,,c&quot;</span><span class="p">,</span> <span class="n">pieces</span><span class="p">,</span> <span class="kc">true</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">pieces</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="mi">2</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">pieces</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="s">&quot;a&quot;</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">pieces</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="s">&quot;c&quot;</span><span class="p">);</span>
+  <span class="n">pieces</span><span class="p">.</span><span class="n">clear</span><span class="p">();</span>
+
+  <span class="n">folly</span><span class="o">::</span><span class="n">split</span><span class="p">(</span><span class="sc">&#39;,&#39;</span><span class="p">,</span> <span class="s">&quot;,,a,,c,,,&quot;</span><span class="p">,</span> <span class="n">pieces</span><span class="p">,</span> <span class="kc">true</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">pieces</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="mi">2</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">pieces</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="s">&quot;a&quot;</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">pieces</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="s">&quot;c&quot;</span><span class="p">);</span>
+  <span class="n">pieces</span><span class="p">.</span><span class="n">clear</span><span class="p">();</span></pre></div></td></tr>
+
+
+<tr id="section-16"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-16">&#182;</a></div><p>test multiple split w/o clear</p></td><td class="code"><div class="highlight"><pre>  <span class="n">folly</span><span class="o">::</span><span class="n">split</span><span class="p">(</span><span class="sc">&#39;,&#39;</span><span class="p">,</span> <span class="s">&quot;,,a,,c,,,&quot;</span><span class="p">,</span> <span class="n">pieces</span><span class="p">,</span> <span class="kc">true</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">pieces</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="mi">2</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">pieces</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="s">&quot;a&quot;</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">pieces</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="s">&quot;c&quot;</span><span class="p">);</span>
+  <span class="n">folly</span><span class="o">::</span><span class="n">split</span><span class="p">(</span><span class="sc">&#39;,&#39;</span><span class="p">,</span> <span class="s">&quot;,,a,,c,,,&quot;</span><span class="p">,</span> <span class="n">pieces</span><span class="p">,</span> <span class="kc">true</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">pieces</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="mi">4</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">pieces</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span> <span class="s">&quot;a&quot;</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">pieces</span><span class="p">[</span><span class="mi">3</span><span class="p">],</span> <span class="s">&quot;c&quot;</span><span class="p">);</span>
+  <span class="n">pieces</span><span class="p">.</span><span class="n">clear</span><span class="p">();</span></pre></div></td></tr>
+
+
+<tr id="section-17"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-17">&#182;</a></div><p>test multiple split rounds</p></td><td class="code"><div class="highlight"><pre>  <span class="n">folly</span><span class="o">::</span><span class="n">split</span><span class="p">(</span><span class="s">&quot;,&quot;</span><span class="p">,</span> <span class="s">&quot;a_b,c_d&quot;</span><span class="p">,</span> <span class="n">pieces</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">pieces</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="mi">2</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">pieces</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="s">&quot;a_b&quot;</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">pieces</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="s">&quot;c_d&quot;</span><span class="p">);</span>
+  <span class="n">folly</span><span class="o">::</span><span class="n">split</span><span class="p">(</span><span class="s">&quot;_&quot;</span><span class="p">,</span> <span class="n">pieces</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">pieces2</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">pieces2</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="mi">2</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">pieces2</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="s">&quot;a&quot;</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">pieces2</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="s">&quot;b&quot;</span><span class="p">);</span>
+  <span class="n">pieces2</span><span class="p">.</span><span class="n">clear</span><span class="p">();</span>
+  <span class="n">folly</span><span class="o">::</span><span class="n">split</span><span class="p">(</span><span class="s">&quot;_&quot;</span><span class="p">,</span> <span class="n">pieces</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">pieces2</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">pieces2</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="mi">2</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">pieces2</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="s">&quot;c&quot;</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">pieces2</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="s">&quot;d&quot;</span><span class="p">);</span>
+  <span class="n">pieces</span><span class="p">.</span><span class="n">clear</span><span class="p">();</span>
+  <span class="n">pieces2</span><span class="p">.</span><span class="n">clear</span><span class="p">();</span></pre></div></td></tr>
+
+
+<tr id="section-18"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-18">&#182;</a></div><p>test splits that with multi-line delimiter</p></td><td class="code"><div class="highlight"><pre>  <span class="n">folly</span><span class="o">::</span><span class="n">split</span><span class="p">(</span><span class="s">&quot;ab&quot;</span><span class="p">,</span> <span class="s">&quot;dabcabkdbkab&quot;</span><span class="p">,</span> <span class="n">pieces</span><span class="p">,</span> <span class="kc">true</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">pieces</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="mi">3</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">pieces</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="s">&quot;d&quot;</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">pieces</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="s">&quot;c&quot;</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">pieces</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span> <span class="s">&quot;kdbk&quot;</span><span class="p">);</span>
+  <span class="n">pieces</span><span class="p">.</span><span class="n">clear</span><span class="p">();</span>
+
+  <span class="n">string</span> <span class="n">orig</span> <span class="o">=</span> <span class="s">&quot;ab2342asdfv~~!&quot;</span><span class="p">;</span>
+  <span class="n">folly</span><span class="o">::</span><span class="n">split</span><span class="p">(</span><span class="s">&quot;&quot;</span><span class="p">,</span> <span class="n">orig</span><span class="p">.</span><span class="n">c_str</span><span class="p">(),</span> <span class="n">pieces</span><span class="p">,</span> <span class="kc">true</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">pieces</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="mi">1</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">pieces</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">orig</span><span class="p">);</span>
+  <span class="n">pieces</span><span class="p">.</span><span class="n">clear</span><span class="p">();</span>
+
+  <span class="n">folly</span><span class="o">::</span><span class="n">split</span><span class="p">(</span><span class="s">&quot;452x;o38asfsajsdlfdf.j&quot;</span><span class="p">,</span> <span class="s">&quot;asfds&quot;</span><span class="p">,</span> <span class="n">pieces</span><span class="p">,</span> <span class="kc">true</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">pieces</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="mi">1</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">pieces</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="s">&quot;asfds&quot;</span><span class="p">);</span>
+  <span class="n">pieces</span><span class="p">.</span><span class="n">clear</span><span class="p">();</span>
+
+  <span class="n">folly</span><span class="o">::</span><span class="n">split</span><span class="p">(</span><span class="s">&quot;a&quot;</span><span class="p">,</span> <span class="s">&quot;&quot;</span><span class="p">,</span> <span class="n">pieces</span><span class="p">,</span> <span class="kc">true</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">pieces</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="mi">0</span><span class="p">);</span>
+  <span class="n">pieces</span><span class="p">.</span><span class="n">clear</span><span class="p">();</span>
+
+  <span class="n">folly</span><span class="o">::</span><span class="n">split</span><span class="p">(</span><span class="s">&quot;a&quot;</span><span class="p">,</span> <span class="s">&quot;&quot;</span><span class="p">,</span> <span class="n">pieces</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">pieces</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="mi">1</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">pieces</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="s">&quot;&quot;</span><span class="p">);</span>
+  <span class="n">pieces</span><span class="p">.</span><span class="n">clear</span><span class="p">();</span>
+
+  <span class="n">folly</span><span class="o">::</span><span class="n">split</span><span class="p">(</span><span class="s">&quot;a&quot;</span><span class="p">,</span> <span class="s">&quot;abcdefg&quot;</span><span class="p">,</span> <span class="n">pieces</span><span class="p">,</span> <span class="kc">true</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">pieces</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="mi">1</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">pieces</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="s">&quot;bcdefg&quot;</span><span class="p">);</span>
+  <span class="n">pieces</span><span class="p">.</span><span class="n">clear</span><span class="p">();</span>
+
+  <span class="n">orig</span> <span class="o">=</span> <span class="s">&quot;All, , your bases, are , , belong to us&quot;</span><span class="p">;</span>
+  <span class="n">folly</span><span class="o">::</span><span class="n">split</span><span class="p">(</span><span class="s">&quot;, &quot;</span><span class="p">,</span> <span class="n">orig</span><span class="p">,</span> <span class="n">pieces</span><span class="p">,</span> <span class="kc">true</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">pieces</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="mi">4</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">pieces</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="s">&quot;All&quot;</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">pieces</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="s">&quot;your bases&quot;</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">pieces</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span> <span class="s">&quot;are &quot;</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">pieces</span><span class="p">[</span><span class="mi">3</span><span class="p">],</span> <span class="s">&quot;belong to us&quot;</span><span class="p">);</span>
+  <span class="n">pieces</span><span class="p">.</span><span class="n">clear</span><span class="p">();</span>
+  <span class="n">folly</span><span class="o">::</span><span class="n">split</span><span class="p">(</span><span class="s">&quot;, &quot;</span><span class="p">,</span> <span class="n">orig</span><span class="p">,</span> <span class="n">pieces</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">pieces</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="mi">6</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">pieces</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="s">&quot;All&quot;</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">pieces</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="s">&quot;&quot;</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">pieces</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span> <span class="s">&quot;your bases&quot;</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">pieces</span><span class="p">[</span><span class="mi">3</span><span class="p">],</span> <span class="s">&quot;are &quot;</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">pieces</span><span class="p">[</span><span class="mi">4</span><span class="p">],</span> <span class="s">&quot;&quot;</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">pieces</span><span class="p">[</span><span class="mi">5</span><span class="p">],</span> <span class="s">&quot;belong to us&quot;</span><span class="p">);</span>
+  <span class="n">pieces</span><span class="p">.</span><span class="n">clear</span><span class="p">();</span>
+
+  <span class="n">orig</span> <span class="o">=</span> <span class="s">&quot;, Facebook, rul,es!, &quot;</span><span class="p">;</span>
+  <span class="n">folly</span><span class="o">::</span><span class="n">split</span><span class="p">(</span><span class="s">&quot;, &quot;</span><span class="p">,</span> <span class="n">orig</span><span class="p">,</span> <span class="n">pieces</span><span class="p">,</span> <span class="kc">true</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">pieces</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="mi">2</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">pieces</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="s">&quot;Facebook&quot;</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">pieces</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="s">&quot;rul,es!&quot;</span><span class="p">);</span>
+  <span class="n">pieces</span><span class="p">.</span><span class="n">clear</span><span class="p">();</span>
+  <span class="n">folly</span><span class="o">::</span><span class="n">split</span><span class="p">(</span><span class="s">&quot;, &quot;</span><span class="p">,</span> <span class="n">orig</span><span class="p">,</span> <span class="n">pieces</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">pieces</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="mi">4</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">pieces</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="s">&quot;&quot;</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">pieces</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="s">&quot;Facebook&quot;</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">pieces</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span> <span class="s">&quot;rul,es!&quot;</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">pieces</span><span class="p">[</span><span class="mi">3</span><span class="p">],</span> <span class="s">&quot;&quot;</span><span class="p">);</span>
+  <span class="n">pieces</span><span class="p">.</span><span class="n">clear</span><span class="p">();</span>
+
+  <span class="k">const</span> <span class="kt">char</span><span class="o">*</span> <span class="n">str</span> <span class="o">=</span> <span class="s">&quot;a,b&quot;</span><span class="p">;</span>
+  <span class="n">folly</span><span class="o">::</span><span class="n">split</span><span class="p">(</span><span class="sc">&#39;,&#39;</span><span class="p">,</span> <span class="n">StringPiece</span><span class="p">(</span><span class="n">str</span><span class="p">),</span> <span class="n">pieces</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">pieces</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="mi">2</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">pieces</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="s">&quot;a&quot;</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">pieces</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="s">&quot;b&quot;</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">pieces</span><span class="p">[</span><span class="mi">0</span><span class="p">].</span><span class="n">start</span><span class="p">(),</span> <span class="n">str</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">pieces</span><span class="p">[</span><span class="mi">1</span><span class="p">].</span><span class="n">start</span><span class="p">(),</span> <span class="n">str</span> <span class="o">+</span> <span class="mi">2</span><span class="p">);</span>
+
+  <span class="n">std</span><span class="o">::</span><span class="n">set</span><span class="o">&lt;</span><span class="n">StringPiece</span><span class="o">&gt;</span> <span class="n">unique</span><span class="p">;</span>
+  <span class="n">folly</span><span class="o">::</span><span class="n">splitTo</span><span class="o">&lt;</span><span class="n">StringPiece</span><span class="o">&gt;</span><span class="p">(</span><span class="s">&quot;:&quot;</span><span class="p">,</span> <span class="s">&quot;asd:bsd:asd:asd:bsd:csd::asd&quot;</span><span class="p">,</span>
+    <span class="n">std</span><span class="o">::</span><span class="n">inserter</span><span class="p">(</span><span class="n">unique</span><span class="p">,</span> <span class="n">unique</span><span class="p">.</span><span class="n">begin</span><span class="p">()),</span> <span class="kc">true</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">unique</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="mi">3</span><span class="p">);</span>
+  <span class="k">if</span> <span class="p">(</span><span class="n">unique</span><span class="p">.</span><span class="n">size</span><span class="p">()</span> <span class="o">==</span> <span class="mi">3</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="o">*</span><span class="n">unique</span><span class="p">.</span><span class="n">begin</span><span class="p">(),</span> <span class="s">&quot;asd&quot;</span><span class="p">);</span>
+    <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="o">*--</span><span class="n">unique</span><span class="p">.</span><span class="n">end</span><span class="p">(),</span> <span class="s">&quot;csd&quot;</span><span class="p">);</span>
+  <span class="p">}</span>
+
+  <span class="n">VectorType</span><span class="o">&lt;</span><span class="n">fbstring</span><span class="p">,</span><span class="n">std</span><span class="o">::</span><span class="n">allocator</span><span class="o">&lt;</span><span class="n">fbstring</span><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="n">blah</span><span class="p">;</span>
+  <span class="n">folly</span><span class="o">::</span><span class="n">split</span><span class="p">(</span><span class="sc">&#39;-&#39;</span><span class="p">,</span> <span class="s">&quot;a-b-c-d-f-e&quot;</span><span class="p">,</span> <span class="n">blah</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">blah</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="mi">6</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">Split</span><span class="p">,</span> <span class="n">split_vector</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">splitTest</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&gt;</span><span class="p">();</span>
+<span class="p">}</span>
+<span class="n">TEST</span><span class="p">(</span><span class="n">Split</span><span class="p">,</span> <span class="n">split_fbvector</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">splitTest</span><span class="o">&lt;</span><span class="n">folly</span><span class="o">::</span><span class="n">fbvector</span><span class="o">&gt;</span><span class="p">();</span>
+<span class="p">}</span>
+<span class="n">TEST</span><span class="p">(</span><span class="n">Split</span><span class="p">,</span> <span class="n">pieces_vector</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">piecesTest</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&gt;</span><span class="p">();</span>
+<span class="p">}</span>
+<span class="n">TEST</span><span class="p">(</span><span class="n">Split</span><span class="p">,</span> <span class="n">pieces_fbvector</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">piecesTest</span><span class="o">&lt;</span><span class="n">folly</span><span class="o">::</span><span class="n">fbvector</span><span class="o">&gt;</span><span class="p">();</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">String</span><span class="p">,</span> <span class="n">hexlify</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">string</span> <span class="n">input1</span> <span class="o">=</span> <span class="s">&quot;0123&quot;</span><span class="p">;</span>
+  <span class="n">string</span> <span class="n">output1</span><span class="p">;</span>
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">hexlify</span><span class="p">(</span><span class="n">input1</span><span class="p">,</span> <span class="n">output1</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">output1</span><span class="p">,</span> <span class="s">&quot;30313233&quot;</span><span class="p">);</span>
+
+  <span class="n">fbstring</span> <span class="n">input2</span> <span class="o">=</span> <span class="s">&quot;abcdefg&quot;</span><span class="p">;</span>
+  <span class="n">input2</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+  <span class="n">input2</span><span class="p">[</span><span class="mi">3</span><span class="p">]</span> <span class="o">=</span> <span class="mh">0xff</span><span class="p">;</span>
+  <span class="n">input2</span><span class="p">[</span><span class="mi">5</span><span class="p">]</span> <span class="o">=</span> <span class="mh">0xb6</span><span class="p">;</span>
+  <span class="n">fbstring</span> <span class="n">output2</span><span class="p">;</span>
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">hexlify</span><span class="p">(</span><span class="n">input2</span><span class="p">,</span> <span class="n">output2</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">output2</span><span class="p">,</span> <span class="s">&quot;610063ff65b667&quot;</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">String</span><span class="p">,</span> <span class="n">unhexlify</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">string</span> <span class="n">input1</span> <span class="o">=</span> <span class="s">&quot;30313233&quot;</span><span class="p">;</span>
+  <span class="n">string</span> <span class="n">output1</span><span class="p">;</span>
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">unhexlify</span><span class="p">(</span><span class="n">input1</span><span class="p">,</span> <span class="n">output1</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">output1</span><span class="p">,</span> <span class="s">&quot;0123&quot;</span><span class="p">);</span>
+
+  <span class="n">fbstring</span> <span class="n">input2</span> <span class="o">=</span> <span class="s">&quot;610063ff65b667&quot;</span><span class="p">;</span>
+  <span class="n">fbstring</span> <span class="n">output2</span><span class="p">;</span>
+  <span class="n">EXPECT_TRUE</span><span class="p">(</span><span class="n">unhexlify</span><span class="p">(</span><span class="n">input2</span><span class="p">,</span> <span class="n">output2</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">output2</span><span class="p">.</span><span class="n">size</span><span class="p">(),</span> <span class="mi">7</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">output2</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="sc">&#39;a&#39;</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">output2</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="mi">0</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">output2</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span> <span class="sc">&#39;c&#39;</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">output2</span><span class="p">[</span><span class="mi">3</span><span class="p">]</span> <span class="o">&amp;</span> <span class="mh">0xff</span><span class="p">,</span> <span class="mh">0xff</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">output2</span><span class="p">[</span><span class="mi">4</span><span class="p">],</span> <span class="sc">&#39;e&#39;</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">output2</span><span class="p">[</span><span class="mi">5</span><span class="p">]</span> <span class="o">&amp;</span> <span class="mh">0xff</span><span class="p">,</span> <span class="mh">0xb6</span><span class="p">);</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="n">output2</span><span class="p">[</span><span class="mi">6</span><span class="p">],</span> <span class="sc">&#39;g&#39;</span><span class="p">);</span>
+
+  <span class="n">string</span> <span class="n">input3</span> <span class="o">=</span> <span class="s">&quot;x&quot;</span><span class="p">;</span>
+  <span class="n">string</span> <span class="n">output3</span><span class="p">;</span>
+  <span class="n">EXPECT_FALSE</span><span class="p">(</span><span class="n">unhexlify</span><span class="p">(</span><span class="n">input3</span><span class="p">,</span> <span class="n">output3</span><span class="p">));</span>
+
+  <span class="n">string</span> <span class="n">input4</span> <span class="o">=</span> <span class="s">&quot;xy&quot;</span><span class="p">;</span>
+  <span class="n">string</span> <span class="n">output4</span><span class="p">;</span>
+  <span class="n">EXPECT_FALSE</span><span class="p">(</span><span class="n">unhexlify</span><span class="p">(</span><span class="n">input4</span><span class="p">,</span> <span class="n">output4</span><span class="p">));</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">String</span><span class="p">,</span> <span class="n">backslashify</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;abc&quot;</span><span class="p">,</span> <span class="n">string</span><span class="p">(</span><span class="s">&quot;abc&quot;</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;abc&quot;</span><span class="p">,</span> <span class="n">backslashify</span><span class="p">(</span><span class="n">string</span><span class="p">(</span><span class="s">&quot;abc&quot;</span><span class="p">)));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;abc</span><span class="se">\\</span><span class="s">r&quot;</span><span class="p">,</span> <span class="n">backslashify</span><span class="p">(</span><span class="n">string</span><span class="p">(</span><span class="s">&quot;abc</span><span class="se">\r</span><span class="s">&quot;</span><span class="p">)));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;abc</span><span class="se">\\</span><span class="s">x0d&quot;</span><span class="p">,</span> <span class="n">backslashify</span><span class="p">(</span><span class="n">string</span><span class="p">(</span><span class="s">&quot;abc</span><span class="se">\r</span><span class="s">&quot;</span><span class="p">),</span> <span class="kc">true</span><span class="p">));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;</span><span class="se">\\</span><span class="s">0</span><span class="se">\\</span><span class="s">0&quot;</span><span class="p">,</span> <span class="n">backslashify</span><span class="p">(</span><span class="n">string</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="sc">&#39;\0&#39;</span><span class="p">)));</span>
+<span class="p">}</span>
+
+<span class="n">TEST</span><span class="p">(</span><span class="n">String</span><span class="p">,</span> <span class="n">humanify</span><span class="p">)</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-19"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-19">&#182;</a></div><p>Simple cases; output is obvious.</p></td><td class="code"><div class="highlight"><pre>  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;abc&quot;</span><span class="p">,</span> <span class="n">humanify</span><span class="p">(</span><span class="n">string</span><span class="p">(</span><span class="s">&quot;abc&quot;</span><span class="p">)));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;abc</span><span class="se">\\\\</span><span class="s">r&quot;</span><span class="p">,</span> <span class="n">humanify</span><span class="p">(</span><span class="n">string</span><span class="p">(</span><span class="s">&quot;abc</span><span class="se">\\</span><span class="s">r&quot;</span><span class="p">)));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;0xff&quot;</span><span class="p">,</span> <span class="n">humanify</span><span class="p">(</span><span class="n">string</span><span class="p">(</span><span class="s">&quot;</span><span class="se">\xff</span><span class="s">&quot;</span><span class="p">)));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;abc</span><span class="se">\\</span><span class="s">xff&quot;</span><span class="p">,</span> <span class="n">humanify</span><span class="p">(</span><span class="n">string</span><span class="p">(</span><span class="s">&quot;abc</span><span class="se">\xff</span><span class="s">&quot;</span><span class="p">)));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;abc</span><span class="se">\\</span><span class="s">b&quot;</span><span class="p">,</span> <span class="n">humanify</span><span class="p">(</span><span class="n">string</span><span class="p">(</span><span class="s">&quot;abc</span><span class="se">\b</span><span class="s">&quot;</span><span class="p">)));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;0x00&quot;</span><span class="p">,</span> <span class="n">humanify</span><span class="p">(</span><span class="n">string</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="sc">&#39;\0&#39;</span><span class="p">)));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;0x0000&quot;</span><span class="p">,</span> <span class="n">humanify</span><span class="p">(</span><span class="n">string</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="sc">&#39;\0&#39;</span><span class="p">)));</span></pre></div></td></tr>
+
+
+<tr id="section-20"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-20">&#182;</a></div><p>Mostly printable, so backslash!  80, 60, and 40% printable, respectively</p></td><td class="code"><div class="highlight"><pre>  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;aaaa</span><span class="se">\\</span><span class="s">xff&quot;</span><span class="p">,</span> <span class="n">humanify</span><span class="p">(</span><span class="n">string</span><span class="p">(</span><span class="s">&quot;aaaa</span><span class="se">\xff</span><span class="s">&quot;</span><span class="p">)));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;aaa</span><span class="se">\\</span><span class="s">xff</span><span class="se">\\</span><span class="s">xff&quot;</span><span class="p">,</span> <span class="n">humanify</span><span class="p">(</span><span class="n">string</span><span class="p">(</span><span class="s">&quot;aaa</span><span class="se">\xff\xff</span><span class="s">&quot;</span><span class="p">)));</span>
+  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;aa</span><span class="se">\\</span><span class="s">xff</span><span class="se">\\</span><span class="s">xff</span><span class="se">\\</span><span class="s">xff&quot;</span><span class="p">,</span> <span class="n">humanify</span><span class="p">(</span><span class="n">string</span><span class="p">(</span><span class="s">&quot;aa</span><span class="se">\xff\xff\xff</span><span class="s">&quot;</span><span class="p">)));</span></pre></div></td></tr>
+
+
+<tr id="section-21"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-21">&#182;</a></div><p>20% printable, and the printable portion isn't the prefix; hexify!</p></td><td class="code"><div class="highlight"><pre>  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;0xff61ffffff&quot;</span><span class="p">,</span> <span class="n">humanify</span><span class="p">(</span><span class="n">string</span><span class="p">(</span><span class="s">&quot;</span><span class="se">\xff</span><span class="s">&quot;</span> <span class="s">&quot;a</span><span class="se">\xff\xff\xff</span><span class="s">&quot;</span><span class="p">)));</span></pre></div></td></tr>
+
+
+<tr id="section-22"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-22">&#182;</a></div><p>Same as previous, except swap first two chars; prefix is
+printable and within the threshold, so backslashify.</p></td><td class="code"><div class="highlight"><pre>  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;a</span><span class="se">\\</span><span class="s">xff</span><span class="se">\\</span><span class="s">xff</span><span class="se">\\</span><span class="s">xff</span><span class="se">\\</span><span class="s">xff&quot;</span><span class="p">,</span> <span class="n">humanify</span><span class="p">(</span><span class="n">string</span><span class="p">(</span><span class="s">&quot;a</span><span class="se">\xff\xff\xff\xff</span><span class="s">&quot;</span><span class="p">)));</span></pre></div></td></tr>
+
+
+<tr id="section-23"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-23">&#182;</a></div><p>Just too much unprintable; hex, despite prefix.</p></td><td class="code"><div class="highlight"><pre>  <span class="n">EXPECT_EQ</span><span class="p">(</span><span class="s">&quot;0x61ffffffffff&quot;</span><span class="p">,</span> <span class="n">humanify</span><span class="p">(</span><span class="n">string</span><span class="p">(</span><span class="s">&quot;a</span><span class="se">\xff\xff\xff\xff\xff</span><span class="s">&quot;</span><span class="p">)));</span>
+<span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-24"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-24">&#182;</a></div><p>////////////////////////////////////////////////////////////////////</p></td><td class="code"><div class="highlight"><pre><span class="n">BENCHMARK</span><span class="p">(</span><span class="n">splitOnSingleChar</span><span class="p">,</span> <span class="n">iters</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">const</span> <span class="n">std</span><span class="o">::</span><span class="n">string</span> <span class="n">line</span> <span class="o">=</span> <span class="s">&quot;one:two:three:four&quot;</span><span class="p">;</span>
+  <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">iters</span> <span class="o">&lt;&lt;</span> <span class="mi">4</span><span class="p">;</span> <span class="o">++</span><span class="n">i</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="n">StringPiece</span><span class="o">&gt;</span> <span class="n">pieces</span><span class="p">;</span>
+    <span class="n">folly</span><span class="o">::</span><span class="n">split</span><span class="p">(</span><span class="sc">&#39;:&#39;</span><span class="p">,</span> <span class="n">line</span><span class="p">,</span> <span class="n">pieces</span><span class="p">);</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="n">BENCHMARK</span><span class="p">(</span><span class="n">splitStr</span><span class="p">,</span> <span class="n">iters</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">const</span> <span class="n">std</span><span class="o">::</span><span class="n">string</span> <span class="n">line</span> <span class="o">=</span> <span class="s">&quot;one-*-two-*-three-*-four&quot;</span><span class="p">;</span>
+  <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">iters</span> <span class="o">&lt;&lt;</span> <span class="mi">4</span><span class="p">;</span> <span class="o">++</span><span class="n">i</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="n">StringPiece</span><span class="o">&gt;</span> <span class="n">pieces</span><span class="p">;</span>
+    <span class="n">folly</span><span class="o">::</span><span class="n">split</span><span class="p">(</span><span class="s">&quot;-*-&quot;</span><span class="p">,</span> <span class="n">line</span><span class="p">,</span> <span class="n">pieces</span><span class="p">);</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="n">BENCHMARK</span><span class="p">(</span><span class="n">boost_splitOnSingleChar</span><span class="p">,</span> <span class="n">iters</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">std</span><span class="o">::</span><span class="n">string</span> <span class="n">line</span> <span class="o">=</span> <span class="s">&quot;one:two:three:four&quot;</span><span class="p">;</span>
+  <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">iters</span> <span class="o">&lt;&lt;</span> <span class="mi">4</span><span class="p">;</span> <span class="o">++</span><span class="n">i</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="n">boost</span><span class="o">::</span><span class="n">iterator_range</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="o">::</span><span class="n">iterator</span><span class="o">&gt;&gt;</span> <span class="n">pieces</span><span class="p">;</span>
+    <span class="n">boost</span><span class="o">::</span><span class="n">split</span><span class="p">(</span><span class="n">pieces</span><span class="p">,</span> <span class="n">line</span><span class="p">,</span> <span class="p">[]</span> <span class="p">(</span><span class="kt">char</span> <span class="n">c</span><span class="p">)</span> <span class="p">{</span> <span class="k">return</span> <span class="n">c</span> <span class="o">==</span> <span class="sc">&#39;:&#39;</span><span class="p">;</span> <span class="p">});</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="kt">int</span> <span class="n">main</span><span class="p">(</span><span class="kt">int</span> <span class="n">argc</span><span class="p">,</span> <span class="kt">char</span> <span class="o">*</span><span class="n">argv</span><span class="p">[])</span> <span class="p">{</span>
+  <span class="n">testing</span><span class="o">::</span><span class="n">InitGoogleTest</span><span class="p">(</span><span class="o">&amp;</span><span class="n">argc</span><span class="p">,</span> <span class="n">argv</span><span class="p">);</span>
+  <span class="n">google</span><span class="o">::</span><span class="n">ParseCommandLineFlags</span><span class="p">(</span><span class="o">&amp;</span><span class="n">argc</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">argv</span><span class="p">,</span> <span class="kc">true</span><span class="p">);</span>
+  <span class="k">auto</span> <span class="n">ret</span> <span class="o">=</span> <span class="n">RUN_ALL_TESTS</span><span class="p">();</span>
+  <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">ret</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">initBenchmark</span><span class="p">();</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">FLAGS_benchmark</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">folly</span><span class="o">::</span><span class="n">runBenchmarks</span><span class="p">();</span>
+    <span class="p">}</span>
+  <span class="p">}</span>
+  <span class="k">return</span> <span class="n">ret</span><span class="p">;</span>
+<span class="p">}</span>
+
+</pre></div></td></tr>
+
+</tbody>
+</table>
+</div>
+
+</body>
+<script>docas={repo:"joekychen/folly",depth:2}</script>
+<script>document.write('<script src=' + ('__proto__' in {} ? 'http://cdnjs.cloudflare.com/ajax/libs/zepto/1.0rc1/zepto.min.js' : 'https://ajax.googleapis.com/ajax/libs/jquery/1.7.2/jquery.min.js')+'><\\/script>')</script>
+<script src="http://baoshan.github.com/moment/min/moment.min.js"></script>
+<script src="../../javascript/docco.min.js"></script>
+</html>

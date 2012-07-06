@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html><head><title>joekychen/folly » folly › ThreadLocal.h
+
+</title>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+<meta name="generator" content="Docco">
+<link rel="stylesheet" media="all" href="../stylesheets/docco.min.css" />
+
+
+</head>
+<body>
+<div id="container">
+<div id="background"></div>
+<table cellpadding="0" cellspacing="0">
+<thead><tr><th class="docs"><a id="home" href="../index.html"></a><h1>ThreadLocal.h</h1></th><th class="code"></th></tr></thead>
+<tbody>
+
+
+<tr id="section-1"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-1">&#182;</a></div></td><td class="code"><div class="highlight"><pre><span class="cm">/*</span>
+<span class="cm"> * Copyright 2012 Facebook, Inc.</span>
+<span class="cm"> *</span>
+<span class="cm"> * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span class="cm"> * you may not use this file except in compliance with the License.</span>
+<span class="cm"> * You may obtain a copy of the License at</span>
+<span class="cm"> *</span>
+<span class="cm"> *   http://www.apache.org/licenses/LICENSE-2.0</span>
+<span class="cm"> *</span>
+<span class="cm"> * Unless required by applicable law or agreed to in writing, software</span>
+<span class="cm"> * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span class="cm"> * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span class="cm"> * See the License for the specific language governing permissions and</span>
+<span class="cm"> * limitations under the License.</span>
+<span class="cm"> */</span>
+
+<span class="cm">/**</span>
+<span class="cm"> * Improved thread local storage for non-trivial types (similar speed as</span>
+<span class="cm"> * pthread_getspecific but only consumes a single pthread_key_t, and 4x faster</span>
+<span class="cm"> * than boost::thread_specific_ptr).</span>
+<span class="cm"> *</span>
+<span class="cm"> * Also includes an accessor interface to walk all the thread local child</span>
+<span class="cm"> * objects of a parent.  accessAllThreads() initializes an accessor which holds</span>
+<span class="cm"> * a global lock *that blocks all creation and destruction of ThreadLocal</span>
+<span class="cm"> * objects with the same Tag* and can be used as an iterable container.</span>
+<span class="cm"> *</span>
+<span class="cm"> * Intended use is for frequent write, infrequent read data access patterns such</span>
+<span class="cm"> * as counters.</span>
+<span class="cm"> *</span>
+<span class="cm"> * There are two classes here - ThreadLocal and ThreadLocalPtr.  ThreadLocalPtr</span>
+<span class="cm"> * has semantics similar to boost::thread_specific_ptr. ThreadLocal is a thin</span>
+<span class="cm"> * wrapper around ThreadLocalPtr that manages allocation automatically.</span>
+<span class="cm"> *</span>
+<span class="cm"> * @author Spencer Ahrens (sahrens)</span>
+<span class="cm"> */</span>
+
+<span class="cp">#ifndef FOLLY_THREADLOCAL_H_</span>
+<span class="cp">#define FOLLY_THREADLOCAL_H_</span>
+
+<span class="cp">#include &quot;folly/Portability.h&quot;</span>
+<span class="cp">#include &lt;boost/iterator/iterator_facade.hpp&gt;</span>
+<span class="cp">#include &quot;folly/Likely.h&quot;</span>
+<span class="cp">#include &lt;type_traits&gt;</span></pre></div></td></tr>
+
+
+<tr id="section-2"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-2">&#182;</a></div><p>Use noexcept on gcc 4.6 or higher</p></td><td class="code"><div class="highlight"><pre><span class="cp">#undef FOLLY_NOEXCEPT</span>
+<span class="cp">#ifdef __GNUC__</span>
+<span class="cp"># ifdef HAVE_FEATURES_H</span>
+<span class="cp">#  include &lt;features.h&gt;</span>
+<span class="cp">#  if __GNUC_PREREQ(4,6)</span>
+<span class="cp">#    define FOLLY_NOEXCEPT noexcept</span>
+<span class="cp">#    define FOLLY_ASSERT(x) x</span>
+<span class="cp">#  endif</span>
+<span class="cp"># endif</span>
+<span class="cp">#endif</span>
+
+<span class="cp">#ifndef FOLLY_NOEXCEPT</span>
+<span class="cp">#  define FOLLY_NOEXCEPT</span>
+<span class="cp">#  define FOLLY_ASSERT(x) </span><span class="cm">/**/</span><span class="cp"></span>
+<span class="cp">#endif</span>
+
+<span class="n">namespace</span> <span class="n">folly</span> <span class="p">{</span>
+<span class="k">enum</span> <span class="n">class</span> <span class="n">TLPDestructionMode</span> <span class="p">{</span>
+  <span class="n">THIS_THREAD</span><span class="p">,</span>
+  <span class="n">ALL_THREADS</span>
+<span class="p">};</span>
+<span class="p">}</span>  <span class="c1">// namespace</span>
+
+<span class="cp">#include &quot;folly/detail/ThreadLocalDetail.h&quot;</span>
+
+<span class="n">namespace</span> <span class="n">folly</span> <span class="p">{</span>
+
+<span class="n">template</span><span class="o">&lt;</span><span class="n">class</span> <span class="n">T</span><span class="p">,</span> <span class="n">class</span> <span class="n">Tag</span><span class="o">&gt;</span> <span class="n">class</span> <span class="n">ThreadLocalPtr</span><span class="p">;</span>
+
+<span class="n">template</span><span class="o">&lt;</span><span class="n">class</span> <span class="n">T</span><span class="p">,</span> <span class="n">class</span> <span class="n">Tag</span><span class="o">=</span><span class="kt">void</span><span class="o">&gt;</span>
+<span class="n">class</span> <span class="n">ThreadLocal</span> <span class="p">{</span>
+ <span class="nl">public:</span>
+  <span class="n">ThreadLocal</span><span class="p">()</span> <span class="p">{</span> <span class="p">}</span>
+
+  <span class="n">T</span><span class="o">*</span> <span class="n">get</span><span class="p">()</span> <span class="k">const</span> <span class="p">{</span>
+    <span class="n">T</span><span class="o">*</span> <span class="n">ptr</span> <span class="o">=</span> <span class="n">tlp_</span><span class="p">.</span><span class="n">get</span><span class="p">();</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">UNLIKELY</span><span class="p">(</span><span class="n">ptr</span> <span class="o">==</span> <span class="nb">NULL</span><span class="p">))</span> <span class="p">{</span>
+      <span class="n">ptr</span> <span class="o">=</span> <span class="n">new</span> <span class="n">T</span><span class="p">();</span>
+      <span class="n">tlp_</span><span class="p">.</span><span class="n">reset</span><span class="p">(</span><span class="n">ptr</span><span class="p">);</span>
+    <span class="p">}</span>
+    <span class="k">return</span> <span class="n">ptr</span><span class="p">;</span>
+  <span class="p">}</span>
+
+  <span class="n">T</span><span class="o">*</span> <span class="n">operator</span><span class="o">-&gt;</span><span class="p">()</span> <span class="k">const</span> <span class="p">{</span>
+    <span class="k">return</span> <span class="n">get</span><span class="p">();</span>
+  <span class="p">}</span>
+
+  <span class="n">T</span><span class="o">&amp;</span> <span class="n">operator</span><span class="o">*</span><span class="p">()</span> <span class="k">const</span> <span class="p">{</span>
+    <span class="k">return</span> <span class="o">*</span><span class="n">get</span><span class="p">();</span>
+  <span class="p">}</span>
+
+  <span class="kt">void</span> <span class="n">reset</span><span class="p">(</span><span class="n">T</span><span class="o">*</span> <span class="n">newPtr</span> <span class="o">=</span> <span class="nb">NULL</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">tlp_</span><span class="p">.</span><span class="n">reset</span><span class="p">(</span><span class="n">newPtr</span><span class="p">);</span>
+  <span class="p">}</span>
+
+  <span class="k">typedef</span> <span class="kr">typename</span> <span class="n">ThreadLocalPtr</span><span class="o">&lt;</span><span class="n">T</span><span class="p">,</span><span class="n">Tag</span><span class="o">&gt;::</span><span class="n">Accessor</span> <span class="n">Accessor</span><span class="p">;</span>
+  <span class="n">Accessor</span> <span class="n">accessAllThreads</span><span class="p">()</span> <span class="k">const</span> <span class="p">{</span>
+    <span class="k">return</span> <span class="n">tlp_</span><span class="p">.</span><span class="n">accessAllThreads</span><span class="p">();</span>
+  <span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-3"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-3">&#182;</a></div><p>movable</p></td><td class="code"><div class="highlight"><pre>  <span class="n">ThreadLocal</span><span class="p">(</span><span class="n">ThreadLocal</span><span class="o">&amp;&amp;</span><span class="p">)</span> <span class="o">=</span> <span class="k">default</span><span class="p">;</span>
+  <span class="n">ThreadLocal</span><span class="o">&amp;</span> <span class="n">operator</span><span class="o">=</span><span class="p">(</span><span class="n">ThreadLocal</span><span class="o">&amp;&amp;</span><span class="p">)</span> <span class="o">=</span> <span class="k">default</span><span class="p">;</span>
+
+ <span class="nl">private:</span></pre></div></td></tr>
+
+
+<tr id="section-4"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-4">&#182;</a></div><p>non-copyable</p></td><td class="code"><div class="highlight"><pre>  <span class="n">ThreadLocal</span><span class="p">(</span><span class="k">const</span> <span class="n">ThreadLocal</span><span class="o">&amp;</span><span class="p">)</span> <span class="o">=</span> <span class="n">delete</span><span class="p">;</span>
+  <span class="n">ThreadLocal</span><span class="o">&amp;</span> <span class="n">operator</span><span class="o">=</span><span class="p">(</span><span class="k">const</span> <span class="n">ThreadLocal</span><span class="o">&amp;</span><span class="p">)</span> <span class="o">=</span> <span class="n">delete</span><span class="p">;</span>
+
+  <span class="n">mutable</span> <span class="n">ThreadLocalPtr</span><span class="o">&lt;</span><span class="n">T</span><span class="p">,</span><span class="n">Tag</span><span class="o">&gt;</span> <span class="n">tlp_</span><span class="p">;</span>
+<span class="p">};</span>
+
+<span class="cm">/*</span>
+<span class="cm"> * The idea here is that __thread is faster than pthread_getspecific, so we</span>
+<span class="cm"> * keep a __thread array of pointers to objects (ThreadEntry::elements) where</span>
+<span class="cm"> * each array has an index for each unique instance of the ThreadLocalPtr</span>
+<span class="cm"> * object.  Each ThreadLocalPtr object has a unique id that is an index into</span>
+<span class="cm"> * these arrays so we can fetch the correct object from thread local storage</span>
+<span class="cm"> * very efficiently.</span>
+<span class="cm"> *</span>
+<span class="cm"> * In order to prevent unbounded growth of the id space and thus huge</span>
+<span class="cm"> * ThreadEntry::elements, arrays, for example due to continuous creation and</span>
+<span class="cm"> * destruction of ThreadLocalPtr objects, we keep a set of all active</span>
+<span class="cm"> * instances.  When an instance is destroyed we remove it from the active</span>
+<span class="cm"> * set and insert the id into freeIds_ for reuse.  These operations require a</span>
+<span class="cm"> * global mutex, but only happen at construction and destruction time.</span>
+<span class="cm"> *</span>
+<span class="cm"> * We use a single global pthread_key_t per Tag to manage object destruction and</span>
+<span class="cm"> * memory cleanup upon thread exit because there is a finite number of</span>
+<span class="cm"> * pthread_key_t&#39;s available per machine.</span>
+<span class="cm"> */</span>
+
+<span class="n">template</span><span class="o">&lt;</span><span class="n">class</span> <span class="n">T</span><span class="p">,</span> <span class="n">class</span> <span class="n">Tag</span><span class="o">=</span><span class="kt">void</span><span class="o">&gt;</span>
+<span class="n">class</span> <span class="n">ThreadLocalPtr</span> <span class="p">{</span>
+ <span class="nl">public:</span>
+  <span class="n">ThreadLocalPtr</span><span class="p">()</span> <span class="o">:</span> <span class="n">id_</span><span class="p">(</span><span class="n">threadlocal_detail</span><span class="o">::</span><span class="n">StaticMeta</span><span class="o">&lt;</span><span class="n">Tag</span><span class="o">&gt;::</span><span class="n">create</span><span class="p">())</span> <span class="p">{</span> <span class="p">}</span>
+
+  <span class="n">ThreadLocalPtr</span><span class="p">(</span><span class="n">ThreadLocalPtr</span><span class="o">&amp;&amp;</span> <span class="n">other</span><span class="p">)</span> <span class="o">:</span> <span class="n">id_</span><span class="p">(</span><span class="n">other</span><span class="p">.</span><span class="n">id_</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">other</span><span class="p">.</span><span class="n">id_</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+  <span class="p">}</span>
+
+  <span class="n">ThreadLocalPtr</span><span class="o">&amp;</span> <span class="n">operator</span><span class="o">=</span><span class="p">(</span><span class="n">ThreadLocalPtr</span><span class="o">&amp;&amp;</span> <span class="n">other</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">assert</span><span class="p">(</span><span class="n">this</span> <span class="o">!=</span> <span class="o">&amp;</span><span class="n">other</span><span class="p">);</span>
+    <span class="n">destroy</span><span class="p">();</span>
+    <span class="n">id_</span> <span class="o">=</span> <span class="n">other</span><span class="p">.</span><span class="n">id_</span><span class="p">;</span>
+    <span class="n">other</span><span class="p">.</span><span class="n">id_</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+    <span class="k">return</span> <span class="o">*</span><span class="n">this</span><span class="p">;</span>
+  <span class="p">}</span>
+
+  <span class="o">~</span><span class="n">ThreadLocalPtr</span><span class="p">()</span> <span class="p">{</span>
+    <span class="n">destroy</span><span class="p">();</span>
+  <span class="p">}</span>
+
+  <span class="n">T</span><span class="o">*</span> <span class="n">get</span><span class="p">()</span> <span class="k">const</span> <span class="p">{</span>
+    <span class="k">return</span> <span class="n">static_cast</span><span class="o">&lt;</span><span class="n">T</span><span class="o">*&gt;</span><span class="p">(</span><span class="n">threadlocal_detail</span><span class="o">::</span><span class="n">StaticMeta</span><span class="o">&lt;</span><span class="n">Tag</span><span class="o">&gt;::</span><span class="n">get</span><span class="p">(</span><span class="n">id_</span><span class="p">).</span><span class="n">ptr</span><span class="p">);</span>
+  <span class="p">}</span>
+
+  <span class="n">T</span><span class="o">*</span> <span class="n">operator</span><span class="o">-&gt;</span><span class="p">()</span> <span class="k">const</span> <span class="p">{</span>
+    <span class="k">return</span> <span class="n">get</span><span class="p">();</span>
+  <span class="p">}</span>
+
+  <span class="n">T</span><span class="o">&amp;</span> <span class="n">operator</span><span class="o">*</span><span class="p">()</span> <span class="k">const</span> <span class="p">{</span>
+    <span class="k">return</span> <span class="o">*</span><span class="n">get</span><span class="p">();</span>
+  <span class="p">}</span>
+
+  <span class="kt">void</span> <span class="n">reset</span><span class="p">(</span><span class="n">T</span><span class="o">*</span> <span class="n">newPtr</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">threadlocal_detail</span><span class="o">::</span><span class="n">ElementWrapper</span><span class="o">&amp;</span> <span class="n">w</span> <span class="o">=</span>
+      <span class="n">threadlocal_detail</span><span class="o">::</span><span class="n">StaticMeta</span><span class="o">&lt;</span><span class="n">Tag</span><span class="o">&gt;::</span><span class="n">get</span><span class="p">(</span><span class="n">id_</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">w</span><span class="p">.</span><span class="n">ptr</span> <span class="o">!=</span> <span class="n">newPtr</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">w</span><span class="p">.</span><span class="n">dispose</span><span class="p">(</span><span class="n">TLPDestructionMode</span><span class="o">::</span><span class="n">THIS_THREAD</span><span class="p">);</span>
+      <span class="n">w</span><span class="p">.</span><span class="n">set</span><span class="p">(</span><span class="n">newPtr</span><span class="p">);</span>
+    <span class="p">}</span>
+  <span class="p">}</span>
+
+  <span class="cm">/**</span>
+<span class="cm">   * reset() with a custom deleter:</span>
+<span class="cm">   * deleter(T* ptr, TLPDestructionMode mode)</span>
+<span class="cm">   * &quot;mode&quot; is ALL_THREADS if we&#39;re destructing this ThreadLocalPtr (and thus</span>
+<span class="cm">   * deleting pointers for all threads), and THIS_THREAD if we&#39;re only deleting</span>
+<span class="cm">   * the member for one thread (because of thread exit or reset())</span>
+<span class="cm">   */</span>
+  <span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">Deleter</span><span class="o">&gt;</span>
+  <span class="kt">void</span> <span class="n">reset</span><span class="p">(</span><span class="n">T</span><span class="o">*</span> <span class="n">newPtr</span><span class="p">,</span> <span class="n">Deleter</span> <span class="n">deleter</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">threadlocal_detail</span><span class="o">::</span><span class="n">ElementWrapper</span><span class="o">&amp;</span> <span class="n">w</span> <span class="o">=</span>
+      <span class="n">threadlocal_detail</span><span class="o">::</span><span class="n">StaticMeta</span><span class="o">&lt;</span><span class="n">Tag</span><span class="o">&gt;::</span><span class="n">get</span><span class="p">(</span><span class="n">id_</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">w</span><span class="p">.</span><span class="n">ptr</span> <span class="o">!=</span> <span class="n">newPtr</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">w</span><span class="p">.</span><span class="n">dispose</span><span class="p">(</span><span class="n">TLPDestructionMode</span><span class="o">::</span><span class="n">THIS_THREAD</span><span class="p">);</span>
+      <span class="n">w</span><span class="p">.</span><span class="n">set</span><span class="p">(</span><span class="n">newPtr</span><span class="p">,</span> <span class="n">deleter</span><span class="p">);</span>
+    <span class="p">}</span>
+  <span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-5"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-5">&#182;</a></div><p>Holds a global lock for iteration through all thread local child objects.
+Can be used as an iterable container.
+Use accessAllThreads() to obtain one.</p></td><td class="code"><div class="highlight"><pre>  <span class="n">class</span> <span class="n">Accessor</span> <span class="p">{</span>
+    <span class="n">friend</span> <span class="n">class</span> <span class="n">ThreadLocalPtr</span><span class="o">&lt;</span><span class="n">T</span><span class="p">,</span><span class="n">Tag</span><span class="o">&gt;</span><span class="p">;</span>
+
+    <span class="n">threadlocal_detail</span><span class="o">::</span><span class="n">StaticMeta</span><span class="o">&lt;</span><span class="n">Tag</span><span class="o">&gt;&amp;</span> <span class="n">meta_</span><span class="p">;</span>
+    <span class="n">boost</span><span class="o">::</span><span class="n">mutex</span><span class="o">*</span> <span class="n">lock_</span><span class="p">;</span>
+    <span class="kt">int</span> <span class="n">id_</span><span class="p">;</span>
+
+   <span class="nl">public:</span>
+    <span class="n">class</span> <span class="n">Iterator</span><span class="p">;</span>
+    <span class="n">friend</span> <span class="n">class</span> <span class="n">Iterator</span><span class="p">;</span></pre></div></td></tr>
+
+
+<tr id="section-6"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-6">&#182;</a></div><p>The iterators obtained from Accessor are bidirectional iterators.</p></td><td class="code"><div class="highlight"><pre>    <span class="n">class</span> <span class="n">Iterator</span> <span class="o">:</span> <span class="n">public</span> <span class="n">boost</span><span class="o">::</span><span class="n">iterator_facade</span><span class="o">&lt;</span>
+          <span class="n">Iterator</span><span class="p">,</span>                               <span class="c1">// Derived</span>
+          <span class="n">T</span><span class="p">,</span>                                      <span class="c1">// value_type</span>
+          <span class="n">boost</span><span class="o">::</span><span class="n">bidirectional_traversal_tag</span><span class="o">&gt;</span> <span class="p">{</span>   <span class="c1">// traversal</span>
+      <span class="n">friend</span> <span class="n">class</span> <span class="n">Accessor</span><span class="p">;</span>
+      <span class="n">friend</span> <span class="n">class</span> <span class="n">boost</span><span class="o">::</span><span class="n">iterator_core_access</span><span class="p">;</span>
+      <span class="k">const</span> <span class="n">Accessor</span><span class="o">*</span> <span class="k">const</span> <span class="n">accessor_</span><span class="p">;</span>
+      <span class="n">threadlocal_detail</span><span class="o">::</span><span class="n">ThreadEntry</span><span class="o">*</span> <span class="n">e_</span><span class="p">;</span>
+
+      <span class="kt">void</span> <span class="nf">increment</span><span class="p">()</span> <span class="p">{</span>
+        <span class="n">e_</span> <span class="o">=</span> <span class="n">e_</span><span class="o">-&gt;</span><span class="n">next</span><span class="p">;</span>
+        <span class="n">incrementToValid</span><span class="p">();</span>
+      <span class="p">}</span>
+
+      <span class="kt">void</span> <span class="nf">decrement</span><span class="p">()</span> <span class="p">{</span>
+        <span class="n">e_</span> <span class="o">=</span> <span class="n">e_</span><span class="o">-&gt;</span><span class="n">prev</span><span class="p">;</span>
+        <span class="n">decrementToValid</span><span class="p">();</span>
+      <span class="p">}</span>
+
+      <span class="n">T</span><span class="o">&amp;</span> <span class="n">dereference</span><span class="p">()</span> <span class="k">const</span> <span class="p">{</span>
+        <span class="k">return</span> <span class="o">*</span><span class="n">static_cast</span><span class="o">&lt;</span><span class="n">T</span><span class="o">*&gt;</span><span class="p">(</span><span class="n">e_</span><span class="o">-&gt;</span><span class="n">elements</span><span class="p">[</span><span class="n">accessor_</span><span class="o">-&gt;</span><span class="n">id_</span><span class="p">].</span><span class="n">ptr</span><span class="p">);</span>
+      <span class="p">}</span>
+
+      <span class="n">bool</span> <span class="n">equal</span><span class="p">(</span><span class="k">const</span> <span class="n">Iterator</span><span class="o">&amp;</span> <span class="n">other</span><span class="p">)</span> <span class="k">const</span> <span class="p">{</span>
+        <span class="k">return</span> <span class="p">(</span><span class="n">accessor_</span><span class="o">-&gt;</span><span class="n">id_</span> <span class="o">==</span> <span class="n">other</span><span class="p">.</span><span class="n">accessor_</span><span class="o">-&gt;</span><span class="n">id_</span> <span class="o">&amp;&amp;</span>
+                <span class="n">e_</span> <span class="o">==</span> <span class="n">other</span><span class="p">.</span><span class="n">e_</span><span class="p">);</span>
+      <span class="p">}</span>
+
+      <span class="n">explicit</span> <span class="n">Iterator</span><span class="p">(</span><span class="k">const</span> <span class="n">Accessor</span><span class="o">*</span> <span class="n">accessor</span><span class="p">)</span>
+        <span class="o">:</span> <span class="n">accessor_</span><span class="p">(</span><span class="n">accessor</span><span class="p">),</span>
+          <span class="n">e_</span><span class="p">(</span><span class="o">&amp;</span><span class="n">accessor_</span><span class="o">-&gt;</span><span class="n">meta_</span><span class="p">.</span><span class="n">head_</span><span class="p">)</span> <span class="p">{</span>
+      <span class="p">}</span>
+
+      <span class="n">bool</span> <span class="n">valid</span><span class="p">()</span> <span class="k">const</span> <span class="p">{</span>
+        <span class="k">return</span> <span class="p">(</span><span class="n">e_</span><span class="o">-&gt;</span><span class="n">elements</span> <span class="o">&amp;&amp;</span>
+                <span class="n">accessor_</span><span class="o">-&gt;</span><span class="n">id_</span> <span class="o">&lt;</span> <span class="n">e_</span><span class="o">-&gt;</span><span class="n">elementsCapacity</span> <span class="o">&amp;&amp;</span>
+                <span class="n">e_</span><span class="o">-&gt;</span><span class="n">elements</span><span class="p">[</span><span class="n">accessor_</span><span class="o">-&gt;</span><span class="n">id_</span><span class="p">].</span><span class="n">ptr</span><span class="p">);</span>
+      <span class="p">}</span>
+
+      <span class="kt">void</span> <span class="n">incrementToValid</span><span class="p">()</span> <span class="p">{</span>
+        <span class="k">for</span> <span class="p">(;</span> <span class="n">e_</span> <span class="o">!=</span> <span class="o">&amp;</span><span class="n">accessor_</span><span class="o">-&gt;</span><span class="n">meta_</span><span class="p">.</span><span class="n">head_</span> <span class="o">&amp;&amp;</span> <span class="o">!</span><span class="n">valid</span><span class="p">();</span> <span class="n">e_</span> <span class="o">=</span> <span class="n">e_</span><span class="o">-&gt;</span><span class="n">next</span><span class="p">)</span> <span class="p">{</span> <span class="p">}</span>
+      <span class="p">}</span>
+
+      <span class="kt">void</span> <span class="n">decrementToValid</span><span class="p">()</span> <span class="p">{</span>
+        <span class="k">for</span> <span class="p">(;</span> <span class="n">e_</span> <span class="o">!=</span> <span class="o">&amp;</span><span class="n">accessor_</span><span class="o">-&gt;</span><span class="n">meta_</span><span class="p">.</span><span class="n">head_</span> <span class="o">&amp;&amp;</span> <span class="o">!</span><span class="n">valid</span><span class="p">();</span> <span class="n">e_</span> <span class="o">=</span> <span class="n">e_</span><span class="o">-&gt;</span><span class="n">prev</span><span class="p">)</span> <span class="p">{</span> <span class="p">}</span>
+      <span class="p">}</span>
+    <span class="p">};</span>
+
+    <span class="o">~</span><span class="n">Accessor</span><span class="p">()</span> <span class="p">{</span>
+      <span class="n">release</span><span class="p">();</span>
+    <span class="p">}</span>
+
+    <span class="n">Iterator</span> <span class="n">begin</span><span class="p">()</span> <span class="k">const</span> <span class="p">{</span>
+      <span class="k">return</span> <span class="o">++</span><span class="n">Iterator</span><span class="p">(</span><span class="n">this</span><span class="p">);</span>
+    <span class="p">}</span>
+
+    <span class="n">Iterator</span> <span class="n">end</span><span class="p">()</span> <span class="k">const</span> <span class="p">{</span>
+      <span class="k">return</span> <span class="n">Iterator</span><span class="p">(</span><span class="n">this</span><span class="p">);</span>
+    <span class="p">}</span>
+
+    <span class="n">Accessor</span><span class="p">(</span><span class="k">const</span> <span class="n">Accessor</span><span class="o">&amp;</span><span class="p">)</span> <span class="o">=</span> <span class="n">delete</span><span class="p">;</span>
+    <span class="n">Accessor</span><span class="o">&amp;</span> <span class="n">operator</span><span class="o">=</span><span class="p">(</span><span class="k">const</span> <span class="n">Accessor</span><span class="o">&amp;</span><span class="p">)</span> <span class="o">=</span> <span class="n">delete</span><span class="p">;</span>
+
+    <span class="n">Accessor</span><span class="p">(</span><span class="n">Accessor</span><span class="o">&amp;&amp;</span> <span class="n">other</span><span class="p">)</span> <span class="n">FOLLY_NOEXCEPT</span>
+      <span class="o">:</span> <span class="n">meta_</span><span class="p">(</span><span class="n">other</span><span class="p">.</span><span class="n">meta_</span><span class="p">),</span>
+        <span class="n">lock_</span><span class="p">(</span><span class="n">other</span><span class="p">.</span><span class="n">lock_</span><span class="p">),</span>
+        <span class="n">id_</span><span class="p">(</span><span class="n">other</span><span class="p">.</span><span class="n">id_</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">other</span><span class="p">.</span><span class="n">id_</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+      <span class="n">other</span><span class="p">.</span><span class="n">lock_</span> <span class="o">=</span> <span class="nb">NULL</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="n">Accessor</span><span class="o">&amp;</span> <span class="n">operator</span><span class="o">=</span><span class="p">(</span><span class="n">Accessor</span><span class="o">&amp;&amp;</span> <span class="n">other</span><span class="p">)</span> <span class="n">FOLLY_NOEXCEPT</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-7"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-7">&#182;</a></div><p>Each Tag has its own unique meta, and accessors with different Tags
+have different types.  So either *this is empty, or this and other
+have the same tag.  But if they have the same tag, they have the same
+meta (and lock), so they'd both hold the lock at the same time,
+which is impossible, which leaves only one possible scenario --
+*this is empty.  Assert it.</p></td><td class="code"><div class="highlight"><pre>      <span class="n">assert</span><span class="p">(</span><span class="o">&amp;</span><span class="n">meta_</span> <span class="o">==</span> <span class="o">&amp;</span><span class="n">other</span><span class="p">.</span><span class="n">meta_</span><span class="p">);</span>
+      <span class="n">assert</span><span class="p">(</span><span class="n">lock_</span> <span class="o">==</span> <span class="nb">NULL</span><span class="p">);</span>
+      <span class="n">using</span> <span class="n">std</span><span class="o">::</span><span class="n">swap</span><span class="p">;</span>
+      <span class="n">swap</span><span class="p">(</span><span class="n">lock_</span><span class="p">,</span> <span class="n">other</span><span class="p">.</span><span class="n">lock_</span><span class="p">);</span>
+      <span class="n">swap</span><span class="p">(</span><span class="n">id_</span><span class="p">,</span> <span class="n">other</span><span class="p">.</span><span class="n">id_</span><span class="p">);</span>
+    <span class="p">}</span>
+
+    <span class="n">Accessor</span><span class="p">()</span>
+      <span class="o">:</span> <span class="n">meta_</span><span class="p">(</span><span class="n">threadlocal_detail</span><span class="o">::</span><span class="n">StaticMeta</span><span class="o">&lt;</span><span class="n">Tag</span><span class="o">&gt;::</span><span class="n">instance</span><span class="p">()),</span>
+        <span class="n">lock_</span><span class="p">(</span><span class="nb">NULL</span><span class="p">),</span>
+        <span class="n">id_</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+    <span class="p">}</span>
+
+   <span class="nl">private:</span>
+    <span class="n">explicit</span> <span class="n">Accessor</span><span class="p">(</span><span class="kt">int</span> <span class="n">id</span><span class="p">)</span>
+      <span class="o">:</span> <span class="n">meta_</span><span class="p">(</span><span class="n">threadlocal_detail</span><span class="o">::</span><span class="n">StaticMeta</span><span class="o">&lt;</span><span class="n">Tag</span><span class="o">&gt;::</span><span class="n">instance</span><span class="p">()),</span>
+        <span class="n">lock_</span><span class="p">(</span><span class="o">&amp;</span><span class="n">meta_</span><span class="p">.</span><span class="n">lock_</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">lock_</span><span class="o">-&gt;</span><span class="n">lock</span><span class="p">();</span>
+      <span class="n">id_</span> <span class="o">=</span> <span class="n">id</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="kt">void</span> <span class="n">release</span><span class="p">()</span> <span class="p">{</span>
+      <span class="k">if</span> <span class="p">(</span><span class="n">lock_</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">lock_</span><span class="o">-&gt;</span><span class="n">unlock</span><span class="p">();</span>
+        <span class="n">id_</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+        <span class="n">lock_</span> <span class="o">=</span> <span class="nb">NULL</span><span class="p">;</span>
+      <span class="p">}</span>
+    <span class="p">}</span>
+  <span class="p">};</span></pre></div></td></tr>
+
+
+<tr id="section-8"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-8">&#182;</a></div><p>accessor allows a client to iterate through all thread local child
+elements of this ThreadLocal instance.  Holds a global lock for each <Tag></p></td><td class="code"><div class="highlight"><pre>  <span class="n">Accessor</span> <span class="n">accessAllThreads</span><span class="p">()</span> <span class="k">const</span> <span class="p">{</span>
+    <span class="n">FOLLY_ASSERT</span><span class="p">(</span><span class="n">static_assert</span><span class="p">(</span><span class="o">!</span><span class="n">std</span><span class="o">::</span><span class="n">is_same</span><span class="o">&lt;</span><span class="n">Tag</span><span class="p">,</span> <span class="kt">void</span><span class="o">&gt;::</span><span class="n">value</span><span class="p">,</span>
+                 <span class="s">&quot;Must use a unique Tag to use the accessAllThreads feature&quot;</span><span class="p">));</span>
+    <span class="k">return</span> <span class="n">Accessor</span><span class="p">(</span><span class="n">id_</span><span class="p">);</span>
+  <span class="p">}</span>
+
+ <span class="nl">private:</span>
+  <span class="kt">void</span> <span class="n">destroy</span><span class="p">()</span> <span class="p">{</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">id_</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">threadlocal_detail</span><span class="o">::</span><span class="n">StaticMeta</span><span class="o">&lt;</span><span class="n">Tag</span><span class="o">&gt;::</span><span class="n">destroy</span><span class="p">(</span><span class="n">id_</span><span class="p">);</span>
+    <span class="p">}</span>
+  <span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-9"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-9">&#182;</a></div><p>non-copyable</p></td><td class="code"><div class="highlight"><pre>  <span class="n">ThreadLocalPtr</span><span class="p">(</span><span class="k">const</span> <span class="n">ThreadLocalPtr</span><span class="o">&amp;</span><span class="p">)</span> <span class="o">=</span> <span class="n">delete</span><span class="p">;</span>
+  <span class="n">ThreadLocalPtr</span><span class="o">&amp;</span> <span class="n">operator</span><span class="o">=</span><span class="p">(</span><span class="k">const</span> <span class="n">ThreadLocalPtr</span><span class="o">&amp;</span><span class="p">)</span> <span class="o">=</span> <span class="n">delete</span><span class="p">;</span>
+
+  <span class="kt">int</span> <span class="n">id_</span><span class="p">;</span>  <span class="c1">// every instantiation has a unique id</span>
+<span class="p">};</span>
+
+<span class="cp">#undef FOLLY_NOEXCEPT</span>
+
+<span class="p">}</span>  <span class="c1">// namespace folly</span>
+
+<span class="cp">#endif </span><span class="cm">/* FOLLY_THREADLOCAL_H_ */</span><span class="cp"></span>
+
+</pre></div></td></tr>
+
+</tbody>
+</table>
+</div>
+
+</body>
+<script>docas={repo:"joekychen/folly",depth:1}</script>
+<script>document.write('<script src=' + ('__proto__' in {} ? 'http://cdnjs.cloudflare.com/ajax/libs/zepto/1.0rc1/zepto.min.js' : 'https://ajax.googleapis.com/ajax/libs/jquery/1.7.2/jquery.min.js')+'><\\/script>')</script>
+<script src="http://baoshan.github.com/moment/min/moment.min.js"></script>
+<script src="../javascript/docco.min.js"></script>
+</html>

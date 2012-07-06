@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html><head><title>joekychen/folly » folly › AtomicHashMap-inl.h
+
+</title>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+<meta name="generator" content="Docco">
+<link rel="stylesheet" media="all" href="../stylesheets/docco.min.css" />
+
+
+</head>
+<body>
+<div id="container">
+<div id="background"></div>
+<table cellpadding="0" cellspacing="0">
+<thead><tr><th class="docs"><a id="home" href="../index.html"></a><h1>AtomicHashMap-inl.h</h1></th><th class="code"></th></tr></thead>
+<tbody>
+
+
+<tr id="section-1"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-1">&#182;</a></div></td><td class="code"><div class="highlight"><pre><span class="cm">/*</span>
+<span class="cm"> * Copyright 2012 Facebook, Inc.</span>
+<span class="cm"> *</span>
+<span class="cm"> * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span class="cm"> * you may not use this file except in compliance with the License.</span>
+<span class="cm"> * You may obtain a copy of the License at</span>
+<span class="cm"> *</span>
+<span class="cm"> *   http://www.apache.org/licenses/LICENSE-2.0</span>
+<span class="cm"> *</span>
+<span class="cm"> * Unless required by applicable law or agreed to in writing, software</span>
+<span class="cm"> * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span class="cm"> * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span class="cm"> * See the License for the specific language governing permissions and</span>
+<span class="cm"> * limitations under the License.</span>
+<span class="cm"> */</span>
+
+<span class="cp">#ifndef FOLLY_ATOMICHASHMAP_H_</span>
+<span class="cp">#error &quot;This should only be included by AtomicHashMap.h&quot;</span>
+<span class="cp">#endif</span>
+
+<span class="cp">#include &quot;folly/detail/AtomicHashUtils.h&quot;</span>
+
+<span class="n">namespace</span> <span class="n">folly</span> <span class="p">{</span>
+
+<span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">KeyT</span><span class="p">,</span> <span class="n">class</span> <span class="n">ValueT</span><span class="p">,</span> <span class="n">class</span> <span class="n">HashFcn</span><span class="o">&gt;</span>
+<span class="k">const</span> <span class="kr">typename</span> <span class="n">AtomicHashMap</span><span class="o">&lt;</span><span class="n">KeyT</span><span class="p">,</span> <span class="n">ValueT</span><span class="p">,</span> <span class="n">HashFcn</span><span class="o">&gt;::</span><span class="n">Config</span>
+<span class="n">AtomicHashMap</span><span class="o">&lt;</span><span class="n">KeyT</span><span class="p">,</span> <span class="n">ValueT</span><span class="p">,</span> <span class="n">HashFcn</span><span class="o">&gt;::</span><span class="n">defaultConfig</span><span class="p">;</span></pre></div></td></tr>
+
+
+<tr id="section-2"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-2">&#182;</a></div><p>AtomicHashMap constructor -- Atomic wrapper that allows growth
+This class has a lot of overhead (184 Bytes) so only use for big maps</p></td><td class="code"><div class="highlight"><pre><span class="n">template</span> <span class="o">&lt;</span><span class="kr">typename</span> <span class="n">KeyT</span><span class="p">,</span> <span class="kr">typename</span> <span class="n">ValueT</span><span class="p">,</span> <span class="kr">typename</span> <span class="n">HashFcn</span><span class="o">&gt;</span>
+<span class="n">AtomicHashMap</span><span class="o">&lt;</span><span class="n">KeyT</span><span class="p">,</span> <span class="n">ValueT</span><span class="p">,</span> <span class="n">HashFcn</span><span class="o">&gt;::</span>
+<span class="n">AtomicHashMap</span><span class="p">(</span><span class="kt">size_t</span> <span class="n">size</span><span class="p">,</span> <span class="k">const</span> <span class="n">Config</span><span class="o">&amp;</span> <span class="n">config</span><span class="p">)</span>
+  <span class="o">:</span> <span class="n">kGrowthFrac_</span><span class="p">(</span><span class="mf">1.0</span> <span class="o">-</span> <span class="n">config</span><span class="p">.</span><span class="n">maxLoadFactor</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">CHECK</span><span class="p">(</span><span class="n">config</span><span class="p">.</span><span class="n">maxLoadFactor</span> <span class="o">&gt;</span> <span class="mf">0.0</span> <span class="o">&amp;&amp;</span> <span class="n">config</span><span class="p">.</span><span class="n">maxLoadFactor</span> <span class="o">&lt;</span> <span class="mf">1.0</span><span class="p">);</span>
+  <span class="n">subMaps_</span><span class="p">[</span><span class="mi">0</span><span class="p">].</span><span class="n">store</span><span class="p">(</span><span class="n">SubMap</span><span class="o">::</span><span class="n">create</span><span class="p">(</span><span class="n">size</span><span class="p">,</span> <span class="n">config</span><span class="p">).</span><span class="n">release</span><span class="p">(),</span>
+    <span class="n">std</span><span class="o">::</span><span class="n">memory_order_relaxed</span><span class="p">);</span>
+  <span class="k">auto</span> <span class="n">numSubMaps</span> <span class="o">=</span> <span class="n">kNumSubMaps_</span><span class="p">;</span>
+  <span class="n">FOR_EACH_RANGE</span><span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">numSubMaps</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">subMaps_</span><span class="p">[</span><span class="n">i</span><span class="p">].</span><span class="n">store</span><span class="p">(</span><span class="n">nullptr</span><span class="p">,</span> <span class="n">std</span><span class="o">::</span><span class="n">memory_order_relaxed</span><span class="p">);</span>
+  <span class="p">}</span>
+  <span class="n">numMapsAllocated_</span><span class="p">.</span><span class="n">store</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">std</span><span class="o">::</span><span class="n">memory_order_relaxed</span><span class="p">);</span>
+<span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-3"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-3">&#182;</a></div><p>insert --</p></td><td class="code"><div class="highlight"><pre><span class="n">template</span> <span class="o">&lt;</span><span class="kr">typename</span> <span class="n">KeyT</span><span class="p">,</span> <span class="kr">typename</span> <span class="n">ValueT</span><span class="p">,</span> <span class="kr">typename</span> <span class="n">HashFcn</span><span class="o">&gt;</span>
+<span class="n">std</span><span class="o">::</span><span class="n">pair</span><span class="o">&lt;</span><span class="kr">typename</span> <span class="n">AtomicHashMap</span><span class="o">&lt;</span><span class="n">KeyT</span><span class="p">,</span><span class="n">ValueT</span><span class="p">,</span><span class="n">HashFcn</span><span class="o">&gt;::</span><span class="n">iterator</span><span class="p">,</span><span class="n">bool</span><span class="o">&gt;</span>
+<span class="n">AtomicHashMap</span><span class="o">&lt;</span><span class="n">KeyT</span><span class="p">,</span> <span class="n">ValueT</span><span class="p">,</span> <span class="n">HashFcn</span><span class="o">&gt;::</span>
+<span class="n">insert</span><span class="p">(</span><span class="k">const</span> <span class="n">value_type</span><span class="o">&amp;</span> <span class="n">r</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">SimpleRetT</span> <span class="n">ret</span> <span class="o">=</span> <span class="n">insertInternal</span><span class="p">(</span><span class="n">r</span><span class="p">);</span>
+  <span class="n">SubMap</span><span class="o">*</span> <span class="n">subMap</span> <span class="o">=</span> <span class="n">subMaps_</span><span class="p">[</span><span class="n">ret</span><span class="p">.</span><span class="n">i</span><span class="p">].</span><span class="n">load</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">memory_order_relaxed</span><span class="p">);</span>
+  <span class="k">return</span> <span class="n">std</span><span class="o">::</span><span class="n">make_pair</span><span class="p">(</span><span class="n">iterator</span><span class="p">(</span><span class="n">this</span><span class="p">,</span> <span class="n">ret</span><span class="p">.</span><span class="n">i</span><span class="p">,</span> <span class="n">subMap</span><span class="o">-&gt;</span><span class="n">makeIter</span><span class="p">(</span><span class="n">ret</span><span class="p">.</span><span class="n">j</span><span class="p">)),</span>
+                        <span class="n">ret</span><span class="p">.</span><span class="n">success</span><span class="p">);</span>
+<span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-4"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-4">&#182;</a></div><p>insertInternal -- Allocates new sub maps as existing ones fill up.</p></td><td class="code"><div class="highlight"><pre><span class="n">template</span> <span class="o">&lt;</span><span class="kr">typename</span> <span class="n">KeyT</span><span class="p">,</span> <span class="kr">typename</span> <span class="n">ValueT</span><span class="p">,</span> <span class="kr">typename</span> <span class="n">HashFcn</span><span class="o">&gt;</span>
+<span class="kr">typename</span> <span class="n">AtomicHashMap</span><span class="o">&lt;</span><span class="n">KeyT</span><span class="p">,</span> <span class="n">ValueT</span><span class="p">,</span> <span class="n">HashFcn</span><span class="o">&gt;::</span><span class="n">SimpleRetT</span>
+<span class="n">AtomicHashMap</span><span class="o">&lt;</span><span class="n">KeyT</span><span class="p">,</span> <span class="n">ValueT</span><span class="p">,</span> <span class="n">HashFcn</span><span class="o">&gt;::</span>
+<span class="n">insertInternal</span><span class="p">(</span><span class="k">const</span> <span class="n">value_type</span><span class="o">&amp;</span> <span class="n">r</span><span class="p">)</span> <span class="p">{</span>
+ <span class="nl">beginInsertInternal:</span>
+  <span class="kt">int</span> <span class="n">nextMapIdx</span> <span class="o">=</span> <span class="c1">// this maintains our state</span>
+    <span class="n">numMapsAllocated_</span><span class="p">.</span><span class="n">load</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">memory_order_acquire</span><span class="p">);</span>
+  <span class="kt">uint32_t</span> <span class="n">idx</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+  <span class="kr">typename</span> <span class="n">SubMap</span><span class="o">::</span><span class="n">SimpleRetT</span> <span class="n">ret</span><span class="p">;</span>
+  <span class="n">FOR_EACH_RANGE</span><span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">nextMapIdx</span><span class="p">)</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-5"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-5">&#182;</a></div><p>insert in each map successively.  If one succeeds, we're done!</p></td><td class="code"><div class="highlight"><pre>    <span class="n">SubMap</span><span class="o">*</span> <span class="n">subMap</span> <span class="o">=</span> <span class="n">subMaps_</span><span class="p">[</span><span class="n">i</span><span class="p">].</span><span class="n">load</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">memory_order_relaxed</span><span class="p">);</span>
+    <span class="n">ret</span> <span class="o">=</span> <span class="n">subMap</span><span class="o">-&gt;</span><span class="n">insertInternal</span><span class="p">(</span><span class="n">r</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">ret</span><span class="p">.</span><span class="n">idx</span> <span class="o">==</span> <span class="n">subMap</span><span class="o">-&gt;</span><span class="n">capacity_</span><span class="p">)</span> <span class="p">{</span>
+      <span class="k">continue</span><span class="p">;</span>  <span class="c1">//map is full, so try the next one</span>
+    <span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-6"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-6">&#182;</a></div><p>Either collision or success - insert in either case</p></td><td class="code"><div class="highlight"><pre>    <span class="k">return</span> <span class="n">SimpleRetT</span><span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="n">ret</span><span class="p">.</span><span class="n">idx</span><span class="p">,</span> <span class="n">ret</span><span class="p">.</span><span class="n">success</span><span class="p">);</span>
+  <span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-7"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-7">&#182;</a></div><p>If we made it this far, all maps are full and we need to try to allocate
+the next one.</p></td><td class="code"><div class="highlight"><pre>  <span class="n">SubMap</span><span class="o">*</span> <span class="n">primarySubMap</span> <span class="o">=</span> <span class="n">subMaps_</span><span class="p">[</span><span class="mi">0</span><span class="p">].</span><span class="n">load</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">memory_order_relaxed</span><span class="p">);</span>
+  <span class="k">if</span> <span class="p">(</span><span class="n">nextMapIdx</span> <span class="o">&gt;=</span> <span class="n">kNumSubMaps_</span> <span class="o">||</span>
+      <span class="n">primarySubMap</span><span class="o">-&gt;</span><span class="n">capacity_</span> <span class="o">*</span> <span class="n">kGrowthFrac_</span> <span class="o">&lt;</span> <span class="mf">1.0</span><span class="p">)</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-8"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-8">&#182;</a></div><p>Can't allocate any more sub maps.</p></td><td class="code"><div class="highlight"><pre>    <span class="n">throw</span> <span class="n">AtomicHashMapFullError</span><span class="p">();</span>
+  <span class="p">}</span>
+
+  <span class="k">if</span> <span class="p">(</span><span class="n">tryLockMap</span><span class="p">(</span><span class="n">nextMapIdx</span><span class="p">))</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-9"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-9">&#182;</a></div><p>Alloc a new map and shove it in.  We can change whatever
+we want because other threads are waiting on us...</p></td><td class="code"><div class="highlight"><pre>    <span class="kt">size_t</span> <span class="n">numCellsAllocated</span> <span class="o">=</span> <span class="p">(</span><span class="kt">size_t</span><span class="p">)</span>
+      <span class="p">(</span><span class="n">primarySubMap</span><span class="o">-&gt;</span><span class="n">capacity_</span> <span class="o">*</span>
+       <span class="n">std</span><span class="o">::</span><span class="n">pow</span><span class="p">(</span><span class="mf">1.0</span> <span class="o">+</span> <span class="n">kGrowthFrac_</span><span class="p">,</span> <span class="n">nextMapIdx</span> <span class="o">-</span> <span class="mi">1</span><span class="p">));</span>
+    <span class="kt">size_t</span> <span class="n">newSize</span> <span class="o">=</span> <span class="p">(</span><span class="kt">int</span><span class="p">)</span> <span class="p">(</span><span class="n">numCellsAllocated</span> <span class="o">*</span> <span class="n">kGrowthFrac_</span><span class="p">);</span>
+    <span class="n">DCHECK</span><span class="p">(</span><span class="n">subMaps_</span><span class="p">[</span><span class="n">nextMapIdx</span><span class="p">].</span><span class="n">load</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">memory_order_relaxed</span><span class="p">)</span> <span class="o">==</span>
+      <span class="p">(</span><span class="n">SubMap</span><span class="o">*</span><span class="p">)</span><span class="n">kLockedPtr_</span><span class="p">);</span></pre></div></td></tr>
+
+
+<tr id="section-10"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-10">&#182;</a></div><p>create a new map using the settings stored in the first map</p></td><td class="code"><div class="highlight"><pre>    <span class="n">Config</span> <span class="n">config</span><span class="p">;</span>
+    <span class="n">config</span><span class="p">.</span><span class="n">emptyKey</span> <span class="o">=</span> <span class="n">primarySubMap</span><span class="o">-&gt;</span><span class="n">kEmptyKey_</span><span class="p">;</span>
+    <span class="n">config</span><span class="p">.</span><span class="n">lockedKey</span> <span class="o">=</span> <span class="n">primarySubMap</span><span class="o">-&gt;</span><span class="n">kLockedKey_</span><span class="p">;</span>
+    <span class="n">config</span><span class="p">.</span><span class="n">erasedKey</span> <span class="o">=</span> <span class="n">primarySubMap</span><span class="o">-&gt;</span><span class="n">kErasedKey_</span><span class="p">;</span>
+    <span class="n">config</span><span class="p">.</span><span class="n">maxLoadFactor</span> <span class="o">=</span> <span class="n">primarySubMap</span><span class="o">-&gt;</span><span class="n">maxLoadFactor</span><span class="p">();</span>
+    <span class="n">config</span><span class="p">.</span><span class="n">entryCountThreadCacheSize</span> <span class="o">=</span>
+      <span class="n">primarySubMap</span><span class="o">-&gt;</span><span class="n">getEntryCountThreadCacheSize</span><span class="p">();</span>
+    <span class="n">subMaps_</span><span class="p">[</span><span class="n">nextMapIdx</span><span class="p">].</span><span class="n">store</span><span class="p">(</span><span class="n">SubMap</span><span class="o">::</span><span class="n">create</span><span class="p">(</span><span class="n">newSize</span><span class="p">,</span> <span class="n">config</span><span class="p">).</span><span class="n">release</span><span class="p">(),</span>
+      <span class="n">std</span><span class="o">::</span><span class="n">memory_order_relaxed</span><span class="p">);</span></pre></div></td></tr>
+
+
+<tr id="section-11"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-11">&#182;</a></div><p>Publish the map to other threads.</p></td><td class="code"><div class="highlight"><pre>    <span class="n">numMapsAllocated_</span><span class="p">.</span><span class="n">fetch_add</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">std</span><span class="o">::</span><span class="n">memory_order_release</span><span class="p">);</span>
+    <span class="n">DCHECK_EQ</span><span class="p">(</span><span class="n">nextMapIdx</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span>
+      <span class="n">numMapsAllocated_</span><span class="p">.</span><span class="n">load</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">memory_order_relaxed</span><span class="p">));</span>
+  <span class="p">}</span> <span class="k">else</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-12"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-12">&#182;</a></div><p>If we lost the race, we'll have to wait for the next map to get
+allocated before doing any insertion here.</p></td><td class="code"><div class="highlight"><pre>    <span class="n">FOLLY_SPIN_WAIT</span><span class="p">(</span>
+      <span class="n">nextMapIdx</span> <span class="o">&gt;=</span> <span class="n">numMapsAllocated_</span><span class="p">.</span><span class="n">load</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">memory_order_acquire</span><span class="p">)</span>
+    <span class="p">);</span>
+  <span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-13"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-13">&#182;</a></div><p>Relaxed is ok here because either we just created this map, or we
+just did a spin wait with an acquire load on numMapsAllocated_.</p></td><td class="code"><div class="highlight"><pre>  <span class="n">SubMap</span><span class="o">*</span> <span class="n">loadedMap</span> <span class="o">=</span> <span class="n">subMaps_</span><span class="p">[</span><span class="n">nextMapIdx</span><span class="p">].</span><span class="n">load</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">memory_order_relaxed</span><span class="p">);</span>
+  <span class="n">DCHECK</span><span class="p">(</span><span class="n">loadedMap</span> <span class="o">&amp;&amp;</span> <span class="n">loadedMap</span> <span class="o">!=</span> <span class="p">(</span><span class="n">SubMap</span><span class="o">*</span><span class="p">)</span><span class="n">kLockedPtr_</span><span class="p">);</span>
+  <span class="n">ret</span> <span class="o">=</span> <span class="n">loadedMap</span><span class="o">-&gt;</span><span class="n">insertInternal</span><span class="p">(</span><span class="n">r</span><span class="p">);</span>
+  <span class="k">if</span> <span class="p">(</span><span class="n">ret</span><span class="p">.</span><span class="n">idx</span> <span class="o">!=</span> <span class="n">loadedMap</span><span class="o">-&gt;</span><span class="n">capacity_</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">return</span> <span class="n">SimpleRetT</span><span class="p">(</span><span class="n">nextMapIdx</span><span class="p">,</span> <span class="n">ret</span><span class="p">.</span><span class="n">idx</span><span class="p">,</span> <span class="n">ret</span><span class="p">.</span><span class="n">success</span><span class="p">);</span>
+  <span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-14"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-14">&#182;</a></div><p>We took way too long and the new map is already full...try again from
+the top (this should pretty much never happen).</p></td><td class="code"><div class="highlight"><pre>  <span class="k">goto</span> <span class="n">beginInsertInternal</span><span class="p">;</span>
+<span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-15"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-15">&#182;</a></div><p>find --</p></td><td class="code"><div class="highlight"><pre><span class="n">template</span> <span class="o">&lt;</span><span class="kr">typename</span> <span class="n">KeyT</span><span class="p">,</span> <span class="kr">typename</span> <span class="n">ValueT</span><span class="p">,</span> <span class="kr">typename</span> <span class="n">HashFcn</span><span class="o">&gt;</span>
+<span class="kr">typename</span> <span class="n">AtomicHashMap</span><span class="o">&lt;</span><span class="n">KeyT</span><span class="p">,</span> <span class="n">ValueT</span><span class="p">,</span> <span class="n">HashFcn</span><span class="o">&gt;::</span><span class="n">iterator</span>
+<span class="n">AtomicHashMap</span><span class="o">&lt;</span><span class="n">KeyT</span><span class="p">,</span> <span class="n">ValueT</span><span class="p">,</span> <span class="n">HashFcn</span><span class="o">&gt;::</span>
+<span class="n">find</span><span class="p">(</span><span class="n">KeyT</span> <span class="n">k</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">SimpleRetT</span> <span class="n">ret</span> <span class="o">=</span> <span class="n">findInternal</span><span class="p">(</span><span class="n">k</span><span class="p">);</span>
+  <span class="k">if</span> <span class="p">(</span><span class="n">ret</span><span class="p">.</span><span class="n">i</span> <span class="o">&gt;=</span> <span class="n">numMapsAllocated_</span><span class="p">.</span><span class="n">load</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">memory_order_acquire</span><span class="p">))</span> <span class="p">{</span>
+    <span class="k">return</span> <span class="n">end</span><span class="p">();</span>
+  <span class="p">}</span>
+  <span class="n">SubMap</span><span class="o">*</span> <span class="n">subMap</span> <span class="o">=</span> <span class="n">subMaps_</span><span class="p">[</span><span class="n">ret</span><span class="p">.</span><span class="n">i</span><span class="p">].</span><span class="n">load</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">memory_order_relaxed</span><span class="p">);</span>
+  <span class="k">return</span> <span class="n">iterator</span><span class="p">(</span><span class="n">this</span><span class="p">,</span> <span class="n">ret</span><span class="p">.</span><span class="n">i</span><span class="p">,</span> <span class="n">subMap</span><span class="o">-&gt;</span><span class="n">makeIter</span><span class="p">(</span><span class="n">ret</span><span class="p">.</span><span class="n">j</span><span class="p">));</span>
+<span class="p">}</span>
+
+<span class="n">template</span> <span class="o">&lt;</span><span class="kr">typename</span> <span class="n">KeyT</span><span class="p">,</span> <span class="kr">typename</span> <span class="n">ValueT</span><span class="p">,</span> <span class="kr">typename</span> <span class="n">HashFcn</span><span class="o">&gt;</span>
+<span class="kr">typename</span> <span class="n">AtomicHashMap</span><span class="o">&lt;</span><span class="n">KeyT</span><span class="p">,</span> <span class="n">ValueT</span><span class="p">,</span> <span class="n">HashFcn</span><span class="o">&gt;::</span><span class="n">const_iterator</span>
+<span class="n">AtomicHashMap</span><span class="o">&lt;</span><span class="n">KeyT</span><span class="p">,</span> <span class="n">ValueT</span><span class="p">,</span> <span class="n">HashFcn</span><span class="o">&gt;::</span>
+<span class="n">find</span><span class="p">(</span><span class="n">KeyT</span> <span class="n">k</span><span class="p">)</span> <span class="k">const</span> <span class="p">{</span>
+  <span class="k">return</span> <span class="n">const_cast</span><span class="o">&lt;</span><span class="n">AtomicHashMap</span><span class="o">*&gt;</span><span class="p">(</span><span class="n">this</span><span class="p">)</span><span class="o">-&gt;</span><span class="n">find</span><span class="p">(</span><span class="n">k</span><span class="p">);</span>
+<span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-16"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-16">&#182;</a></div><p>findInternal --</p></td><td class="code"><div class="highlight"><pre><span class="n">template</span> <span class="o">&lt;</span><span class="kr">typename</span> <span class="n">KeyT</span><span class="p">,</span> <span class="kr">typename</span> <span class="n">ValueT</span><span class="p">,</span> <span class="kr">typename</span> <span class="n">HashFcn</span><span class="o">&gt;</span>
+<span class="kr">typename</span> <span class="n">AtomicHashMap</span><span class="o">&lt;</span><span class="n">KeyT</span><span class="p">,</span> <span class="n">ValueT</span><span class="p">,</span> <span class="n">HashFcn</span><span class="o">&gt;::</span><span class="n">SimpleRetT</span>
+<span class="n">AtomicHashMap</span><span class="o">&lt;</span><span class="n">KeyT</span><span class="p">,</span> <span class="n">ValueT</span><span class="p">,</span> <span class="n">HashFcn</span><span class="o">&gt;::</span>
+<span class="n">findInternal</span><span class="p">(</span><span class="k">const</span> <span class="n">KeyT</span> <span class="n">k</span><span class="p">)</span> <span class="k">const</span> <span class="p">{</span>
+  <span class="n">SubMap</span><span class="o">*</span> <span class="k">const</span> <span class="n">primaryMap</span> <span class="o">=</span> <span class="n">subMaps_</span><span class="p">[</span><span class="mi">0</span><span class="p">].</span><span class="n">load</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">memory_order_relaxed</span><span class="p">);</span>
+  <span class="kr">typename</span> <span class="n">SubMap</span><span class="o">::</span><span class="n">SimpleRetT</span> <span class="n">ret</span> <span class="o">=</span> <span class="n">primaryMap</span><span class="o">-&gt;</span><span class="n">findInternal</span><span class="p">(</span><span class="n">k</span><span class="p">);</span>
+  <span class="k">if</span> <span class="p">(</span><span class="n">LIKELY</span><span class="p">(</span><span class="n">ret</span><span class="p">.</span><span class="n">idx</span> <span class="o">!=</span> <span class="n">primaryMap</span><span class="o">-&gt;</span><span class="n">capacity_</span><span class="p">))</span> <span class="p">{</span>
+    <span class="k">return</span> <span class="n">SimpleRetT</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">ret</span><span class="p">.</span><span class="n">idx</span><span class="p">,</span> <span class="n">ret</span><span class="p">.</span><span class="n">success</span><span class="p">);</span>
+  <span class="p">}</span>
+  <span class="kt">int</span> <span class="k">const</span> <span class="n">numMaps</span> <span class="o">=</span> <span class="n">numMapsAllocated_</span><span class="p">.</span><span class="n">load</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">memory_order_acquire</span><span class="p">);</span>
+  <span class="n">FOR_EACH_RANGE</span><span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">numMaps</span><span class="p">)</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-17"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-17">&#182;</a></div><p>Check each map successively.  If one succeeds, we're done!</p></td><td class="code"><div class="highlight"><pre>    <span class="n">SubMap</span><span class="o">*</span> <span class="n">thisMap</span> <span class="o">=</span> <span class="n">subMaps_</span><span class="p">[</span><span class="n">i</span><span class="p">].</span><span class="n">load</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">memory_order_release</span><span class="p">);</span>
+    <span class="n">ret</span> <span class="o">=</span> <span class="n">thisMap</span><span class="o">-&gt;</span><span class="n">findInternal</span><span class="p">(</span><span class="n">k</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">LIKELY</span><span class="p">(</span><span class="n">ret</span><span class="p">.</span><span class="n">idx</span> <span class="o">!=</span> <span class="n">thisMap</span><span class="o">-&gt;</span><span class="n">capacity_</span><span class="p">))</span> <span class="p">{</span>
+      <span class="k">return</span> <span class="n">SimpleRetT</span><span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="n">ret</span><span class="p">.</span><span class="n">idx</span><span class="p">,</span> <span class="n">ret</span><span class="p">.</span><span class="n">success</span><span class="p">);</span>
+    <span class="p">}</span>
+  <span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-18"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-18">&#182;</a></div><p>Didn't find our key...</p></td><td class="code"><div class="highlight"><pre>  <span class="k">return</span> <span class="n">SimpleRetT</span><span class="p">(</span><span class="n">numMaps</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="nb">false</span><span class="p">);</span>
+<span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-19"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-19">&#182;</a></div><p>findAtInternal -- see encodeIndex() for details.</p></td><td class="code"><div class="highlight"><pre><span class="n">template</span> <span class="o">&lt;</span><span class="kr">typename</span> <span class="n">KeyT</span><span class="p">,</span> <span class="kr">typename</span> <span class="n">ValueT</span><span class="p">,</span> <span class="kr">typename</span> <span class="n">HashFcn</span><span class="o">&gt;</span>
+<span class="kr">typename</span> <span class="n">AtomicHashMap</span><span class="o">&lt;</span><span class="n">KeyT</span><span class="p">,</span> <span class="n">ValueT</span><span class="p">,</span> <span class="n">HashFcn</span><span class="o">&gt;::</span><span class="n">SimpleRetT</span>
+<span class="n">AtomicHashMap</span><span class="o">&lt;</span><span class="n">KeyT</span><span class="p">,</span> <span class="n">ValueT</span><span class="p">,</span> <span class="n">HashFcn</span><span class="o">&gt;::</span>
+<span class="n">findAtInternal</span><span class="p">(</span><span class="kt">uint32_t</span> <span class="n">idx</span><span class="p">)</span> <span class="k">const</span> <span class="p">{</span>
+  <span class="kt">uint32_t</span> <span class="n">subMapIdx</span><span class="p">,</span> <span class="n">subMapOffset</span><span class="p">;</span>
+  <span class="k">if</span> <span class="p">(</span><span class="n">idx</span> <span class="o">&amp;</span> <span class="n">kSecondaryMapBit_</span><span class="p">)</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-20"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-20">&#182;</a></div><p>idx falls in a secondary map</p></td><td class="code"><div class="highlight"><pre>    <span class="n">idx</span> <span class="o">&amp;=</span> <span class="o">~</span><span class="n">kSecondaryMapBit_</span><span class="p">;</span>  <span class="c1">// unset secondary bit</span>
+    <span class="n">subMapIdx</span> <span class="o">=</span> <span class="n">idx</span> <span class="o">&gt;&gt;</span> <span class="n">kSubMapIndexShift_</span><span class="p">;</span>
+    <span class="n">DCHECK_LT</span><span class="p">(</span><span class="n">subMapIdx</span><span class="p">,</span> <span class="n">numMapsAllocated_</span><span class="p">.</span><span class="n">load</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">memory_order_relaxed</span><span class="p">));</span>
+    <span class="n">subMapOffset</span> <span class="o">=</span> <span class="n">idx</span> <span class="o">&amp;</span> <span class="n">kSubMapIndexMask_</span><span class="p">;</span>
+  <span class="p">}</span> <span class="k">else</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-21"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-21">&#182;</a></div><p>idx falls in primary map</p></td><td class="code"><div class="highlight"><pre>    <span class="n">subMapIdx</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+    <span class="n">subMapOffset</span> <span class="o">=</span> <span class="n">idx</span><span class="p">;</span>
+  <span class="p">}</span>
+  <span class="k">return</span> <span class="n">SimpleRetT</span><span class="p">(</span><span class="n">subMapIdx</span><span class="p">,</span> <span class="n">subMapOffset</span><span class="p">,</span> <span class="nb">true</span><span class="p">);</span>
+<span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-22"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-22">&#182;</a></div><p>erase --</p></td><td class="code"><div class="highlight"><pre><span class="n">template</span> <span class="o">&lt;</span><span class="kr">typename</span> <span class="n">KeyT</span><span class="p">,</span> <span class="kr">typename</span> <span class="n">ValueT</span><span class="p">,</span> <span class="kr">typename</span> <span class="n">HashFcn</span><span class="o">&gt;</span>
+<span class="kr">typename</span> <span class="n">AtomicHashMap</span><span class="o">&lt;</span><span class="n">KeyT</span><span class="p">,</span> <span class="n">ValueT</span><span class="p">,</span> <span class="n">HashFcn</span><span class="o">&gt;::</span><span class="n">size_type</span>
+<span class="n">AtomicHashMap</span><span class="o">&lt;</span><span class="n">KeyT</span><span class="p">,</span> <span class="n">ValueT</span><span class="p">,</span> <span class="n">HashFcn</span><span class="o">&gt;::</span>
+<span class="n">erase</span><span class="p">(</span><span class="k">const</span> <span class="n">KeyT</span> <span class="n">k</span><span class="p">)</span> <span class="p">{</span>
+  <span class="kt">int</span> <span class="k">const</span> <span class="n">numMaps</span> <span class="o">=</span> <span class="n">numMapsAllocated_</span><span class="p">.</span><span class="n">load</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">memory_order_acquire</span><span class="p">);</span>
+  <span class="n">FOR_EACH_RANGE</span><span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">numMaps</span><span class="p">)</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-23"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-23">&#182;</a></div><p>Check each map successively.  If one succeeds, we're done!</p></td><td class="code"><div class="highlight"><pre>    <span class="k">if</span> <span class="p">(</span><span class="n">subMaps_</span><span class="p">[</span><span class="n">i</span><span class="p">].</span><span class="n">load</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">memory_order_relaxed</span><span class="p">)</span><span class="o">-&gt;</span><span class="n">erase</span><span class="p">(</span><span class="n">k</span><span class="p">))</span> <span class="p">{</span>
+      <span class="k">return</span> <span class="mi">1</span><span class="p">;</span>
+    <span class="p">}</span>
+  <span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-24"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-24">&#182;</a></div><p>Didn't find our key...</p></td><td class="code"><div class="highlight"><pre>  <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-25"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-25">&#182;</a></div><p>capacity -- summation of capacities of all submaps</p></td><td class="code"><div class="highlight"><pre><span class="n">template</span> <span class="o">&lt;</span><span class="kr">typename</span> <span class="n">KeyT</span><span class="p">,</span> <span class="kr">typename</span> <span class="n">ValueT</span><span class="p">,</span> <span class="kr">typename</span> <span class="n">HashFcn</span><span class="o">&gt;</span>
+<span class="kt">size_t</span> <span class="n">AtomicHashMap</span><span class="o">&lt;</span><span class="n">KeyT</span><span class="p">,</span> <span class="n">ValueT</span><span class="p">,</span> <span class="n">HashFcn</span><span class="o">&gt;::</span>
+<span class="n">capacity</span><span class="p">()</span> <span class="k">const</span> <span class="p">{</span>
+  <span class="kt">size_t</span> <span class="n">totalCap</span><span class="p">(</span><span class="mi">0</span><span class="p">);</span>
+  <span class="kt">int</span> <span class="k">const</span> <span class="n">numMaps</span> <span class="o">=</span> <span class="n">numMapsAllocated_</span><span class="p">.</span><span class="n">load</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">memory_order_acquire</span><span class="p">);</span>
+  <span class="n">FOR_EACH_RANGE</span><span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">numMaps</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">totalCap</span> <span class="o">+=</span> <span class="n">subMaps_</span><span class="p">[</span><span class="n">i</span><span class="p">].</span><span class="n">load</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">memory_order_relaxed</span><span class="p">)</span><span class="o">-&gt;</span><span class="n">capacity_</span><span class="p">;</span>
+  <span class="p">}</span>
+  <span class="k">return</span> <span class="n">totalCap</span><span class="p">;</span>
+<span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-26"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-26">&#182;</a></div><p>spaceRemaining --
+number of new insertions until current submaps are all at max load</p></td><td class="code"><div class="highlight"><pre><span class="n">template</span> <span class="o">&lt;</span><span class="kr">typename</span> <span class="n">KeyT</span><span class="p">,</span> <span class="kr">typename</span> <span class="n">ValueT</span><span class="p">,</span> <span class="kr">typename</span> <span class="n">HashFcn</span><span class="o">&gt;</span>
+<span class="kt">size_t</span> <span class="n">AtomicHashMap</span><span class="o">&lt;</span><span class="n">KeyT</span><span class="p">,</span> <span class="n">ValueT</span><span class="p">,</span> <span class="n">HashFcn</span><span class="o">&gt;::</span>
+<span class="n">spaceRemaining</span><span class="p">()</span> <span class="k">const</span> <span class="p">{</span>
+  <span class="kt">size_t</span> <span class="n">spaceRem</span><span class="p">(</span><span class="mi">0</span><span class="p">);</span>
+  <span class="kt">int</span> <span class="k">const</span> <span class="n">numMaps</span> <span class="o">=</span> <span class="n">numMapsAllocated_</span><span class="p">.</span><span class="n">load</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">memory_order_acquire</span><span class="p">);</span>
+  <span class="n">FOR_EACH_RANGE</span><span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">numMaps</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">SubMap</span><span class="o">*</span> <span class="n">thisMap</span> <span class="o">=</span> <span class="n">subMaps_</span><span class="p">[</span><span class="n">i</span><span class="p">].</span><span class="n">load</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">memory_order_relaxed</span><span class="p">);</span>
+    <span class="n">spaceRem</span> <span class="o">+=</span> <span class="n">std</span><span class="o">::</span><span class="n">max</span><span class="p">(</span>
+      <span class="mi">0</span><span class="p">,</span>
+      <span class="n">thisMap</span><span class="o">-&gt;</span><span class="n">maxEntries_</span> <span class="o">-</span> <span class="o">&amp;</span><span class="n">thisMap</span><span class="o">-&gt;</span><span class="n">numEntries_</span><span class="p">.</span><span class="n">readFull</span><span class="p">()</span>
+    <span class="p">);</span>
+  <span class="p">}</span>
+  <span class="k">return</span> <span class="n">spaceRem</span><span class="p">;</span>
+<span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-27"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-27">&#182;</a></div><p>clear -- Wipes all keys and values from primary map and destroys
+all secondary maps.  Not thread safe.</p></td><td class="code"><div class="highlight"><pre><span class="n">template</span> <span class="o">&lt;</span><span class="kr">typename</span> <span class="n">KeyT</span><span class="p">,</span> <span class="kr">typename</span> <span class="n">ValueT</span><span class="p">,</span> <span class="kr">typename</span> <span class="n">HashFcn</span><span class="o">&gt;</span>
+<span class="kt">void</span> <span class="n">AtomicHashMap</span><span class="o">&lt;</span><span class="n">KeyT</span><span class="p">,</span> <span class="n">ValueT</span><span class="p">,</span> <span class="n">HashFcn</span><span class="o">&gt;::</span>
+<span class="n">clear</span><span class="p">()</span> <span class="p">{</span>
+  <span class="n">subMaps_</span><span class="p">[</span><span class="mi">0</span><span class="p">].</span><span class="n">load</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">memory_order_relaxed</span><span class="p">)</span><span class="o">-&gt;</span><span class="n">clear</span><span class="p">();</span>
+  <span class="kt">int</span> <span class="k">const</span> <span class="n">numMaps</span> <span class="o">=</span> <span class="n">numMapsAllocated_</span>
+    <span class="p">.</span><span class="n">load</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">memory_order_relaxed</span><span class="p">);</span>
+  <span class="n">FOR_EACH_RANGE</span><span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">numMaps</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">SubMap</span><span class="o">*</span> <span class="n">thisMap</span> <span class="o">=</span> <span class="n">subMaps_</span><span class="p">[</span><span class="n">i</span><span class="p">].</span><span class="n">load</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">memory_order_relaxed</span><span class="p">);</span>
+    <span class="n">DCHECK</span><span class="p">(</span><span class="n">thisMap</span><span class="p">);</span>
+    <span class="n">SubMap</span><span class="o">::</span><span class="n">destroy</span><span class="p">(</span><span class="n">thisMap</span><span class="p">);</span>
+    <span class="n">subMaps_</span><span class="p">[</span><span class="n">i</span><span class="p">].</span><span class="n">store</span><span class="p">(</span><span class="n">nullptr</span><span class="p">,</span> <span class="n">std</span><span class="o">::</span><span class="n">memory_order_relaxed</span><span class="p">);</span>
+  <span class="p">}</span>
+  <span class="n">numMapsAllocated_</span><span class="p">.</span><span class="n">store</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">std</span><span class="o">::</span><span class="n">memory_order_relaxed</span><span class="p">);</span>
+<span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-28"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-28">&#182;</a></div><p>size --</p></td><td class="code"><div class="highlight"><pre><span class="n">template</span> <span class="o">&lt;</span><span class="kr">typename</span> <span class="n">KeyT</span><span class="p">,</span> <span class="kr">typename</span> <span class="n">ValueT</span><span class="p">,</span> <span class="kr">typename</span> <span class="n">HashFcn</span><span class="o">&gt;</span>
+<span class="kt">size_t</span> <span class="n">AtomicHashMap</span><span class="o">&lt;</span><span class="n">KeyT</span><span class="p">,</span> <span class="n">ValueT</span><span class="p">,</span> <span class="n">HashFcn</span><span class="o">&gt;::</span>
+<span class="n">size</span><span class="p">()</span> <span class="k">const</span> <span class="p">{</span>
+  <span class="kt">size_t</span> <span class="n">totalSize</span><span class="p">(</span><span class="mi">0</span><span class="p">);</span>
+  <span class="kt">int</span> <span class="k">const</span> <span class="n">numMaps</span> <span class="o">=</span> <span class="n">numMapsAllocated_</span><span class="p">.</span><span class="n">load</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">memory_order_acquire</span><span class="p">);</span>
+  <span class="n">FOR_EACH_RANGE</span><span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">numMaps</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">totalSize</span> <span class="o">+=</span> <span class="n">subMaps_</span><span class="p">[</span><span class="n">i</span><span class="p">].</span><span class="n">load</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">memory_order_relaxed</span><span class="p">)</span><span class="o">-&gt;</span><span class="n">size</span><span class="p">();</span>
+  <span class="p">}</span>
+  <span class="k">return</span> <span class="n">totalSize</span><span class="p">;</span>
+<span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-29"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-29">&#182;</a></div><p>encodeIndex -- Encode the submap index and offset into return.
+index_ret must be pre-populated with the submap offset.</p>
+
+<p>We leave index_ret untouched when referring to the primary map
+so it can be as large as possible (31 data bits).  Max size of
+secondary maps is limited by what can fit in the low 27 bits.</p>
+
+<p>Returns the following bit-encoded data in index<em>ret:
+  if subMap == 0 (primary map) =>
+    bit(s)          value
+        31              0
+      0-30  submap offset (index</em>ret input)</p>
+
+<p>if subMap > 0 (secondary maps) =>
+    bit(s)          value
+        31              1
+     27-30   which subMap
+      0-26  subMap offset (index_ret input)</p></td><td class="code"><div class="highlight"><pre><span class="n">template</span> <span class="o">&lt;</span><span class="kr">typename</span> <span class="n">KeyT</span><span class="p">,</span> <span class="kr">typename</span> <span class="n">ValueT</span><span class="p">,</span> <span class="kr">typename</span> <span class="n">HashFcn</span><span class="o">&gt;</span>
+<span class="kr">inline</span> <span class="kt">uint32_t</span> <span class="n">AtomicHashMap</span><span class="o">&lt;</span><span class="n">KeyT</span><span class="p">,</span> <span class="n">ValueT</span><span class="p">,</span> <span class="n">HashFcn</span><span class="o">&gt;::</span>
+<span class="n">encodeIndex</span><span class="p">(</span><span class="kt">uint32_t</span> <span class="n">subMap</span><span class="p">,</span> <span class="kt">uint32_t</span> <span class="n">offset</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">DCHECK_EQ</span><span class="p">(</span><span class="n">offset</span> <span class="o">&amp;</span> <span class="n">kSecondaryMapBit_</span><span class="p">,</span> <span class="mi">0</span><span class="p">);</span>  <span class="c1">// offset can&#39;t be too big</span>
+  <span class="k">if</span> <span class="p">(</span><span class="n">subMap</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span> <span class="k">return</span> <span class="n">offset</span><span class="p">;</span></pre></div></td></tr>
+
+
+<tr id="section-30"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-30">&#182;</a></div><p>Make sure subMap isn't too big</p></td><td class="code"><div class="highlight"><pre>  <span class="n">DCHECK_EQ</span><span class="p">(</span><span class="n">subMap</span> <span class="o">&gt;&gt;</span> <span class="n">kNumSubMapBits_</span><span class="p">,</span> <span class="mi">0</span><span class="p">);</span></pre></div></td></tr>
+
+
+<tr id="section-31"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-31">&#182;</a></div><p>Make sure subMap bits of offset are clear</p></td><td class="code"><div class="highlight"><pre>  <span class="n">DCHECK_EQ</span><span class="p">(</span><span class="n">offset</span> <span class="o">&amp;</span> <span class="p">(</span><span class="o">~</span><span class="n">kSubMapIndexMask_</span> <span class="o">|</span> <span class="n">kSecondaryMapBit_</span><span class="p">),</span> <span class="mi">0</span><span class="p">);</span></pre></div></td></tr>
+
+
+<tr id="section-32"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-32">&#182;</a></div><p>Set high-order bits to encode which submap this index belongs to</p></td><td class="code"><div class="highlight"><pre>  <span class="k">return</span> <span class="n">offset</span> <span class="o">|</span> <span class="p">(</span><span class="n">subMap</span> <span class="o">&lt;&lt;</span> <span class="n">kSubMapIndexShift_</span><span class="p">)</span> <span class="o">|</span> <span class="n">kSecondaryMapBit_</span><span class="p">;</span>
+<span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-33"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-33">&#182;</a></div><p>Iterator implementation</p></td><td class="code"><div class="highlight"><pre><span class="n">template</span> <span class="o">&lt;</span><span class="kr">typename</span> <span class="n">KeyT</span><span class="p">,</span> <span class="kr">typename</span> <span class="n">ValueT</span><span class="p">,</span> <span class="kr">typename</span> <span class="n">HashFcn</span><span class="o">&gt;</span>
+<span class="n">template</span><span class="o">&lt;</span><span class="n">class</span> <span class="n">ContT</span><span class="p">,</span> <span class="n">class</span> <span class="n">IterVal</span><span class="p">,</span> <span class="n">class</span> <span class="n">SubIt</span><span class="o">&gt;</span>
+<span class="k">struct</span> <span class="n">AtomicHashMap</span><span class="o">&lt;</span><span class="n">KeyT</span><span class="p">,</span> <span class="n">ValueT</span><span class="p">,</span> <span class="n">HashFcn</span><span class="o">&gt;::</span><span class="n">ahm_iterator</span>
+    <span class="o">:</span> <span class="n">boost</span><span class="o">::</span><span class="n">iterator_facade</span><span class="o">&lt;</span><span class="n">ahm_iterator</span><span class="o">&lt;</span><span class="n">ContT</span><span class="p">,</span><span class="n">IterVal</span><span class="p">,</span><span class="n">SubIt</span><span class="o">&gt;</span><span class="p">,</span>
+                             <span class="n">IterVal</span><span class="p">,</span>
+                             <span class="n">boost</span><span class="o">::</span><span class="n">forward_traversal_tag</span><span class="o">&gt;</span>
+<span class="p">{</span>
+  <span class="n">explicit</span> <span class="n">ahm_iterator</span><span class="p">()</span> <span class="o">:</span> <span class="n">ahm_</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span> <span class="p">{}</span></pre></div></td></tr>
+
+
+<tr id="section-34"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-34">&#182;</a></div><p>Conversion ctor for interoperability between const<em>iterator and
+iterator.  The enable</em>if&lt;> magic keeps us well-behaved for
+is<em>convertible&lt;> (v. the iterator</em>facade documentation).</p></td><td class="code"><div class="highlight"><pre>  <span class="n">template</span><span class="o">&lt;</span><span class="n">class</span> <span class="n">OtherContT</span><span class="p">,</span> <span class="n">class</span> <span class="n">OtherVal</span><span class="p">,</span> <span class="n">class</span> <span class="n">OtherSubIt</span><span class="o">&gt;</span>
+  <span class="n">ahm_iterator</span><span class="p">(</span><span class="k">const</span> <span class="n">ahm_iterator</span><span class="o">&lt;</span><span class="n">OtherContT</span><span class="p">,</span><span class="n">OtherVal</span><span class="p">,</span><span class="n">OtherSubIt</span><span class="o">&gt;&amp;</span> <span class="n">o</span><span class="p">,</span>
+               <span class="kr">typename</span> <span class="n">std</span><span class="o">::</span><span class="n">enable_if</span><span class="o">&lt;</span>
+               <span class="n">std</span><span class="o">::</span><span class="n">is_convertible</span><span class="o">&lt;</span><span class="n">OtherSubIt</span><span class="p">,</span><span class="n">SubIt</span><span class="o">&gt;::</span><span class="n">value</span> <span class="o">&gt;::</span><span class="n">type</span><span class="o">*</span> <span class="o">=</span> <span class="mi">0</span><span class="p">)</span>
+      <span class="o">:</span> <span class="n">ahm_</span><span class="p">(</span><span class="n">o</span><span class="p">.</span><span class="n">ahm_</span><span class="p">)</span>
+      <span class="p">,</span> <span class="n">subMap_</span><span class="p">(</span><span class="n">o</span><span class="p">.</span><span class="n">subMap_</span><span class="p">)</span>
+      <span class="p">,</span> <span class="n">subIt_</span><span class="p">(</span><span class="n">o</span><span class="p">.</span><span class="n">subIt_</span><span class="p">)</span>
+  <span class="p">{}</span>
+
+  <span class="cm">/*</span>
+<span class="cm">   * Returns the unique index that can be used for access directly</span>
+<span class="cm">   * into the data storage.</span>
+<span class="cm">   */</span>
+  <span class="kt">uint32_t</span> <span class="n">getIndex</span><span class="p">()</span> <span class="k">const</span> <span class="p">{</span>
+    <span class="n">CHECK</span><span class="p">(</span><span class="o">!</span><span class="n">isEnd</span><span class="p">());</span>
+    <span class="k">return</span> <span class="n">ahm_</span><span class="o">-&gt;</span><span class="n">encodeIndex</span><span class="p">(</span><span class="n">subMap_</span><span class="p">,</span> <span class="n">subIt_</span><span class="p">.</span><span class="n">getIndex</span><span class="p">());</span>
+  <span class="p">}</span>
+
+ <span class="nl">private:</span>
+  <span class="n">friend</span> <span class="n">class</span> <span class="n">AtomicHashMap</span><span class="p">;</span>
+  <span class="n">explicit</span> <span class="nf">ahm_iterator</span><span class="p">(</span><span class="n">ContT</span><span class="o">*</span> <span class="n">ahm</span><span class="p">,</span>
+                        <span class="kt">uint32_t</span> <span class="n">subMap</span><span class="p">,</span>
+                        <span class="k">const</span> <span class="n">SubIt</span><span class="o">&amp;</span> <span class="n">subIt</span><span class="p">)</span>
+      <span class="o">:</span> <span class="n">ahm_</span><span class="p">(</span><span class="n">ahm</span><span class="p">)</span>
+      <span class="p">,</span> <span class="n">subMap_</span><span class="p">(</span><span class="n">subMap</span><span class="p">)</span>
+      <span class="p">,</span> <span class="n">subIt_</span><span class="p">(</span><span class="n">subIt</span><span class="p">)</span>
+  <span class="p">{</span>
+    <span class="n">checkAdvanceToNextSubmap</span><span class="p">();</span>
+  <span class="p">}</span>
+
+  <span class="n">friend</span> <span class="n">class</span> <span class="n">boost</span><span class="o">::</span><span class="n">iterator_core_access</span><span class="p">;</span>
+
+  <span class="kt">void</span> <span class="nf">increment</span><span class="p">()</span> <span class="p">{</span>
+    <span class="n">CHECK</span><span class="p">(</span><span class="o">!</span><span class="n">isEnd</span><span class="p">());</span>
+    <span class="o">++</span><span class="n">subIt_</span><span class="p">;</span>
+    <span class="n">checkAdvanceToNextSubmap</span><span class="p">();</span>
+  <span class="p">}</span>
+
+  <span class="n">bool</span> <span class="nf">equal</span><span class="p">(</span><span class="k">const</span> <span class="n">ahm_iterator</span><span class="o">&amp;</span> <span class="n">other</span><span class="p">)</span> <span class="k">const</span> <span class="p">{</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">ahm_</span> <span class="o">!=</span> <span class="n">other</span><span class="p">.</span><span class="n">ahm_</span><span class="p">)</span> <span class="p">{</span>
+      <span class="k">return</span> <span class="nb">false</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="k">if</span> <span class="p">(</span><span class="n">isEnd</span><span class="p">()</span> <span class="o">||</span> <span class="n">other</span><span class="p">.</span><span class="n">isEnd</span><span class="p">())</span> <span class="p">{</span>
+      <span class="k">return</span> <span class="n">isEnd</span><span class="p">()</span> <span class="o">==</span> <span class="n">other</span><span class="p">.</span><span class="n">isEnd</span><span class="p">();</span>
+    <span class="p">}</span>
+
+    <span class="k">return</span> <span class="n">subMap_</span> <span class="o">==</span> <span class="n">other</span><span class="p">.</span><span class="n">subMap_</span> <span class="o">&amp;&amp;</span>
+      <span class="n">subIt_</span> <span class="o">==</span> <span class="n">other</span><span class="p">.</span><span class="n">subIt_</span><span class="p">;</span>
+  <span class="p">}</span>
+
+  <span class="n">IterVal</span><span class="o">&amp;</span> <span class="n">dereference</span><span class="p">()</span> <span class="k">const</span> <span class="p">{</span>
+    <span class="k">return</span> <span class="o">*</span><span class="n">subIt_</span><span class="p">;</span>
+  <span class="p">}</span>
+
+  <span class="n">bool</span> <span class="n">isEnd</span><span class="p">()</span> <span class="k">const</span> <span class="p">{</span> <span class="k">return</span> <span class="n">ahm_</span> <span class="o">==</span> <span class="n">nullptr</span><span class="p">;</span> <span class="p">}</span>
+
+  <span class="kt">void</span> <span class="n">checkAdvanceToNextSubmap</span><span class="p">()</span> <span class="p">{</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">isEnd</span><span class="p">())</span> <span class="p">{</span>
+      <span class="k">return</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="n">SubMap</span><span class="o">*</span> <span class="n">thisMap</span> <span class="o">=</span> <span class="n">ahm_</span><span class="o">-&gt;</span><span class="n">subMaps_</span><span class="p">[</span><span class="n">subMap_</span><span class="p">].</span>
+      <span class="n">load</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">memory_order_relaxed</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">subIt_</span> <span class="o">==</span> <span class="n">thisMap</span><span class="o">-&gt;</span><span class="n">end</span><span class="p">())</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-35"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-35">&#182;</a></div><p>This sub iterator is done, advance to next one</p></td><td class="code"><div class="highlight"><pre>      <span class="k">if</span> <span class="p">(</span><span class="n">subMap_</span> <span class="o">+</span> <span class="mi">1</span> <span class="o">&lt;</span>
+          <span class="n">ahm_</span><span class="o">-&gt;</span><span class="n">numMapsAllocated_</span><span class="p">.</span><span class="n">load</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">memory_order_acquire</span><span class="p">))</span> <span class="p">{</span>
+        <span class="o">++</span><span class="n">subMap_</span><span class="p">;</span>
+        <span class="n">thisMap</span> <span class="o">=</span> <span class="n">ahm_</span><span class="o">-&gt;</span><span class="n">subMaps_</span><span class="p">[</span><span class="n">subMap_</span><span class="p">].</span><span class="n">load</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">memory_order_relaxed</span><span class="p">);</span>
+        <span class="n">subIt_</span> <span class="o">=</span> <span class="n">thisMap</span><span class="o">-&gt;</span><span class="n">begin</span><span class="p">();</span>
+      <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+        <span class="n">ahm_</span> <span class="o">=</span> <span class="n">nullptr</span><span class="p">;</span>
+      <span class="p">}</span>
+    <span class="p">}</span>
+  <span class="p">}</span>
+
+ <span class="nl">private:</span>
+  <span class="n">ContT</span><span class="o">*</span> <span class="n">ahm_</span><span class="p">;</span>
+  <span class="kt">uint32_t</span> <span class="n">subMap_</span><span class="p">;</span>
+  <span class="n">SubIt</span> <span class="n">subIt_</span><span class="p">;</span>
+<span class="p">};</span> <span class="c1">// ahm_iterator</span>
+
+<span class="p">}</span> <span class="c1">// namespace folly</span>
+
+<span class="cp">#undef FOLLY_SPIN_WAIT</span>
+
+</pre></div></td></tr>
+
+</tbody>
+</table>
+</div>
+
+</body>
+<script>docas={repo:"joekychen/folly",depth:1}</script>
+<script>document.write('<script src=' + ('__proto__' in {} ? 'http://cdnjs.cloudflare.com/ajax/libs/zepto/1.0rc1/zepto.min.js' : 'https://ajax.googleapis.com/ajax/libs/jquery/1.7.2/jquery.min.js')+'><\\/script>')</script>
+<script src="http://baoshan.github.com/moment/min/moment.min.js"></script>
+<script src="../javascript/docco.min.js"></script>
+</html>

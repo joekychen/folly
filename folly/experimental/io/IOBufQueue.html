@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html><head><title>joekychen/folly » folly › experimental › io › IOBufQueue.cpp
+
+</title>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+<meta name="generator" content="Docco">
+<link rel="stylesheet" media="all" href="../../../stylesheets/docco.min.css" />
+
+
+</head>
+<body>
+<div id="container">
+<div id="background"></div>
+<table cellpadding="0" cellspacing="0">
+<thead><tr><th class="docs"><a id="home" href="../../../index.html"></a><h1>IOBufQueue.cpp</h1></th><th class="code"></th></tr></thead>
+<tbody>
+
+
+<tr id="section-1"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-1">&#182;</a></div></td><td class="code"><div class="highlight"><pre><span class="cm">/*</span>
+<span class="cm"> * Copyright 2012 Facebook, Inc.</span>
+<span class="cm"> *</span>
+<span class="cm"> * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span class="cm"> * you may not use this file except in compliance with the License.</span>
+<span class="cm"> * You may obtain a copy of the License at</span>
+<span class="cm"> *</span>
+<span class="cm"> *   http://www.apache.org/licenses/LICENSE-2.0</span>
+<span class="cm"> *</span>
+<span class="cm"> * Unless required by applicable law or agreed to in writing, software</span>
+<span class="cm"> * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span class="cm"> * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span class="cm"> * See the License for the specific language governing permissions and</span>
+<span class="cm"> * limitations under the License.</span>
+<span class="cm"> */</span>
+
+<span class="cp">#include &quot;folly/experimental/io/IOBufQueue.h&quot;</span>
+
+<span class="cp">#include &lt;string.h&gt;</span>
+
+<span class="cp">#include &lt;stdexcept&gt;</span>
+
+<span class="k">using</span> <span class="n">std</span><span class="o">::</span><span class="n">make_pair</span><span class="p">;</span>
+<span class="k">using</span> <span class="n">std</span><span class="o">::</span><span class="n">pair</span><span class="p">;</span>
+<span class="k">using</span> <span class="n">std</span><span class="o">::</span><span class="n">unique_ptr</span><span class="p">;</span>
+
+<span class="k">namespace</span> <span class="p">{</span>
+
+<span class="k">using</span> <span class="n">folly</span><span class="o">::</span><span class="n">IOBuf</span><span class="p">;</span>
+
+<span class="k">const</span> <span class="n">size_t</span> <span class="n">MIN_ALLOC_SIZE</span> <span class="o">=</span> <span class="mi">2000</span><span class="p">;</span>
+<span class="k">const</span> <span class="n">size_t</span> <span class="n">MAX_ALLOC_SIZE</span> <span class="o">=</span> <span class="mi">8000</span><span class="p">;</span> <span class="c1">// Must fit within a uint32_t</span>
+
+<span class="cm">/**</span>
+<span class="cm"> * Convenience function to append chain src to chain dst.</span>
+<span class="cm"> */</span>
+<span class="kt">void</span>
+<span class="n">appendToChain</span><span class="p">(</span><span class="n">unique_ptr</span><span class="o">&lt;</span><span class="n">IOBuf</span><span class="o">&gt;&amp;</span> <span class="n">dst</span><span class="p">,</span> <span class="n">unique_ptr</span><span class="o">&lt;</span><span class="n">IOBuf</span><span class="o">&gt;&amp;&amp;</span> <span class="n">src</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">if</span> <span class="p">(</span><span class="n">dst</span> <span class="o">==</span> <span class="nb">NULL</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">dst</span> <span class="o">=</span> <span class="n">std</span><span class="o">::</span><span class="n">move</span><span class="p">(</span><span class="n">src</span><span class="p">);</span>
+  <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+    <span class="n">dst</span><span class="o">-&gt;</span><span class="n">prev</span><span class="p">()</span><span class="o">-&gt;</span><span class="n">appendChain</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">move</span><span class="p">(</span><span class="n">src</span><span class="p">));</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="p">}</span> <span class="c1">// anonymous namespace</span>
+
+<span class="k">namespace</span> <span class="n">folly</span> <span class="p">{</span>
+
+<span class="n">IOBufQueue</span><span class="o">::</span><span class="n">IOBufQueue</span><span class="p">(</span><span class="k">const</span> <span class="n">Options</span><span class="o">&amp;</span> <span class="n">options</span><span class="p">)</span>
+  <span class="o">:</span> <span class="n">options_</span><span class="p">(</span><span class="n">options</span><span class="p">),</span>
+    <span class="n">chainLength_</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+<span class="p">}</span>
+
+<span class="n">IOBufQueue</span><span class="o">::</span><span class="n">IOBufQueue</span><span class="p">(</span><span class="n">IOBufQueue</span><span class="o">&amp;&amp;</span> <span class="n">other</span><span class="p">)</span>
+  <span class="o">:</span> <span class="n">options_</span><span class="p">(</span><span class="n">other</span><span class="p">.</span><span class="n">options_</span><span class="p">),</span>
+    <span class="n">chainLength_</span><span class="p">(</span><span class="n">other</span><span class="p">.</span><span class="n">chainLength_</span><span class="p">),</span>
+    <span class="n">head_</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">move</span><span class="p">(</span><span class="n">other</span><span class="p">.</span><span class="n">head_</span><span class="p">))</span> <span class="p">{</span>
+  <span class="n">other</span><span class="p">.</span><span class="n">chainLength_</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="n">IOBufQueue</span><span class="o">&amp;</span> <span class="n">IOBufQueue</span><span class="o">::</span><span class="k">operator</span><span class="o">=</span><span class="p">(</span><span class="n">IOBufQueue</span><span class="o">&amp;&amp;</span> <span class="n">other</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">if</span> <span class="p">(</span><span class="o">&amp;</span><span class="n">other</span> <span class="o">!=</span> <span class="k">this</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">options_</span> <span class="o">=</span> <span class="n">other</span><span class="p">.</span><span class="n">options_</span><span class="p">;</span>
+    <span class="n">chainLength_</span> <span class="o">=</span> <span class="n">other</span><span class="p">.</span><span class="n">chainLength_</span><span class="p">;</span>
+    <span class="n">head_</span> <span class="o">=</span> <span class="n">std</span><span class="o">::</span><span class="n">move</span><span class="p">(</span><span class="n">other</span><span class="p">.</span><span class="n">head_</span><span class="p">);</span>
+    <span class="n">other</span><span class="p">.</span><span class="n">chainLength_</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+  <span class="p">}</span>
+  <span class="k">return</span> <span class="o">*</span><span class="k">this</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="kt">void</span>
+<span class="n">IOBufQueue</span><span class="o">::</span><span class="n">append</span><span class="p">(</span><span class="n">unique_ptr</span><span class="o">&lt;</span><span class="n">IOBuf</span><span class="o">&gt;&amp;&amp;</span> <span class="n">buf</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">buf</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">return</span><span class="p">;</span>
+  <span class="p">}</span>
+  <span class="k">if</span> <span class="p">(</span><span class="n">options_</span><span class="p">.</span><span class="n">cacheChainLength</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">chainLength_</span> <span class="o">+=</span> <span class="n">buf</span><span class="o">-&gt;</span><span class="n">computeChainDataLength</span><span class="p">();</span>
+  <span class="p">}</span>
+  <span class="n">appendToChain</span><span class="p">(</span><span class="n">head_</span><span class="p">,</span> <span class="n">std</span><span class="o">::</span><span class="n">move</span><span class="p">(</span><span class="n">buf</span><span class="p">));</span>
+<span class="p">}</span>
+
+<span class="kt">void</span>
+<span class="n">IOBufQueue</span><span class="o">::</span><span class="n">append</span><span class="p">(</span><span class="n">IOBufQueue</span><span class="o">&amp;</span> <span class="n">other</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">other</span><span class="p">.</span><span class="n">head_</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">return</span><span class="p">;</span>
+  <span class="p">}</span>
+  <span class="k">if</span> <span class="p">(</span><span class="n">options_</span><span class="p">.</span><span class="n">cacheChainLength</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">other</span><span class="p">.</span><span class="n">options_</span><span class="p">.</span><span class="n">cacheChainLength</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">chainLength_</span> <span class="o">+=</span> <span class="n">other</span><span class="p">.</span><span class="n">chainLength_</span><span class="p">;</span>
+    <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+      <span class="n">chainLength_</span> <span class="o">+=</span> <span class="n">other</span><span class="p">.</span><span class="n">head_</span><span class="o">-&gt;</span><span class="n">computeChainDataLength</span><span class="p">();</span>
+    <span class="p">}</span>
+  <span class="p">}</span>
+  <span class="n">appendToChain</span><span class="p">(</span><span class="n">head_</span><span class="p">,</span> <span class="n">std</span><span class="o">::</span><span class="n">move</span><span class="p">(</span><span class="n">other</span><span class="p">.</span><span class="n">head_</span><span class="p">));</span>
+  <span class="n">other</span><span class="p">.</span><span class="n">chainLength_</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="kt">void</span>
+<span class="n">IOBufQueue</span><span class="o">::</span><span class="n">append</span><span class="p">(</span><span class="k">const</span> <span class="kt">void</span><span class="o">*</span> <span class="n">buf</span><span class="p">,</span> <span class="n">size_t</span> <span class="n">len</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">auto</span> <span class="n">src</span> <span class="o">=</span> <span class="k">static_cast</span><span class="o">&lt;</span><span class="k">const</span> <span class="n">uint8_t</span><span class="o">*&gt;</span><span class="p">(</span><span class="n">buf</span><span class="p">);</span>
+  <span class="k">while</span> <span class="p">(</span><span class="n">len</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">if</span> <span class="p">((</span><span class="n">head_</span> <span class="o">==</span> <span class="nb">NULL</span><span class="p">)</span> <span class="o">||</span> <span class="n">head_</span><span class="o">-&gt;</span><span class="n">prev</span><span class="p">()</span><span class="o">-&gt;</span><span class="n">isSharedOne</span><span class="p">()</span> <span class="o">||</span>
+        <span class="p">(</span><span class="n">head_</span><span class="o">-&gt;</span><span class="n">prev</span><span class="p">()</span><span class="o">-&gt;</span><span class="n">tailroom</span><span class="p">()</span> <span class="o">==</span> <span class="mi">0</span><span class="p">))</span> <span class="p">{</span>
+      <span class="n">appendToChain</span><span class="p">(</span><span class="n">head_</span><span class="p">,</span> <span class="n">std</span><span class="o">::</span><span class="n">move</span><span class="p">(</span>
+          <span class="n">IOBuf</span><span class="o">::</span><span class="n">create</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">max</span><span class="p">(</span><span class="n">MIN_ALLOC_SIZE</span><span class="p">,</span>
+              <span class="n">std</span><span class="o">::</span><span class="n">min</span><span class="p">(</span><span class="n">len</span><span class="p">,</span> <span class="n">MAX_ALLOC_SIZE</span><span class="p">)))));</span>
+    <span class="p">}</span>
+    <span class="n">IOBuf</span><span class="o">*</span> <span class="n">last</span> <span class="o">=</span> <span class="n">head_</span><span class="o">-&gt;</span><span class="n">prev</span><span class="p">();</span>
+    <span class="n">uint32_t</span> <span class="n">copyLen</span> <span class="o">=</span> <span class="n">std</span><span class="o">::</span><span class="n">min</span><span class="p">(</span><span class="n">len</span><span class="p">,</span> <span class="p">(</span><span class="n">size_t</span><span class="p">)</span><span class="n">last</span><span class="o">-&gt;</span><span class="n">tailroom</span><span class="p">());</span>
+    <span class="n">memcpy</span><span class="p">(</span><span class="n">last</span><span class="o">-&gt;</span><span class="n">writableTail</span><span class="p">(),</span> <span class="n">src</span><span class="p">,</span> <span class="n">copyLen</span><span class="p">);</span>
+    <span class="n">src</span> <span class="o">+=</span> <span class="n">copyLen</span><span class="p">;</span>
+    <span class="n">last</span><span class="o">-&gt;</span><span class="n">append</span><span class="p">(</span><span class="n">copyLen</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">options_</span><span class="p">.</span><span class="n">cacheChainLength</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">chainLength_</span> <span class="o">+=</span> <span class="n">copyLen</span><span class="p">;</span>
+    <span class="p">}</span>
+    <span class="n">len</span> <span class="o">-=</span> <span class="n">copyLen</span><span class="p">;</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="kt">void</span>
+<span class="n">IOBufQueue</span><span class="o">::</span><span class="n">wrapBuffer</span><span class="p">(</span><span class="k">const</span> <span class="kt">void</span><span class="o">*</span> <span class="n">buf</span><span class="p">,</span> <span class="n">size_t</span> <span class="n">len</span><span class="p">,</span> <span class="n">uint32_t</span> <span class="n">blockSize</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">auto</span> <span class="n">src</span> <span class="o">=</span> <span class="k">static_cast</span><span class="o">&lt;</span><span class="k">const</span> <span class="n">uint8_t</span><span class="o">*&gt;</span><span class="p">(</span><span class="n">buf</span><span class="p">);</span>
+  <span class="k">while</span> <span class="p">(</span><span class="n">len</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">size_t</span> <span class="n">n</span> <span class="o">=</span> <span class="n">std</span><span class="o">::</span><span class="n">min</span><span class="p">(</span><span class="n">len</span><span class="p">,</span> <span class="n">size_t</span><span class="p">(</span><span class="n">blockSize</span><span class="p">));</span>
+    <span class="n">append</span><span class="p">(</span><span class="n">IOBuf</span><span class="o">::</span><span class="n">wrapBuffer</span><span class="p">(</span><span class="n">src</span><span class="p">,</span> <span class="n">n</span><span class="p">));</span>
+    <span class="n">src</span> <span class="o">+=</span> <span class="n">n</span><span class="p">;</span>
+    <span class="n">len</span> <span class="o">-=</span> <span class="n">n</span><span class="p">;</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="n">pair</span><span class="o">&lt;</span><span class="kt">void</span><span class="o">*</span><span class="p">,</span><span class="n">uint32_t</span><span class="o">&gt;</span>
+<span class="n">IOBufQueue</span><span class="o">::</span><span class="n">preallocate</span><span class="p">(</span><span class="n">uint32_t</span> <span class="n">min</span><span class="p">,</span> <span class="n">uint32_t</span> <span class="n">max</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">if</span> <span class="p">(</span><span class="n">head_</span> <span class="o">!=</span> <span class="nb">NULL</span><span class="p">)</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-2"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-2">&#182;</a></div><p>If there's enough space left over at the end of the queue, use that.</p></td><td class="code"><div class="highlight"><pre>    <span class="n">IOBuf</span><span class="o">*</span> <span class="n">last</span> <span class="o">=</span> <span class="n">head_</span><span class="o">-&gt;</span><span class="n">prev</span><span class="p">();</span>
+    <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">last</span><span class="o">-&gt;</span><span class="n">isSharedOne</span><span class="p">())</span> <span class="p">{</span>
+      <span class="n">uint32_t</span> <span class="n">avail</span> <span class="o">=</span> <span class="n">last</span><span class="o">-&gt;</span><span class="n">tailroom</span><span class="p">();</span>
+      <span class="k">if</span> <span class="p">(</span><span class="n">avail</span> <span class="o">&gt;=</span> <span class="n">min</span><span class="p">)</span> <span class="p">{</span>
+        <span class="k">return</span> <span class="n">make_pair</span><span class="p">(</span>
+            <span class="n">last</span><span class="o">-&gt;</span><span class="n">writableTail</span><span class="p">(),</span> <span class="n">std</span><span class="o">::</span><span class="n">min</span><span class="p">(</span><span class="n">max</span><span class="p">,</span> <span class="n">avail</span><span class="p">));</span>
+      <span class="p">}</span>
+    <span class="p">}</span>
+  <span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-3"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-3">&#182;</a></div><p>Allocate a new buffer of the requested max size.</p></td><td class="code"><div class="highlight"><pre>  <span class="n">unique_ptr</span><span class="o">&lt;</span><span class="n">IOBuf</span><span class="o">&gt;</span> <span class="n">newBuf</span><span class="p">(</span><span class="n">IOBuf</span><span class="o">::</span><span class="n">create</span><span class="p">(</span><span class="n">max</span><span class="p">));</span>
+  <span class="n">appendToChain</span><span class="p">(</span><span class="n">head_</span><span class="p">,</span> <span class="n">std</span><span class="o">::</span><span class="n">move</span><span class="p">(</span><span class="n">newBuf</span><span class="p">));</span>
+  <span class="n">IOBuf</span><span class="o">*</span> <span class="n">last</span> <span class="o">=</span> <span class="n">head_</span><span class="o">-&gt;</span><span class="n">prev</span><span class="p">();</span>
+  <span class="k">return</span> <span class="n">make_pair</span><span class="p">(</span><span class="n">last</span><span class="o">-&gt;</span><span class="n">writableTail</span><span class="p">(),</span>
+      <span class="n">std</span><span class="o">::</span><span class="n">min</span><span class="p">(</span><span class="n">max</span><span class="p">,</span> <span class="n">last</span><span class="o">-&gt;</span><span class="n">tailroom</span><span class="p">()));</span>
+<span class="p">}</span>
+
+<span class="kt">void</span>
+<span class="n">IOBufQueue</span><span class="o">::</span><span class="n">postallocate</span><span class="p">(</span><span class="n">uint32_t</span> <span class="n">n</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">head_</span><span class="o">-&gt;</span><span class="n">prev</span><span class="p">()</span><span class="o">-&gt;</span><span class="n">append</span><span class="p">(</span><span class="n">n</span><span class="p">);</span>
+  <span class="k">if</span> <span class="p">(</span><span class="n">options_</span><span class="p">.</span><span class="n">cacheChainLength</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">chainLength_</span> <span class="o">+=</span> <span class="n">n</span><span class="p">;</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="n">unique_ptr</span><span class="o">&lt;</span><span class="n">IOBuf</span><span class="o">&gt;</span>
+<span class="n">IOBufQueue</span><span class="o">::</span><span class="n">split</span><span class="p">(</span><span class="n">size_t</span> <span class="n">n</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">unique_ptr</span><span class="o">&lt;</span><span class="n">IOBuf</span><span class="o">&gt;</span> <span class="n">result</span><span class="p">;</span>
+  <span class="k">while</span> <span class="p">(</span><span class="n">n</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">head_</span> <span class="o">==</span> <span class="nb">NULL</span><span class="p">)</span> <span class="p">{</span>
+      <span class="k">throw</span> <span class="n">std</span><span class="o">::</span><span class="n">underflow_error</span><span class="p">(</span>
+          <span class="s">&quot;Attempt to remove more bytes than are present in IOBufQueue&quot;</span><span class="p">);</span>
+    <span class="p">}</span> <span class="k">else</span> <span class="k">if</span> <span class="p">(</span><span class="n">head_</span><span class="o">-&gt;</span><span class="n">length</span><span class="p">()</span> <span class="o">&lt;=</span> <span class="n">n</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">n</span> <span class="o">-=</span> <span class="n">head_</span><span class="o">-&gt;</span><span class="n">length</span><span class="p">();</span>
+      <span class="k">if</span> <span class="p">(</span><span class="n">options_</span><span class="p">.</span><span class="n">cacheChainLength</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">chainLength_</span> <span class="o">-=</span> <span class="n">head_</span><span class="o">-&gt;</span><span class="n">length</span><span class="p">();</span>
+      <span class="p">}</span>
+      <span class="n">unique_ptr</span><span class="o">&lt;</span><span class="n">IOBuf</span><span class="o">&gt;</span> <span class="n">remainder</span> <span class="o">=</span> <span class="n">head_</span><span class="o">-&gt;</span><span class="n">pop</span><span class="p">();</span>
+      <span class="n">appendToChain</span><span class="p">(</span><span class="n">result</span><span class="p">,</span> <span class="n">std</span><span class="o">::</span><span class="n">move</span><span class="p">(</span><span class="n">head_</span><span class="p">));</span>
+      <span class="n">head_</span> <span class="o">=</span> <span class="n">std</span><span class="o">::</span><span class="n">move</span><span class="p">(</span><span class="n">remainder</span><span class="p">);</span>
+    <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+      <span class="n">unique_ptr</span><span class="o">&lt;</span><span class="n">IOBuf</span><span class="o">&gt;</span> <span class="n">clone</span> <span class="o">=</span> <span class="n">head_</span><span class="o">-&gt;</span><span class="n">cloneOne</span><span class="p">();</span>
+      <span class="n">clone</span><span class="o">-&gt;</span><span class="n">trimEnd</span><span class="p">(</span><span class="n">clone</span><span class="o">-&gt;</span><span class="n">length</span><span class="p">()</span> <span class="o">-</span> <span class="n">n</span><span class="p">);</span>
+      <span class="n">appendToChain</span><span class="p">(</span><span class="n">result</span><span class="p">,</span> <span class="n">std</span><span class="o">::</span><span class="n">move</span><span class="p">(</span><span class="n">clone</span><span class="p">));</span>
+      <span class="n">head_</span><span class="o">-&gt;</span><span class="n">trimStart</span><span class="p">(</span><span class="n">n</span><span class="p">);</span>
+      <span class="k">if</span> <span class="p">(</span><span class="n">options_</span><span class="p">.</span><span class="n">cacheChainLength</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">chainLength_</span> <span class="o">-=</span> <span class="n">n</span><span class="p">;</span>
+      <span class="p">}</span>
+      <span class="k">break</span><span class="p">;</span>
+    <span class="p">}</span>
+  <span class="p">}</span>
+  <span class="k">return</span> <span class="n">std</span><span class="o">::</span><span class="n">move</span><span class="p">(</span><span class="n">result</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="kt">void</span> <span class="n">IOBufQueue</span><span class="o">::</span><span class="n">trimStart</span><span class="p">(</span><span class="n">size_t</span> <span class="n">amount</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">while</span> <span class="p">(</span><span class="n">amount</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">head_</span><span class="p">)</span> <span class="p">{</span>
+      <span class="k">throw</span> <span class="n">std</span><span class="o">::</span><span class="n">underflow_error</span><span class="p">(</span>
+        <span class="s">&quot;Attempt to trim more bytes than are present in IOBufQueue&quot;</span><span class="p">);</span>
+    <span class="p">}</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">head_</span><span class="o">-&gt;</span><span class="n">length</span><span class="p">()</span> <span class="o">&gt;</span> <span class="n">amount</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">head_</span><span class="o">-&gt;</span><span class="n">trimStart</span><span class="p">(</span><span class="n">amount</span><span class="p">);</span>
+      <span class="k">if</span> <span class="p">(</span><span class="n">options_</span><span class="p">.</span><span class="n">cacheChainLength</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">chainLength_</span> <span class="o">-=</span> <span class="n">amount</span><span class="p">;</span>
+      <span class="p">}</span>
+      <span class="k">break</span><span class="p">;</span>
+    <span class="p">}</span>
+    <span class="n">amount</span> <span class="o">-=</span> <span class="n">head_</span><span class="o">-&gt;</span><span class="n">length</span><span class="p">();</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">options_</span><span class="p">.</span><span class="n">cacheChainLength</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">chainLength_</span> <span class="o">-=</span> <span class="n">head_</span><span class="o">-&gt;</span><span class="n">length</span><span class="p">();</span>
+    <span class="p">}</span>
+    <span class="n">head_</span> <span class="o">=</span> <span class="n">head_</span><span class="o">-&gt;</span><span class="n">pop</span><span class="p">();</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="kt">void</span> <span class="n">IOBufQueue</span><span class="o">::</span><span class="n">trimEnd</span><span class="p">(</span><span class="n">size_t</span> <span class="n">amount</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">while</span> <span class="p">(</span><span class="n">amount</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">head_</span><span class="p">)</span> <span class="p">{</span>
+      <span class="k">throw</span> <span class="n">std</span><span class="o">::</span><span class="n">underflow_error</span><span class="p">(</span>
+        <span class="s">&quot;Attempt to trim more bytes than are present in IOBufQueue&quot;</span><span class="p">);</span>
+    <span class="p">}</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">head_</span><span class="o">-&gt;</span><span class="n">prev</span><span class="p">()</span><span class="o">-&gt;</span><span class="n">length</span><span class="p">()</span> <span class="o">&gt;</span> <span class="n">amount</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">head_</span><span class="o">-&gt;</span><span class="n">prev</span><span class="p">()</span><span class="o">-&gt;</span><span class="n">trimEnd</span><span class="p">(</span><span class="n">amount</span><span class="p">);</span>
+      <span class="k">if</span> <span class="p">(</span><span class="n">options_</span><span class="p">.</span><span class="n">cacheChainLength</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">chainLength_</span> <span class="o">-=</span> <span class="n">amount</span><span class="p">;</span>
+      <span class="p">}</span>
+      <span class="k">break</span><span class="p">;</span>
+    <span class="p">}</span>
+    <span class="n">amount</span> <span class="o">-=</span> <span class="n">head_</span><span class="o">-&gt;</span><span class="n">prev</span><span class="p">()</span><span class="o">-&gt;</span><span class="n">length</span><span class="p">();</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">options_</span><span class="p">.</span><span class="n">cacheChainLength</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">chainLength_</span> <span class="o">-=</span> <span class="n">head_</span><span class="o">-&gt;</span><span class="n">prev</span><span class="p">()</span><span class="o">-&gt;</span><span class="n">length</span><span class="p">();</span>
+    <span class="p">}</span>
+    <span class="n">unique_ptr</span><span class="o">&lt;</span><span class="n">IOBuf</span><span class="o">&gt;</span> <span class="n">b</span> <span class="o">=</span> <span class="n">head_</span><span class="o">-&gt;</span><span class="n">prev</span><span class="p">()</span><span class="o">-&gt;</span><span class="n">unlink</span><span class="p">();</span></pre></div></td></tr>
+
+
+<tr id="section-4"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-4">&#182;</a></div><p>Null queue if we unlinked the head.</p></td><td class="code"><div class="highlight"><pre>    <span class="k">if</span> <span class="p">(</span><span class="n">b</span><span class="p">.</span><span class="n">get</span><span class="p">()</span> <span class="o">==</span> <span class="n">head_</span><span class="p">.</span><span class="n">get</span><span class="p">())</span> <span class="p">{</span>
+      <span class="n">head_</span><span class="p">.</span><span class="n">reset</span><span class="p">();</span>
+    <span class="p">}</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="p">}</span> <span class="c1">// folly</span>
+
+</pre></div></td></tr>
+
+</tbody>
+</table>
+</div>
+
+</body>
+<script>docas={repo:"joekychen/folly",depth:3}</script>
+<script>document.write('<script src=' + ('__proto__' in {} ? 'http://cdnjs.cloudflare.com/ajax/libs/zepto/1.0rc1/zepto.min.js' : 'https://ajax.googleapis.com/ajax/libs/jquery/1.7.2/jquery.min.js')+'><\\/script>')</script>
+<script src="http://baoshan.github.com/moment/min/moment.min.js"></script>
+<script src="../../../javascript/docco.min.js"></script>
+</html>
