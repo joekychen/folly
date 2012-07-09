@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html><head><title>joekychen/folly » folly › Unicode.cpp
+<html><head><title>joekychen/folly » folly › Unicode.h
 
 </title>
 <meta http-equiv="content-type" content="text/html; charset=UTF-8">
@@ -12,7 +12,7 @@
 <div id="container">
 <div id="background"></div>
 <table cellpadding="0" cellspacing="0">
-<thead><tr><th class="docs"><a id="home" href="../index.html"></a><h1>Unicode.cpp</h1></th><th class="code"></th></tr></thead>
+<thead><tr><th class="docs"><a id="home" href="../index.html"></a><h1>Unicode.h</h1></th><th class="code"></th></tr></thead>
 <tbody>
 
 
@@ -30,42 +30,28 @@
 <span class="cm"> * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
 <span class="cm"> * See the License for the specific language governing permissions and</span>
 <span class="cm"> * limitations under the License.</span>
+<span class="cm"> */</span></pre></div></td></tr>
+
+
+<tr id="section-2"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-2">&#182;</a></div><p>Some utility routines relating to unicode.</p></td><td class="code"><div class="highlight"><pre><span class="cp">#ifndef FOLLY_UNICODE_H_</span>
+<span class="cp">#define FOLLY_UNICODE_H_</span>
+
+<span class="cp">#include &quot;folly/FBString.h&quot;</span>
+
+<span class="n">namespace</span> <span class="n">folly</span> <span class="p">{</span></pre></div></td></tr>
+
+
+<tr id="section-3"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-3">&#182;</a></div><p>////////////////////////////////////////////////////////////////////</p></td><td class="code"><div class="highlight"><pre><span class="cm">/*</span>
+<span class="cm"> * Encode a single unicode code point into a UTF-8 byte sequence.</span>
+<span class="cm"> *</span>
+<span class="cm"> * Return value is undefined if `cp&#39; is an invalid code point.</span>
 <span class="cm"> */</span>
-
-<span class="cp">#include &quot;folly/Unicode.h&quot;</span>
-
-<span class="k">namespace</span> <span class="n">folly</span> <span class="p">{</span></pre></div></td></tr>
-
-
-<tr id="section-2"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-2">&#182;</a></div><p>////////////////////////////////////////////////////////////////////</p></td><td class="code"><div class="highlight"><pre><span class="n">fbstring</span> <span class="n">codePointToUtf8</span><span class="p">(</span><span class="n">char32_t</span> <span class="n">cp</span><span class="p">)</span> <span class="p">{</span>
-  <span class="n">fbstring</span> <span class="n">result</span><span class="p">;</span></pre></div></td></tr>
-
-
-<tr id="section-3"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-3">&#182;</a></div><p>Based on description from http://en.wikipedia.org/wiki/UTF-8.</p></td><td class="code"><div class="highlight"><pre>  <span class="k">if</span> <span class="p">(</span><span class="n">cp</span> <span class="o">&lt;=</span> <span class="mh">0x7f</span><span class="p">)</span> <span class="p">{</span>
-    <span class="n">result</span><span class="p">.</span><span class="n">resize</span><span class="p">(</span><span class="mi">1</span><span class="p">);</span>
-    <span class="n">result</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="k">static_cast</span><span class="o">&lt;</span><span class="kt">char</span><span class="o">&gt;</span><span class="p">(</span><span class="n">cp</span><span class="p">);</span>
-  <span class="p">}</span> <span class="k">else</span> <span class="k">if</span> <span class="p">(</span><span class="n">cp</span> <span class="o">&lt;=</span> <span class="mh">0x7FF</span><span class="p">)</span> <span class="p">{</span>
-    <span class="n">result</span><span class="p">.</span><span class="n">resize</span><span class="p">(</span><span class="mi">2</span><span class="p">);</span>
-    <span class="n">result</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="k">static_cast</span><span class="o">&lt;</span><span class="kt">char</span><span class="o">&gt;</span><span class="p">(</span><span class="mh">0x80</span> <span class="o">|</span> <span class="p">(</span><span class="mh">0x3f</span> <span class="o">&amp;</span> <span class="n">cp</span><span class="p">));</span>
-    <span class="n">result</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="k">static_cast</span><span class="o">&lt;</span><span class="kt">char</span><span class="o">&gt;</span><span class="p">(</span><span class="mh">0xC0</span> <span class="o">|</span> <span class="p">(</span><span class="n">cp</span> <span class="o">&gt;&gt;</span> <span class="mi">6</span><span class="p">));</span>
-  <span class="p">}</span> <span class="k">else</span> <span class="k">if</span> <span class="p">(</span><span class="n">cp</span> <span class="o">&lt;=</span> <span class="mh">0xFFFF</span><span class="p">)</span> <span class="p">{</span>
-    <span class="n">result</span><span class="p">.</span><span class="n">resize</span><span class="p">(</span><span class="mi">3</span><span class="p">);</span>
-    <span class="n">result</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="o">=</span> <span class="k">static_cast</span><span class="o">&lt;</span><span class="kt">char</span><span class="o">&gt;</span><span class="p">(</span><span class="mh">0x80</span> <span class="o">|</span> <span class="p">(</span><span class="mh">0x3f</span> <span class="o">&amp;</span> <span class="n">cp</span><span class="p">));</span>
-    <span class="n">result</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="mh">0x80</span> <span class="o">|</span> <span class="k">static_cast</span><span class="o">&lt;</span><span class="kt">char</span><span class="o">&gt;</span><span class="p">((</span><span class="mh">0x3f</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">cp</span> <span class="o">&gt;&gt;</span> <span class="mi">6</span><span class="p">))));</span>
-    <span class="n">result</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="mh">0xE0</span> <span class="o">|</span> <span class="k">static_cast</span><span class="o">&lt;</span><span class="kt">char</span><span class="o">&gt;</span><span class="p">(</span><span class="n">cp</span> <span class="o">&gt;&gt;</span> <span class="mi">12</span><span class="p">));</span>
-  <span class="p">}</span> <span class="k">else</span> <span class="k">if</span> <span class="p">(</span><span class="n">cp</span> <span class="o">&lt;=</span> <span class="mh">0x10FFFF</span><span class="p">)</span> <span class="p">{</span>
-    <span class="n">result</span><span class="p">.</span><span class="n">resize</span><span class="p">(</span><span class="mi">4</span><span class="p">);</span>
-    <span class="n">result</span><span class="p">[</span><span class="mi">3</span><span class="p">]</span> <span class="o">=</span> <span class="k">static_cast</span><span class="o">&lt;</span><span class="kt">char</span><span class="o">&gt;</span><span class="p">(</span><span class="mh">0x80</span> <span class="o">|</span> <span class="p">(</span><span class="mh">0x3f</span> <span class="o">&amp;</span> <span class="n">cp</span><span class="p">));</span>
-    <span class="n">result</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="o">=</span> <span class="k">static_cast</span><span class="o">&lt;</span><span class="kt">char</span><span class="o">&gt;</span><span class="p">(</span><span class="mh">0x80</span> <span class="o">|</span> <span class="p">(</span><span class="mh">0x3f</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">cp</span> <span class="o">&gt;&gt;</span> <span class="mi">6</span><span class="p">)));</span>
-    <span class="n">result</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="k">static_cast</span><span class="o">&lt;</span><span class="kt">char</span><span class="o">&gt;</span><span class="p">(</span><span class="mh">0x80</span> <span class="o">|</span> <span class="p">(</span><span class="mh">0x3f</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">cp</span> <span class="o">&gt;&gt;</span> <span class="mi">12</span><span class="p">)));</span>
-    <span class="n">result</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="k">static_cast</span><span class="o">&lt;</span><span class="kt">char</span><span class="o">&gt;</span><span class="p">(</span><span class="mh">0xF0</span> <span class="o">|</span> <span class="p">(</span><span class="n">cp</span> <span class="o">&gt;&gt;</span> <span class="mi">18</span><span class="p">));</span>
-  <span class="p">}</span>
-
-  <span class="k">return</span> <span class="n">result</span><span class="p">;</span>
-<span class="p">}</span></pre></div></td></tr>
+<span class="n">fbstring</span> <span class="n">codePointToUtf8</span><span class="p">(</span><span class="n">char32_t</span> <span class="n">cp</span><span class="p">);</span></pre></div></td></tr>
 
 
 <tr id="section-4"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-4">&#182;</a></div><p>////////////////////////////////////////////////////////////////////</p></td><td class="code"><div class="highlight"><pre><span class="p">}</span>
+
+<span class="cp">#endif</span>
 
 </pre></div></td></tr>
 

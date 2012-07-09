@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html><head><title>joekychen/folly » folly › experimental › TestUtil.h
+<html><head><title>joekychen/folly » folly › experimental › TestUtil.cpp
 
 </title>
 <meta http-equiv="content-type" content="text/html; charset=UTF-8">
@@ -12,7 +12,7 @@
 <div id="container">
 <div id="background"></div>
 <table cellpadding="0" cellspacing="0">
-<thead><tr><th class="docs"><a id="home" href="../../index.html"></a><h1>TestUtil.h</h1></th><th class="code"></th></tr></thead>
+<thead><tr><th class="docs"><a id="home" href="../../index.html"></a><h1>TestUtil.cpp</h1></th><th class="code"></th></tr></thead>
 <tbody>
 
 
@@ -32,52 +32,89 @@
 <span class="cm"> * limitations under the License.</span>
 <span class="cm"> */</span>
 
-<span class="cp">#ifndef FOLLY_TESTUTIL_H_</span>
-<span class="cp">#define FOLLY_TESTUTIL_H_</span>
+<span class="cp">#include &quot;folly/experimental/TestUtil.h&quot;</span>
 
-<span class="cp">#include &lt;string&gt;</span>
+<span class="cp">#include &lt;stdlib.h&gt;</span>
+<span class="cp">#include &lt;errno.h&gt;</span>
+<span class="cp">#include &lt;stdexcept&gt;</span>
+<span class="cp">#include &lt;system_error&gt;</span>
 
-<span class="n">namespace</span> <span class="n">folly</span> <span class="p">{</span>
-<span class="n">namespace</span> <span class="n">test</span> <span class="p">{</span>
+<span class="cp">#include &quot;folly/Format.h&quot;</span>
 
-<span class="cm">/**</span>
-<span class="cm"> * Temporary file.</span>
-<span class="cm"> *</span>
-<span class="cm"> * By default, the file is created in a system-specific location (the value</span>
-<span class="cm"> * of the TMPDIR environment variable, or /tmp), but you can override that</span>
-<span class="cm"> * by making &quot;prefix&quot; be a path (containing a &#39;/&#39;; use a prefix starting with</span>
-<span class="cm"> * &#39;./&#39; to create a file in the current directory).</span>
-<span class="cm"> *</span>
-<span class="cm"> * By default, the file is closed and deleted when the TemporaryFile object</span>
-<span class="cm"> * is destroyed, but both these behaviors can be overridden with arguments</span>
-<span class="cm"> * to the constructor.</span>
-<span class="cm"> */</span>
-<span class="n">class</span> <span class="n">TemporaryFile</span> <span class="p">{</span>
- <span class="nl">public:</span>
-  <span class="k">enum</span> <span class="n">class</span> <span class="n">Scope</span> <span class="p">{</span>
-    <span class="n">PERMANENT</span><span class="p">,</span>
-    <span class="n">UNLINK_IMMEDIATELY</span><span class="p">,</span>
-    <span class="n">UNLINK_ON_DESTRUCTION</span>
-  <span class="p">};</span>
-  <span class="n">explicit</span> <span class="n">TemporaryFile</span><span class="p">(</span><span class="k">const</span> <span class="kt">char</span><span class="o">*</span> <span class="n">prefix</span><span class="o">=</span><span class="n">nullptr</span><span class="p">,</span>
-                         <span class="n">Scope</span> <span class="n">scope</span><span class="o">=</span><span class="n">Scope</span><span class="o">::</span><span class="n">UNLINK_ON_DESTRUCTION</span><span class="p">,</span>
-                         <span class="n">bool</span> <span class="n">closeOnDestruction</span><span class="o">=</span><span class="nb">true</span><span class="p">);</span>
-  <span class="o">~</span><span class="n">TemporaryFile</span><span class="p">();</span>
+<span class="k">namespace</span> <span class="n">folly</span> <span class="p">{</span>
+<span class="k">namespace</span> <span class="n">test</span> <span class="p">{</span>
 
-  <span class="kt">int</span> <span class="n">fd</span><span class="p">()</span> <span class="k">const</span> <span class="p">{</span> <span class="k">return</span> <span class="n">fd_</span><span class="p">;</span> <span class="p">}</span>
-  <span class="k">const</span> <span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="o">&amp;</span> <span class="n">path</span><span class="p">()</span> <span class="k">const</span><span class="p">;</span>
+<span class="n">TemporaryFile</span><span class="o">::</span><span class="n">TemporaryFile</span><span class="p">(</span><span class="k">const</span> <span class="kt">char</span><span class="o">*</span> <span class="n">prefix</span><span class="p">,</span> <span class="n">Scope</span> <span class="n">scope</span><span class="p">,</span>
+                             <span class="kt">bool</span> <span class="n">closeOnDestruction</span><span class="p">)</span>
+  <span class="o">:</span> <span class="n">scope_</span><span class="p">(</span><span class="n">scope</span><span class="p">),</span>
+    <span class="n">closeOnDestruction_</span><span class="p">(</span><span class="n">closeOnDestruction</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">static</span> <span class="k">const</span> <span class="kt">char</span><span class="o">*</span> <span class="n">suffix</span> <span class="o">=</span> <span class="s">&quot;.XXXXXX&quot;</span><span class="p">;</span>  <span class="c1">// per mkstemp(3)</span>
+  <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">prefix</span> <span class="o">||</span> <span class="n">prefix</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="sc">&#39;\0&#39;</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">prefix</span> <span class="o">=</span> <span class="s">&quot;temp&quot;</span><span class="p">;</span>
+  <span class="p">}</span>
+  <span class="k">const</span> <span class="kt">char</span><span class="o">*</span> <span class="n">dir</span> <span class="o">=</span> <span class="n">nullptr</span><span class="p">;</span>
+  <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">strchr</span><span class="p">(</span><span class="n">prefix</span><span class="p">,</span> <span class="sc">&#39;/&#39;</span><span class="p">))</span> <span class="p">{</span></pre></div></td></tr>
 
- <span class="nl">private:</span>
-  <span class="n">Scope</span> <span class="n">scope_</span><span class="p">;</span>
-  <span class="n">bool</span> <span class="n">closeOnDestruction_</span><span class="p">;</span>
-  <span class="kt">int</span> <span class="n">fd_</span><span class="p">;</span>
-  <span class="n">std</span><span class="o">::</span><span class="n">string</span> <span class="n">path_</span><span class="p">;</span>
-<span class="p">};</span>
+
+<tr id="section-2"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-2">&#182;</a></div><p>Not a full path, try getenv("TMPDIR") or "/tmp"</p></td><td class="code"><div class="highlight"><pre>    <span class="n">dir</span> <span class="o">=</span> <span class="n">getenv</span><span class="p">(</span><span class="s">&quot;TMPDIR&quot;</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">dir</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">dir</span> <span class="o">=</span> <span class="s">&quot;/tmp&quot;</span><span class="p">;</span>
+    <span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-3"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-3">&#182;</a></div><p>The "!" is a placeholder to ensure that &amp;(path[0]) is null-terminated.
+This is the only standard-compliant way to get at a null-terminated
+non-const char string inside a std::string: put the null-terminator
+yourself.</p></td><td class="code"><div class="highlight"><pre>    <span class="n">path_</span> <span class="o">=</span> <span class="n">format</span><span class="p">(</span><span class="s">&quot;{}/{}{}!&quot;</span><span class="p">,</span> <span class="n">dir</span><span class="p">,</span> <span class="n">prefix</span><span class="p">,</span> <span class="n">suffix</span><span class="p">).</span><span class="n">str</span><span class="p">();</span>
+  <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+    <span class="n">path_</span> <span class="o">=</span> <span class="n">format</span><span class="p">(</span><span class="s">&quot;{}{}!&quot;</span><span class="p">,</span> <span class="n">prefix</span><span class="p">,</span> <span class="n">suffix</span><span class="p">).</span><span class="n">str</span><span class="p">();</span>
+  <span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-4"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-4">&#182;</a></div><p>Replace the '!' with a null terminator, we'll get rid of it later</p></td><td class="code"><div class="highlight"><pre>  <span class="n">path_</span><span class="p">[</span><span class="n">path_</span><span class="p">.</span><span class="n">size</span><span class="p">()</span> <span class="o">-</span> <span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="sc">&#39;\0&#39;</span><span class="p">;</span>
+
+  <span class="n">fd_</span> <span class="o">=</span> <span class="n">mkstemp</span><span class="p">(</span><span class="o">&amp;</span><span class="p">(</span><span class="n">path_</span><span class="p">[</span><span class="mi">0</span><span class="p">]));</span>
+  <span class="k">if</span> <span class="p">(</span><span class="n">fd_</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">throw</span> <span class="n">std</span><span class="o">::</span><span class="n">system_error</span><span class="p">(</span><span class="n">errno</span><span class="p">,</span> <span class="n">std</span><span class="o">::</span><span class="n">system_category</span><span class="p">(),</span>
+                            <span class="n">format</span><span class="p">(</span><span class="s">&quot;mkstemp failed: {}&quot;</span><span class="p">,</span> <span class="n">path_</span><span class="p">).</span><span class="n">str</span><span class="p">().</span><span class="n">c_str</span><span class="p">());</span>
+  <span class="p">}</span>
+
+  <span class="n">DCHECK_EQ</span><span class="p">(</span><span class="n">path_</span><span class="p">[</span><span class="n">path_</span><span class="p">.</span><span class="n">size</span><span class="p">()</span> <span class="o">-</span> <span class="mi">1</span><span class="p">],</span> <span class="sc">&#39;\0&#39;</span><span class="p">);</span>
+  <span class="n">path_</span><span class="p">.</span><span class="n">erase</span><span class="p">(</span><span class="n">path_</span><span class="p">.</span><span class="n">size</span><span class="p">()</span> <span class="o">-</span> <span class="mi">1</span><span class="p">);</span>
+
+  <span class="k">if</span> <span class="p">(</span><span class="n">scope_</span> <span class="o">==</span> <span class="n">Scope</span><span class="o">::</span><span class="n">UNLINK_IMMEDIATELY</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">unlink</span><span class="p">(</span><span class="n">path_</span><span class="p">.</span><span class="n">c_str</span><span class="p">())</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="p">{</span>
+      <span class="k">throw</span> <span class="n">std</span><span class="o">::</span><span class="n">system_error</span><span class="p">(</span><span class="n">errno</span><span class="p">,</span> <span class="n">std</span><span class="o">::</span><span class="n">system_category</span><span class="p">(),</span>
+                              <span class="n">format</span><span class="p">(</span><span class="s">&quot;unlink failed: {}&quot;</span><span class="p">,</span> <span class="n">path_</span><span class="p">).</span><span class="n">str</span><span class="p">().</span><span class="n">c_str</span><span class="p">());</span>
+    <span class="p">}</span>
+    <span class="n">path_</span><span class="p">.</span><span class="n">clear</span><span class="p">();</span>  <span class="c1">// path no longer available or meaningful</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="k">const</span> <span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="o">&amp;</span> <span class="n">TemporaryFile</span><span class="o">::</span><span class="n">path</span><span class="p">()</span> <span class="k">const</span> <span class="p">{</span>
+  <span class="n">CHECK</span><span class="p">(</span><span class="n">scope_</span> <span class="o">!=</span> <span class="n">Scope</span><span class="o">::</span><span class="n">UNLINK_IMMEDIATELY</span><span class="p">);</span>
+  <span class="n">DCHECK</span><span class="p">(</span><span class="o">!</span><span class="n">path_</span><span class="p">.</span><span class="n">empty</span><span class="p">());</span>
+  <span class="k">return</span> <span class="n">path_</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="n">TemporaryFile</span><span class="o">::~</span><span class="n">TemporaryFile</span><span class="p">()</span> <span class="p">{</span>
+  <span class="k">if</span> <span class="p">(</span><span class="n">fd_</span> <span class="o">!=</span> <span class="o">-</span><span class="mi">1</span> <span class="o">&amp;&amp;</span> <span class="n">closeOnDestruction_</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">close</span><span class="p">(</span><span class="n">fd_</span><span class="p">)</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">PLOG</span><span class="p">(</span><span class="n">ERROR</span><span class="p">)</span> <span class="o">&lt;&lt;</span> <span class="s">&quot;close failed&quot;</span><span class="p">;</span>
+    <span class="p">}</span>
+  <span class="p">}</span></pre></div></td></tr>
+
+
+<tr id="section-5"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-5">&#182;</a></div><p>If we previously failed to unlink() (UNLINK_IMMEDIATELY), we'll
+try again here.</p></td><td class="code"><div class="highlight"><pre>  <span class="k">if</span> <span class="p">(</span><span class="n">scope_</span> <span class="o">!=</span> <span class="n">Scope</span><span class="o">::</span><span class="n">PERMANENT</span> <span class="o">&amp;&amp;</span> <span class="o">!</span><span class="n">path_</span><span class="p">.</span><span class="n">empty</span><span class="p">())</span> <span class="p">{</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">unlink</span><span class="p">(</span><span class="n">path_</span><span class="p">.</span><span class="n">c_str</span><span class="p">())</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">PLOG</span><span class="p">(</span><span class="n">ERROR</span><span class="p">)</span> <span class="o">&lt;&lt;</span> <span class="s">&quot;unlink(&quot;</span> <span class="o">&lt;&lt;</span> <span class="n">path_</span> <span class="o">&lt;&lt;</span> <span class="s">&quot;) failed&quot;</span><span class="p">;</span>
+    <span class="p">}</span>
+  <span class="p">}</span>
+<span class="p">}</span>
 
 <span class="p">}</span>  <span class="c1">// namespace test</span>
 <span class="p">}</span>  <span class="c1">// namespace folly</span>
-
-<span class="cp">#endif </span><span class="cm">/* FOLLY_TESTUTIL_H_ */</span><span class="cp"></span>
 
 </pre></div></td></tr>
 
