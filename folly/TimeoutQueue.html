@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html><head><title>joekychen/folly » folly › TimeoutQueue.cpp
+<html><head><title>joekychen/folly » folly › TimeoutQueue.h
 
 </title>
 <meta http-equiv="content-type" content="text/html; charset=UTF-8">
@@ -12,7 +12,7 @@
 <div id="container">
 <div id="background"></div>
 <table cellpadding="0" cellspacing="0">
-<thead><tr><th class="docs"><a id="home" href="../index.html"></a><h1>TimeoutQueue.cpp</h1></th><th class="code"></th></tr></thead>
+<thead><tr><th class="docs"><a id="home" href="../index.html"></a><h1>TimeoutQueue.h</h1></th><th class="code"></th></tr></thead>
 <tbody>
 
 
@@ -32,66 +32,122 @@
 <span class="cm"> * limitations under the License.</span>
 <span class="cm"> */</span>
 
-<span class="cp">#include &quot;folly/TimeoutQueue.h&quot;</span>
-<span class="cp">#include &lt;algorithm&gt;</span>
+<span class="cm">/**</span>
+<span class="cm"> * Simple timeout queue.  Call user-specified callbacks when their timeouts</span>
+<span class="cm"> * expire.</span>
+<span class="cm"> *</span>
+<span class="cm"> * This class assumes that &quot;time&quot; is an int64_t and doesn&#39;t care about time</span>
+<span class="cm"> * units (seconds, milliseconds, etc).  You call runOnce() / runLoop() using</span>
+<span class="cm"> * the same time units that you use to specify callbacks.</span>
+<span class="cm"> *</span>
+<span class="cm"> * @author Tudor Bosman (tudorb@fb.com)</span>
+<span class="cm"> */</span>
 
-<span class="k">namespace</span> <span class="n">folly</span> <span class="p">{</span>
+<span class="cp">#ifndef FOLLY_TIMEOUTQUEUE_H_</span>
+<span class="cp">#define FOLLY_TIMEOUTQUEUE_H_</span>
 
-<span class="n">TimeoutQueue</span><span class="o">::</span><span class="n">Id</span> <span class="n">TimeoutQueue</span><span class="o">::</span><span class="n">add</span><span class="p">(</span>
-  <span class="n">int64_t</span> <span class="n">now</span><span class="p">,</span>
-  <span class="n">int64_t</span> <span class="n">delay</span><span class="p">,</span>
-  <span class="n">Callback</span> <span class="n">callback</span><span class="p">)</span> <span class="p">{</span>
-  <span class="n">Id</span> <span class="n">id</span> <span class="o">=</span> <span class="n">nextId_</span><span class="o">++</span><span class="p">;</span>
-  <span class="n">timeouts_</span><span class="p">.</span><span class="n">insert</span><span class="p">({</span><span class="n">id</span><span class="p">,</span> <span class="n">now</span> <span class="o">+</span> <span class="n">delay</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">std</span><span class="o">::</span><span class="n">move</span><span class="p">(</span><span class="n">callback</span><span class="p">)});</span>
-  <span class="k">return</span> <span class="n">id</span><span class="p">;</span>
-<span class="p">}</span>
+<span class="cp">#include &lt;stdint.h&gt;</span>
+<span class="cp">#include &lt;functional&gt;</span>
+<span class="cp">#include &lt;boost/multi_index_container.hpp&gt;</span>
+<span class="cp">#include &lt;boost/multi_index/indexed_by.hpp&gt;</span>
+<span class="cp">#include &lt;boost/multi_index/ordered_index.hpp&gt;</span>
+<span class="cp">#include &lt;boost/multi_index/member.hpp&gt;</span>
 
-<span class="n">TimeoutQueue</span><span class="o">::</span><span class="n">Id</span> <span class="n">TimeoutQueue</span><span class="o">::</span><span class="n">addRepeating</span><span class="p">(</span>
-  <span class="n">int64_t</span> <span class="n">now</span><span class="p">,</span>
-  <span class="n">int64_t</span> <span class="n">interval</span><span class="p">,</span>
-  <span class="n">Callback</span> <span class="n">callback</span><span class="p">)</span> <span class="p">{</span>
-  <span class="n">Id</span> <span class="n">id</span> <span class="o">=</span> <span class="n">nextId_</span><span class="o">++</span><span class="p">;</span>
-  <span class="n">timeouts_</span><span class="p">.</span><span class="n">insert</span><span class="p">({</span><span class="n">id</span><span class="p">,</span> <span class="n">now</span> <span class="o">+</span> <span class="n">interval</span><span class="p">,</span> <span class="n">interval</span><span class="p">,</span> <span class="n">std</span><span class="o">::</span><span class="n">move</span><span class="p">(</span><span class="n">callback</span><span class="p">)});</span>
-  <span class="k">return</span> <span class="n">id</span><span class="p">;</span>
-<span class="p">}</span>
+<span class="n">namespace</span> <span class="n">folly</span> <span class="p">{</span>
 
-<span class="n">int64_t</span> <span class="n">TimeoutQueue</span><span class="o">::</span><span class="n">nextExpiration</span><span class="p">()</span> <span class="k">const</span> <span class="p">{</span>
-  <span class="k">return</span> <span class="p">(</span><span class="n">timeouts_</span><span class="p">.</span><span class="n">empty</span><span class="p">()</span> <span class="o">?</span> <span class="n">std</span><span class="o">::</span><span class="n">numeric_limits</span><span class="o">&lt;</span><span class="n">int64_t</span><span class="o">&gt;::</span><span class="n">max</span><span class="p">()</span> <span class="o">:</span>
-          <span class="n">timeouts_</span><span class="p">.</span><span class="n">get</span><span class="o">&lt;</span><span class="n">BY_EXPIRATION</span><span class="o">&gt;</span><span class="p">().</span><span class="n">begin</span><span class="p">()</span><span class="o">-&gt;</span><span class="n">expiration</span><span class="p">);</span>
-<span class="p">}</span>
+<span class="n">class</span> <span class="n">TimeoutQueue</span> <span class="p">{</span>
+ <span class="nl">public:</span>
+  <span class="k">typedef</span> <span class="kt">int64_t</span> <span class="n">Id</span><span class="p">;</span>
+  <span class="k">typedef</span> <span class="n">std</span><span class="o">::</span><span class="n">function</span><span class="o">&lt;</span><span class="kt">void</span><span class="p">(</span><span class="n">Id</span><span class="p">,</span> <span class="kt">int64_t</span><span class="p">)</span><span class="o">&gt;</span> <span class="n">Callback</span><span class="p">;</span>
 
-<span class="kt">bool</span> <span class="n">TimeoutQueue</span><span class="o">::</span><span class="n">erase</span><span class="p">(</span><span class="n">Id</span> <span class="n">id</span><span class="p">)</span> <span class="p">{</span>
-  <span class="k">return</span> <span class="n">timeouts_</span><span class="p">.</span><span class="n">get</span><span class="o">&lt;</span><span class="n">BY_ID</span><span class="o">&gt;</span><span class="p">().</span><span class="n">erase</span><span class="p">(</span><span class="n">id</span><span class="p">);</span>
-<span class="p">}</span>
+  <span class="n">TimeoutQueue</span><span class="p">()</span> <span class="o">:</span> <span class="n">nextId_</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span> <span class="p">{</span> <span class="p">}</span>
 
-<span class="n">int64_t</span> <span class="n">TimeoutQueue</span><span class="o">::</span><span class="n">runInternal</span><span class="p">(</span><span class="n">int64_t</span> <span class="n">now</span><span class="p">,</span> <span class="kt">bool</span> <span class="n">onceOnly</span><span class="p">)</span> <span class="p">{</span>
-  <span class="k">auto</span><span class="o">&amp;</span> <span class="n">byExpiration</span> <span class="o">=</span> <span class="n">timeouts_</span><span class="p">.</span><span class="n">get</span><span class="o">&lt;</span><span class="n">BY_EXPIRATION</span><span class="o">&gt;</span><span class="p">();</span>
-  <span class="n">int64_t</span> <span class="n">nextExp</span><span class="p">;</span>
-  <span class="k">do</span> <span class="p">{</span>
-    <span class="k">auto</span> <span class="n">end</span> <span class="o">=</span> <span class="n">byExpiration</span><span class="p">.</span><span class="n">upper_bound</span><span class="p">(</span><span class="n">now</span><span class="p">);</span>
-    <span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="n">Event</span><span class="o">&gt;</span> <span class="n">expired</span><span class="p">;</span>
-    <span class="n">std</span><span class="o">::</span><span class="n">move</span><span class="p">(</span><span class="n">byExpiration</span><span class="p">.</span><span class="n">begin</span><span class="p">(),</span> <span class="n">end</span><span class="p">,</span> <span class="n">std</span><span class="o">::</span><span class="n">back_inserter</span><span class="p">(</span><span class="n">expired</span><span class="p">));</span>
-    <span class="n">byExpiration</span><span class="p">.</span><span class="n">erase</span><span class="p">(</span><span class="n">byExpiration</span><span class="p">.</span><span class="n">begin</span><span class="p">(),</span> <span class="n">end</span><span class="p">);</span>
-    <span class="k">for</span> <span class="p">(</span><span class="k">auto</span><span class="o">&amp;</span> <span class="n">event</span> <span class="o">:</span> <span class="n">expired</span><span class="p">)</span> <span class="p">{</span></pre></div></td></tr>
+  <span class="cm">/**</span>
+<span class="cm">   * Add a one-time timeout event that will fire &quot;delay&quot; time units from &quot;now&quot;</span>
+<span class="cm">   * (that is, the first time that run*() is called with a time value &gt;= now</span>
+<span class="cm">   * + delay).</span>
+<span class="cm">   */</span>
+  <span class="n">Id</span> <span class="n">add</span><span class="p">(</span><span class="kt">int64_t</span> <span class="n">now</span><span class="p">,</span> <span class="kt">int64_t</span> <span class="n">delay</span><span class="p">,</span> <span class="n">Callback</span> <span class="n">callback</span><span class="p">);</span>
+
+  <span class="cm">/**</span>
+<span class="cm">   * Add a repeating timeout event that will fire every &quot;interval&quot; time units</span>
+<span class="cm">   * (it will first fire when run*() is called with a time value &gt;=</span>
+<span class="cm">   * now + interval).</span>
+<span class="cm">   *</span>
+<span class="cm">   * run*() will always invoke each repeating event at most once, even if</span>
+<span class="cm">   * more than one &quot;interval&quot; period has passed.</span>
+<span class="cm">   */</span>
+  <span class="n">Id</span> <span class="n">addRepeating</span><span class="p">(</span><span class="kt">int64_t</span> <span class="n">now</span><span class="p">,</span> <span class="kt">int64_t</span> <span class="n">interval</span><span class="p">,</span> <span class="n">Callback</span> <span class="n">callback</span><span class="p">);</span>
+
+  <span class="cm">/**</span>
+<span class="cm">   * Erase a given timeout event, returns true if the event was actually</span>
+<span class="cm">   * erased and false if it didn&#39;t exist in our queue.</span>
+<span class="cm">   */</span>
+  <span class="n">bool</span> <span class="n">erase</span><span class="p">(</span><span class="n">Id</span> <span class="n">id</span><span class="p">);</span>
+
+  <span class="cm">/**</span>
+<span class="cm">   * Process all events that are due at times &lt;= &quot;now&quot; by calling their</span>
+<span class="cm">   * callbacks.</span>
+<span class="cm">   *</span>
+<span class="cm">   * Callbacks are allowed to call back into the queue and add / erase events;</span>
+<span class="cm">   * they might create more events that are already due.  In this case,</span>
+<span class="cm">   * runOnce() will only go through the queue once, and return a &quot;next</span>
+<span class="cm">   * expiration&quot; time in the past or present (&lt;= now); runLoop()</span>
+<span class="cm">   * will process the queue again, until there are no events already due.</span>
+<span class="cm">   *</span>
+<span class="cm">   * Note that it is then possible for runLoop to never return if</span>
+<span class="cm">   * callbacks re-add themselves to the queue (or if you have repeating</span>
+<span class="cm">   * callbacks with an interval of 0).</span>
+<span class="cm">   *</span>
+<span class="cm">   * Return the time that the next event will be due (same as</span>
+<span class="cm">   * nextExpiration(), below)</span>
+<span class="cm">   */</span>
+  <span class="kt">int64_t</span> <span class="nf">runOnce</span><span class="p">(</span><span class="kt">int64_t</span> <span class="n">now</span><span class="p">)</span> <span class="p">{</span> <span class="k">return</span> <span class="n">runInternal</span><span class="p">(</span><span class="n">now</span><span class="p">,</span> <span class="nb">true</span><span class="p">);</span> <span class="p">}</span>
+  <span class="kt">int64_t</span> <span class="nf">runLoop</span><span class="p">(</span><span class="kt">int64_t</span> <span class="n">now</span><span class="p">)</span> <span class="p">{</span> <span class="k">return</span> <span class="n">runInternal</span><span class="p">(</span><span class="n">now</span><span class="p">,</span> <span class="nb">false</span><span class="p">);</span> <span class="p">}</span>
+
+  <span class="cm">/**</span>
+<span class="cm">   * Return the time that the next event will be due.</span>
+<span class="cm">   */</span>
+  <span class="kt">int64_t</span> <span class="n">nextExpiration</span><span class="p">()</span> <span class="k">const</span><span class="p">;</span>
+
+ <span class="nl">private:</span>
+  <span class="kt">int64_t</span> <span class="n">runInternal</span><span class="p">(</span><span class="kt">int64_t</span> <span class="n">now</span><span class="p">,</span> <span class="n">bool</span> <span class="n">runOnce</span><span class="p">);</span></pre></div></td></tr>
 
 
-<tr id="section-2"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-2">&#182;</a></div><p>Reinsert if repeating, do this before executing callbacks
-so the callbacks have a chance to call erase</p></td><td class="code"><div class="highlight"><pre>      <span class="k">if</span> <span class="p">(</span><span class="n">event</span><span class="p">.</span><span class="n">repeatInterval</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
-        <span class="n">timeouts_</span><span class="p">.</span><span class="n">insert</span><span class="p">({</span><span class="n">event</span><span class="p">.</span><span class="n">id</span><span class="p">,</span> <span class="n">now</span> <span class="o">+</span> <span class="n">event</span><span class="p">.</span><span class="n">repeatInterval</span><span class="p">,</span>
-                          <span class="n">event</span><span class="p">.</span><span class="n">repeatInterval</span><span class="p">,</span> <span class="n">event</span><span class="p">.</span><span class="n">callback</span><span class="p">});</span>
-      <span class="p">}</span>
-    <span class="p">}</span></pre></div></td></tr>
+<tr id="section-2"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-2">&#182;</a></div><p>noncopyable</p></td><td class="code"><div class="highlight"><pre>  <span class="n">TimeoutQueue</span><span class="p">(</span><span class="k">const</span> <span class="n">TimeoutQueue</span><span class="o">&amp;</span><span class="p">)</span> <span class="o">=</span> <span class="n">delete</span><span class="p">;</span>
+  <span class="n">TimeoutQueue</span><span class="o">&amp;</span> <span class="n">operator</span><span class="o">=</span><span class="p">(</span><span class="k">const</span> <span class="n">TimeoutQueue</span><span class="o">&amp;</span><span class="p">)</span> <span class="o">=</span> <span class="n">delete</span><span class="p">;</span>
 
+  <span class="k">struct</span> <span class="n">Event</span> <span class="p">{</span>
+    <span class="n">Id</span> <span class="n">id</span><span class="p">;</span>
+    <span class="kt">int64_t</span> <span class="n">expiration</span><span class="p">;</span>
+    <span class="kt">int64_t</span> <span class="n">repeatInterval</span><span class="p">;</span>
+    <span class="n">Callback</span> <span class="n">callback</span><span class="p">;</span>
+  <span class="p">};</span>
 
-<tr id="section-3"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-3">&#182;</a></div><p>Call callbacks</p></td><td class="code"><div class="highlight"><pre>    <span class="k">for</span> <span class="p">(</span><span class="k">auto</span><span class="o">&amp;</span> <span class="n">event</span> <span class="o">:</span> <span class="n">expired</span><span class="p">)</span> <span class="p">{</span>
-      <span class="n">event</span><span class="p">.</span><span class="n">callback</span><span class="p">(</span><span class="n">event</span><span class="p">.</span><span class="n">id</span><span class="p">,</span> <span class="n">now</span><span class="p">);</span>
-    <span class="p">}</span>
-    <span class="n">nextExp</span> <span class="o">=</span> <span class="n">nextExpiration</span><span class="p">();</span>
-  <span class="p">}</span> <span class="k">while</span> <span class="p">(</span><span class="o">!</span><span class="n">onceOnly</span> <span class="o">&amp;&amp;</span> <span class="n">nextExp</span> <span class="o">&lt;=</span> <span class="n">now</span><span class="p">);</span>
-  <span class="k">return</span> <span class="n">nextExp</span><span class="p">;</span>
-<span class="p">}</span>
+  <span class="k">typedef</span> <span class="n">boost</span><span class="o">::</span><span class="n">multi_index_container</span><span class="o">&lt;</span>
+    <span class="n">Event</span><span class="p">,</span>
+    <span class="n">boost</span><span class="o">::</span><span class="n">multi_index</span><span class="o">::</span><span class="n">indexed_by</span><span class="o">&lt;</span>
+      <span class="n">boost</span><span class="o">::</span><span class="n">multi_index</span><span class="o">::</span><span class="n">ordered_unique</span><span class="o">&lt;</span><span class="n">boost</span><span class="o">::</span><span class="n">multi_index</span><span class="o">::</span><span class="n">member</span><span class="o">&lt;</span>
+        <span class="n">Event</span><span class="p">,</span> <span class="n">Id</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">Event</span><span class="o">::</span><span class="n">id</span>
+      <span class="o">&gt;&gt;</span><span class="p">,</span>
+      <span class="n">boost</span><span class="o">::</span><span class="n">multi_index</span><span class="o">::</span><span class="n">ordered_non_unique</span><span class="o">&lt;</span><span class="n">boost</span><span class="o">::</span><span class="n">multi_index</span><span class="o">::</span><span class="n">member</span><span class="o">&lt;</span>
+        <span class="n">Event</span><span class="p">,</span> <span class="kt">int64_t</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">Event</span><span class="o">::</span><span class="n">expiration</span>
+      <span class="o">&gt;&gt;</span>
+    <span class="o">&gt;</span>
+  <span class="o">&gt;</span> <span class="n">Set</span><span class="p">;</span>
+
+  <span class="k">enum</span> <span class="p">{</span>
+    <span class="n">BY_ID</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+    <span class="n">BY_EXPIRATION</span><span class="o">=</span><span class="mi">1</span>
+  <span class="p">};</span>
+
+  <span class="n">Set</span> <span class="n">timeouts_</span><span class="p">;</span>
+  <span class="n">Id</span> <span class="n">nextId_</span><span class="p">;</span>
+<span class="p">};</span>
 
 <span class="p">}</span>  <span class="c1">// namespace folly</span>
+
+<span class="cp">#endif </span><span class="cm">/* FOLLY_TIMEOUTQUEUE_H_ */</span><span class="cp"></span>
 
 </pre></div></td></tr>
 

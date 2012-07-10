@@ -1,3 +1,3 @@
-d | folly |  | 76 items |  | Tudor Bosman | tudorb@fb.com | 1340830276 |  | Minor changes to folly/experimental/io  Reviewed By: philipp@fb.com  FB internal diff: D491952
+d | folly |  | 76 items |  | joekychen | chensi@healskare.cm | 1341912536 |  | Update master
 f | LICENSE | g | 9.9K |  | Jordan DeLong | jdelong@fb.com | 1338873142 |  | Move LICENCE and README to top level directory  Summary: For the public version of the repo.  Test Plan: N/A.
 f | README | g | 1.8K |  | Tudor Bosman | tudorb@fb.com | 1339543419 |  | Fix build and test.  Summary: Fix bug in FBStringTest (don't reuse the same file name)  Don't use VLOG, as that requires that glog is compiled with gflags support, which it isn't always.  Add other targets and tests, make all tests pass.  Test Plan: tests  Reviewed By: delong.j@fb.com  FB internal diff: D493018
