@@ -1,19 +1,19 @@
-f | AtomicHashMap.md | s | 5.0K | 104 | Tudor Bosman | tudorb@fb.com | 1338875952 |  | Typos.  Summary: As pointed out by orbitcowboy at https://github.com/facebook/folly/issues/6  Test Plan: No  Reviewers: jdelong, aalexandre  Reviewed By: jdelong  CC: folly@lists, bagashe  Differential Revision: https://phabricator.fb.com/D486754
-f | ThreadCachedInt.md | s | 4.5K | 78 | Jordan DeLong | jdelong@fb.com | 1338661169 |  | Pull from FB rev 63ce89e2f2301e6bba44a111cc7d4218022156f6
 f | ThreadLocal.md | s | 4.2K | 85 | Jordan DeLong | jdelong@fb.com | 1338661169 |  | Pull from FB rev 63ce89e2f2301e6bba44a111cc7d4218022156f6
 f | Makefile | g | 700B |  | Jordan DeLong | jdelong@fb.com | 1338661169 |  | Pull from FB rev 63ce89e2f2301e6bba44a111cc7d4218022156f6
+f | AtomicHashMap.md | s | 5.0K | 104 | Tudor Bosman | tudorb@fb.com | 1338875952 |  | Typos.  Summary: As pointed out by orbitcowboy at https://github.com/facebook/folly/issues/6  Test Plan: No  Reviewers: jdelong, aalexandre  Reviewed By: jdelong  CC: folly@lists, bagashe  Differential Revision: https://phabricator.fb.com/D486754
+f | ThreadCachedInt.md | s | 4.5K | 78 | Jordan DeLong | jdelong@fb.com | 1338661169 |  | Pull from FB rev 63ce89e2f2301e6bba44a111cc7d4218022156f6
+f | GroupVarint.md | s | 2.0K | 33 | Jordan DeLong | jdelong@fb.com | 1338661169 |  | Pull from FB rev 63ce89e2f2301e6bba44a111cc7d4218022156f6
+f | Benchmark.md | s | 9.9K | 241 | Jordan DeLong | jdelong@fb.com | 1338661169 |  | Pull from FB rev 63ce89e2f2301e6bba44a111cc7d4218022156f6
 f | PackedSyncPtr.md | s | 2.4K | 60 | Jordan DeLong | jdelong@fb.com | 1338661169 |  | Pull from FB rev 63ce89e2f2301e6bba44a111cc7d4218022156f6
 f | Overview.md | s | 6.9K | 156 | Christopher C. Aycock | chris@chrisaycock.com | 1338934411 |  | Some typos corrects, and collapsed the two descriptions of Bits.h into one.  Summary: https://github.com/facebook/folly/pull/1  Test Plan: N/A.  Reviewed By: andrewjcg@fb.com  FB internal diff: D485738
-f | Benchmark.md | s | 9.9K | 241 | Jordan DeLong | jdelong@fb.com | 1338661169 |  | Pull from FB rev 63ce89e2f2301e6bba44a111cc7d4218022156f6
-f | GroupVarint.md | s | 2.0K | 33 | Jordan DeLong | jdelong@fb.com | 1338661169 |  | Pull from FB rev 63ce89e2f2301e6bba44a111cc7d4218022156f6
+f | Histogram.md | s | 4.4K | 83 | Jordan DeLong | jdelong@fb.com | 1338661169 |  | Pull from FB rev 63ce89e2f2301e6bba44a111cc7d4218022156f6
+f | small_vector.md | s | 2.4K | 51 | Jordan DeLong | jdelong@fb.com | 1338661169 |  | Pull from FB rev 63ce89e2f2301e6bba44a111cc7d4218022156f6
 f | ProducerConsumerQueue.md | s | 2.7K | 68 | Mike Curtiss | mcurtiss@fb.com | 1340332731 |  | Add sizeGuess() member to ProducerConsumerQueue  Summary: This is part 1 of a change to add hysteretic behavior to a blocking queue based on ProducerConsumerQueue.  Knowing the size is useful for monitoring and possibly for objects that contain a ProducerConsumerQueue.  Test Plan: Added tiny test-case.  Tests pass  Reviewed By: delong.j@fb.com  FB internal diff: D496787
 f | FBString.md | s | 1.5K | 33 | Jordan DeLong | jdelong@fb.com | 1338661169 |  | Pull from FB rev 63ce89e2f2301e6bba44a111cc7d4218022156f6
-f | small_vector.md | s | 2.4K | 51 | Jordan DeLong | jdelong@fb.com | 1338661169 |  | Pull from FB rev 63ce89e2f2301e6bba44a111cc7d4218022156f6
-f | Histogram.md | s | 4.4K | 83 | Jordan DeLong | jdelong@fb.com | 1338661169 |  | Pull from FB rev 63ce89e2f2301e6bba44a111cc7d4218022156f6
-f | SmallLocks.md | s | 1006B | 19 | Jordan DeLong | jdelong@fb.com | 1338661169 |  | Pull from FB rev 63ce89e2f2301e6bba44a111cc7d4218022156f6
-f | Synchronized.md | s | 20K | 505 | Jordan DeLong | jdelong@fb.com | 1338661169 |  | Pull from FB rev 63ce89e2f2301e6bba44a111cc7d4218022156f6
-f | Conv.md | s | 7.4K | 176 | Jordan DeLong | jdelong@fb.com | 1338661169 |  | Pull from FB rev 63ce89e2f2301e6bba44a111cc7d4218022156f6
 f | Dynamic.md | s | 5.8K | 144 | Jordan DeLong | jdelong@fb.com | 1338661169 |  | Pull from FB rev 63ce89e2f2301e6bba44a111cc7d4218022156f6
+f | Synchronized.md | s | 20K | 505 | Jordan DeLong | jdelong@fb.com | 1338661169 |  | Pull from FB rev 63ce89e2f2301e6bba44a111cc7d4218022156f6
+f | SmallLocks.md | s | 1006B | 19 | Jordan DeLong | jdelong@fb.com | 1338661169 |  | Pull from FB rev 63ce89e2f2301e6bba44a111cc7d4218022156f6
+f | Conv.md | s | 7.4K | 176 | Jordan DeLong | jdelong@fb.com | 1338661169 |  | Pull from FB rev 63ce89e2f2301e6bba44a111cc7d4218022156f6
 f | style.css | g | 165B |  | Jordan DeLong | jdelong@fb.com | 1338661169 |  | Pull from FB rev 63ce89e2f2301e6bba44a111cc7d4218022156f6
 f | Fbvector--graphical_solutions.png | g | 14K |  | Jordan DeLong | jdelong@fb.com | 1338661169 |  | Pull from FB rev 63ce89e2f2301e6bba44a111cc7d4218022156f6
 f | Format.md | s | 7.3K | 151 | Tudor Bosman | tudorb@fb.com | 1339543364 |  | Typos.  Test Plan: No  Reviewed By: delong.j@fb.com  FB internal diff: D491038

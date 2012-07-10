@@ -657,3 +657,134 @@ goodMallocSize(), truncate downwards if necessary.</p></td><td class="code"><div
 <script src="http://baoshan.github.com/moment/min/moment.min.js"></script>
 <script src="../../../javascript/docco.min.js"></script>
 </html>
+ternal data.</span>
+<span class="cm">   *</span>
+<span class="cm">   * end is a pointer to the end of the IOBuf&#39;s internal data buffer.</span>
+<span class="cm">   */</span>
+  <span class="n">explicit</span> <span class="n">IOBuf</span><span class="p">(</span><span class="kt">uint8_t</span><span class="o">*</span> <span class="n">end</span><span class="p">);</span>
+
+  <span class="cm">/**</span>
+<span class="cm">   * Create a new IOBuf pointing to an external buffer.</span>
+<span class="cm">   *</span>
+<span class="cm">   * The caller is responsible for holding a reference count for this new</span>
+<span class="cm">   * IOBuf.  The IOBuf constructor does not automatically increment the</span>
+<span class="cm">   * reference count.</span>
+<span class="cm">   */</span>
+  <span class="n">IOBuf</span><span class="p">(</span><span class="n">ExtBufTypeEnum</span> <span class="n">type</span><span class="p">,</span> <span class="kt">uint32_t</span> <span class="n">flags</span><span class="p">,</span>
+        <span class="kt">uint8_t</span><span class="o">*</span> <span class="n">buf</span><span class="p">,</span> <span class="kt">uint32_t</span> <span class="n">capacity</span><span class="p">,</span>
+        <span class="kt">uint8_t</span><span class="o">*</span> <span class="n">data</span><span class="p">,</span> <span class="kt">uint32_t</span> <span class="n">length</span><span class="p">,</span>
+        <span class="n">SharedInfo</span><span class="o">*</span> <span class="n">sharedInfo</span><span class="p">);</span>
+
+  <span class="kt">void</span> <span class="n">unshareOneSlow</span><span class="p">();</span>
+  <span class="kt">void</span> <span class="n">unshareChained</span><span class="p">();</span>
+  <span class="kt">void</span> <span class="n">coalesceSlow</span><span class="p">(</span><span class="kt">size_t</span> <span class="n">maxLength</span><span class="o">=</span><span class="n">std</span><span class="o">::</span><span class="n">numeric_limits</span><span class="o">&lt;</span><span class="kt">size_t</span><span class="o">&gt;::</span><span class="n">max</span><span class="p">());</span>
+  <span class="kt">void</span> <span class="n">decrementRefcount</span><span class="p">();</span>
+  <span class="kt">void</span> <span class="n">reserveSlow</span><span class="p">(</span><span class="kt">uint32_t</span> <span class="n">minHeadroom</span><span class="p">,</span> <span class="kt">uint32_t</span> <span class="n">minTailroom</span><span class="p">);</span>
+
+  <span class="k">static</span> <span class="kt">size_t</span> <span class="n">goodExtBufferSize</span><span class="p">(</span><span class="kt">uint32_t</span> <span class="n">minCapacity</span><span class="p">);</span>
+  <span class="k">static</span> <span class="kt">void</span> <span class="n">initExtBuffer</span><span class="p">(</span><span class="kt">uint8_t</span><span class="o">*</span> <span class="n">buf</span><span class="p">,</span> <span class="kt">size_t</span> <span class="n">mallocSize</span><span class="p">,</span>
+                            <span class="n">SharedInfo</span><span class="o">**</span> <span class="n">infoReturn</span><span class="p">,</span>
+                            <span class="kt">uint32_t</span><span class="o">*</span> <span class="n">capacityReturn</span><span class="p">);</span>
+  <span class="k">static</span> <span class="kt">void</span> <span class="n">allocExtBuffer</span><span class="p">(</span><span class="kt">uint32_t</span> <span class="n">minCapacity</span><span class="p">,</span>
+                             <span class="kt">uint8_t</span><span class="o">**</span> <span class="n">bufReturn</span><span class="p">,</span>
+                             <span class="n">SharedInfo</span><span class="o">**</span> <span class="n">infoReturn</span><span class="p">,</span>
+                             <span class="kt">uint32_t</span><span class="o">*</span> <span class="n">capacityReturn</span><span class="p">);</span>
+
+  <span class="cm">/*</span>
+<span class="cm">   * Member variables</span>
+<span class="cm">   */</span>
+
+  <span class="cm">/*</span>
+<span class="cm">   * Links to the next and the previous IOBuf in this chain.</span>
+<span class="cm">   *</span>
+<span class="cm">   * The chain is circularly linked (the last element in the chain points back</span>
+<span class="cm">   * at the head), and next_ and prev_ can never be NULL.  If this IOBuf is the</span>
+<span class="cm">   * only element in the chain, next_ and prev_ will both point to this.</span>
+<span class="cm">   */</span>
+  <span class="n">IOBuf</span><span class="o">*</span> <span class="n">next_</span><span class="p">;</span>
+  <span class="n">IOBuf</span><span class="o">*</span> <span class="n">prev_</span><span class="p">;</span>
+
+  <span class="cm">/*</span>
+<span class="cm">   * A pointer to the start of the data referenced by this IOBuf, and the</span>
+<span class="cm">   * length of the data.</span>
+<span class="cm">   *</span>
+<span class="cm">   * This may refer to any subsection of the actual buffer capacity.</span>
+<span class="cm">   */</span>
+  <span class="kt">uint8_t</span><span class="o">*</span> <span class="n">data_</span><span class="p">;</span>
+  <span class="kt">uint32_t</span> <span class="n">length_</span><span class="p">;</span>
+  <span class="kt">uint32_t</span> <span class="n">flags_</span><span class="p">;</span>
+
+  <span class="k">union</span> <span class="p">{</span>
+    <span class="n">ExternalBuf</span> <span class="n">ext_</span><span class="p">;</span>
+    <span class="n">InternalBuf</span> <span class="n">int_</span><span class="p">;</span>
+  <span class="p">};</span>
+
+  <span class="k">struct</span> <span class="n">DeleterBase</span> <span class="p">{</span>
+    <span class="k">virtual</span> <span class="o">~</span><span class="n">DeleterBase</span><span class="p">()</span> <span class="p">{</span> <span class="p">}</span>
+    <span class="k">virtual</span> <span class="kt">void</span> <span class="n">dispose</span><span class="p">(</span><span class="kt">void</span><span class="o">*</span> <span class="n">p</span><span class="p">)</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+  <span class="p">};</span>
+
+  <span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">UniquePtr</span><span class="o">&gt;</span>
+  <span class="k">struct</span> <span class="n">UniquePtrDeleter</span> <span class="o">:</span> <span class="n">public</span> <span class="n">DeleterBase</span> <span class="p">{</span>
+    <span class="k">typedef</span> <span class="kr">typename</span> <span class="n">UniquePtr</span><span class="o">::</span><span class="n">pointer</span> <span class="n">Pointer</span><span class="p">;</span>
+    <span class="k">typedef</span> <span class="kr">typename</span> <span class="n">UniquePtr</span><span class="o">::</span><span class="n">deleter_type</span> <span class="n">Deleter</span><span class="p">;</span>
+
+    <span class="n">explicit</span> <span class="nf">UniquePtrDeleter</span><span class="p">(</span><span class="n">Deleter</span> <span class="n">deleter</span><span class="p">)</span> <span class="o">:</span> <span class="n">deleter_</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">move</span><span class="p">(</span><span class="n">deleter</span><span class="p">)){</span> <span class="p">}</span>
+    <span class="kt">void</span> <span class="n">dispose</span><span class="p">(</span><span class="kt">void</span><span class="o">*</span> <span class="n">p</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">try</span> <span class="p">{</span>
+        <span class="n">deleter_</span><span class="p">(</span><span class="n">static_cast</span><span class="o">&lt;</span><span class="n">Pointer</span><span class="o">&gt;</span><span class="p">(</span><span class="n">p</span><span class="p">));</span>
+        <span class="n">delete</span> <span class="n">this</span><span class="p">;</span>
+      <span class="p">}</span> <span class="n">catch</span> <span class="p">(...)</span> <span class="p">{</span>
+        <span class="n">abort</span><span class="p">();</span>
+      <span class="p">}</span>
+    <span class="p">}</span>
+
+   <span class="nl">private:</span>
+    <span class="n">Deleter</span> <span class="n">deleter_</span><span class="p">;</span>
+  <span class="p">};</span>
+
+  <span class="k">static</span> <span class="kt">void</span> <span class="nf">freeUniquePtrBuffer</span><span class="p">(</span><span class="kt">void</span><span class="o">*</span> <span class="n">ptr</span><span class="p">,</span> <span class="kt">void</span><span class="o">*</span> <span class="n">userData</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">static_cast</span><span class="o">&lt;</span><span class="n">DeleterBase</span><span class="o">*&gt;</span><span class="p">(</span><span class="n">userData</span><span class="p">)</span><span class="o">-&gt;</span><span class="n">dispose</span><span class="p">(</span><span class="n">ptr</span><span class="p">);</span>
+  <span class="p">}</span>
+<span class="p">};</span>
+
+<span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">UniquePtr</span><span class="o">&gt;</span>
+<span class="kr">typename</span> <span class="n">std</span><span class="o">::</span><span class="n">enable_if</span><span class="o">&lt;</span><span class="n">detail</span><span class="o">::</span><span class="n">IsUniquePtrToSL</span><span class="o">&lt;</span><span class="n">UniquePtr</span><span class="o">&gt;::</span><span class="n">value</span><span class="p">,</span>
+                        <span class="n">std</span><span class="o">::</span><span class="n">unique_ptr</span><span class="o">&lt;</span><span class="n">IOBuf</span><span class="o">&gt;&gt;::</span><span class="n">type</span>
+<span class="n">IOBuf</span><span class="o">::</span><span class="n">takeOwnership</span><span class="p">(</span><span class="n">UniquePtr</span><span class="o">&amp;&amp;</span> <span class="n">buf</span><span class="p">,</span> <span class="kt">size_t</span> <span class="n">count</span><span class="p">)</span> <span class="p">{</span>
+  <span class="kt">size_t</span> <span class="n">size</span> <span class="o">=</span> <span class="n">count</span> <span class="o">*</span> <span class="k">sizeof</span><span class="p">(</span><span class="kr">typename</span> <span class="n">UniquePtr</span><span class="o">::</span><span class="n">element_type</span><span class="p">);</span>
+  <span class="n">CHECK_LT</span><span class="p">(</span><span class="n">size</span><span class="p">,</span> <span class="kt">size_t</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">numeric_limits</span><span class="o">&lt;</span><span class="kt">uint32_t</span><span class="o">&gt;::</span><span class="n">max</span><span class="p">()));</span>
+  <span class="k">auto</span> <span class="n">deleter</span> <span class="o">=</span> <span class="n">new</span> <span class="n">UniquePtrDeleter</span><span class="o">&lt;</span><span class="n">UniquePtr</span><span class="o">&gt;</span><span class="p">(</span><span class="n">buf</span><span class="p">.</span><span class="n">get_deleter</span><span class="p">());</span>
+  <span class="k">return</span> <span class="n">takeOwnership</span><span class="p">(</span><span class="n">buf</span><span class="p">.</span><span class="n">release</span><span class="p">(),</span>
+                       <span class="n">size</span><span class="p">,</span>
+                       <span class="o">&amp;</span><span class="n">IOBuf</span><span class="o">::</span><span class="n">freeUniquePtrBuffer</span><span class="p">,</span>
+                       <span class="n">deleter</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="kr">inline</span> <span class="n">std</span><span class="o">::</span><span class="n">unique_ptr</span><span class="o">&lt;</span><span class="n">IOBuf</span><span class="o">&gt;</span> <span class="n">IOBuf</span><span class="o">::</span><span class="n">copyBuffer</span><span class="p">(</span>
+    <span class="k">const</span> <span class="kt">void</span><span class="o">*</span> <span class="n">data</span><span class="p">,</span> <span class="kt">uint32_t</span> <span class="n">size</span><span class="p">,</span> <span class="kt">uint32_t</span> <span class="n">headroom</span><span class="p">,</span>
+    <span class="kt">uint32_t</span> <span class="n">minTailroom</span><span class="p">)</span> <span class="p">{</span>
+  <span class="kt">uint32_t</span> <span class="n">capacity</span> <span class="o">=</span> <span class="n">headroom</span> <span class="o">+</span> <span class="n">size</span> <span class="o">+</span> <span class="n">minTailroom</span><span class="p">;</span>
+  <span class="n">std</span><span class="o">::</span><span class="n">unique_ptr</span><span class="o">&lt;</span><span class="n">IOBuf</span><span class="o">&gt;</span> <span class="n">buf</span> <span class="o">=</span> <span class="n">create</span><span class="p">(</span><span class="n">capacity</span><span class="p">);</span>
+  <span class="n">buf</span><span class="o">-&gt;</span><span class="n">advance</span><span class="p">(</span><span class="n">headroom</span><span class="p">);</span>
+  <span class="n">memcpy</span><span class="p">(</span><span class="n">buf</span><span class="o">-&gt;</span><span class="n">writableData</span><span class="p">(),</span> <span class="n">data</span><span class="p">,</span> <span class="n">size</span><span class="p">);</span>
+  <span class="n">buf</span><span class="o">-&gt;</span><span class="n">append</span><span class="p">(</span><span class="n">size</span><span class="p">);</span>
+  <span class="k">return</span> <span class="n">buf</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="p">}</span> <span class="c1">// folly</span>
+
+<span class="cp">#endif </span><span class="c1">// FOLLY_IO_IOBUF_H_</span>
+
+</pre></div></td></tr>
+
+</tbody>
+</table>
+</div>
+
+</body>
+<script>docas={repo:"joekychen/folly",depth:3}</script>
+<script>document.write('<script src=' + ('__proto__' in {} ? 'http://cdnjs.cloudflare.com/ajax/libs/zepto/1.0rc1/zepto.min.js' : 'https://ajax.googleapis.com/ajax/libs/jquery/1.7.2/jquery.min.js')+'><\\/script>')</script>
+<script src="http://baoshan.github.com/moment/min/moment.min.js"></script>
+<script src="../../../javascript/docco.min.js"></script>
+</html>

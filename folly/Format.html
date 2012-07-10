@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html><head><title>joekychen/folly » folly › Format.h
+<html><head><title>joekychen/folly » folly › Format.cpp
 
 </title>
 <meta http-equiv="content-type" content="text/html; charset=UTF-8">
@@ -12,7 +12,7 @@
 <div id="container">
 <div id="background"></div>
 <table cellpadding="0" cellspacing="0">
-<thead><tr><th class="docs"><a id="home" href="../index.html"></a><h1>Format.h</h1></th><th class="code"></th></tr></thead>
+<thead><tr><th class="docs"><a id="home" href="../index.html"></a><h1>Format.cpp</h1></th><th class="code"></th></tr></thead>
 <tbody>
 
 
@@ -32,261 +32,128 @@
 <span class="cm"> * limitations under the License.</span>
 <span class="cm"> */</span>
 
-<span class="cp">#ifndef FOLLY_FORMAT_H_</span>
-<span class="cp">#define FOLLY_FORMAT_H_</span>
+<span class="cp">#include &quot;folly/Format.h&quot;</span>
 
-<span class="cp">#include &lt;array&gt;</span>
-<span class="cp">#include &lt;tuple&gt;</span>
-<span class="cp">#include &lt;type_traits&gt;</span>
-<span class="cp">#include &lt;vector&gt;</span>
-<span class="cp">#include &lt;deque&gt;</span>
-<span class="cp">#include &lt;map&gt;</span>
-<span class="cp">#include &lt;unordered_map&gt;</span>
+<span class="k">namespace</span> <span class="n">folly</span> <span class="p">{</span>
+<span class="k">namespace</span> <span class="n">detail</span> <span class="p">{</span>
 
-<span class="cp">#include &lt;double-conversion.h&gt;</span>
+<span class="k">extern</span> <span class="k">const</span> <span class="n">FormatArg</span><span class="o">::</span><span class="n">Align</span> <span class="n">formatAlignTable</span><span class="p">[];</span>
+<span class="k">extern</span> <span class="k">const</span> <span class="n">FormatArg</span><span class="o">::</span><span class="n">Sign</span> <span class="n">formatSignTable</span><span class="p">[];</span>
 
-<span class="cp">#include &quot;folly/FBVector.h&quot;</span>
-<span class="cp">#include &quot;folly/Conv.h&quot;</span>
-<span class="cp">#include &quot;folly/Range.h&quot;</span>
-<span class="cp">#include &quot;folly/Likely.h&quot;</span>
-<span class="cp">#include &quot;folly/String.h&quot;</span>
-<span class="cp">#include &quot;folly/small_vector.h&quot;</span>
-<span class="cp">#include &quot;folly/FormatArg.h&quot;</span>
+<span class="p">}</span>  <span class="c1">// namespace detail</span>
 
-<span class="n">namespace</span> <span class="n">folly</span> <span class="p">{</span></pre></div></td></tr>
+<span class="k">using</span> <span class="k">namespace</span> <span class="n">folly</span><span class="o">::</span><span class="n">detail</span><span class="p">;</span>
+
+<span class="kt">void</span> <span class="n">FormatArg</span><span class="o">::</span><span class="n">initSlow</span><span class="p">()</span> <span class="p">{</span>
+  <span class="k">auto</span> <span class="n">b</span> <span class="o">=</span> <span class="n">fullArgString</span><span class="p">.</span><span class="n">begin</span><span class="p">();</span>
+  <span class="k">auto</span> <span class="n">end</span> <span class="o">=</span> <span class="n">fullArgString</span><span class="p">.</span><span class="n">end</span><span class="p">();</span></pre></div></td></tr>
 
 
-<tr id="section-2"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-2">&#182;</a></div><p>forward declarations</p></td><td class="code"><div class="highlight"><pre><span class="n">template</span> <span class="o">&lt;</span><span class="n">bool</span> <span class="n">containerMode</span><span class="p">,</span> <span class="n">class</span><span class="p">...</span> <span class="n">Args</span><span class="o">&gt;</span> <span class="n">class</span> <span class="n">Formatter</span><span class="p">;</span>
-<span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span><span class="p">...</span> <span class="n">Args</span><span class="o">&gt;</span>
-<span class="n">Formatter</span><span class="o">&lt;</span><span class="nb">false</span><span class="p">,</span> <span class="n">Args</span><span class="p">...</span><span class="o">&gt;</span> <span class="n">format</span><span class="p">(</span><span class="n">StringPiece</span> <span class="n">fmt</span><span class="p">,</span> <span class="n">Args</span><span class="o">&amp;&amp;</span><span class="p">...</span> <span class="n">args</span><span class="p">);</span>
-<span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">C</span><span class="o">&gt;</span>
-<span class="n">Formatter</span><span class="o">&lt;</span><span class="nb">true</span><span class="p">,</span> <span class="n">C</span><span class="o">&gt;</span> <span class="n">vformat</span><span class="p">(</span><span class="n">StringPiece</span> <span class="n">fmt</span><span class="p">,</span> <span class="n">C</span><span class="o">&amp;&amp;</span> <span class="n">container</span><span class="p">);</span>
-<span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">T</span><span class="p">,</span> <span class="n">class</span> <span class="n">Enable</span><span class="o">=</span><span class="kt">void</span><span class="o">&gt;</span> <span class="n">class</span> <span class="n">FormatValue</span><span class="p">;</span>
-
-<span class="cm">/**</span>
-<span class="cm"> * Formatter class.</span>
-<span class="cm"> *</span>
-<span class="cm"> * Note that this class is tricky, as it keeps *references* to its arguments</span>
-<span class="cm"> * (and doesn&#39;t copy the passed-in format string).  Thankfully, you can&#39;t use</span>
-<span class="cm"> * this directly, you have to use format(...) below.</span>
-<span class="cm"> */</span>
-
-<span class="n">template</span> <span class="o">&lt;</span><span class="n">bool</span> <span class="n">containerMode</span><span class="p">,</span> <span class="n">class</span><span class="p">...</span> <span class="n">Args</span><span class="o">&gt;</span>
-<span class="n">class</span> <span class="n">Formatter</span> <span class="p">{</span>
-  <span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span><span class="p">...</span> <span class="n">A</span><span class="o">&gt;</span>
-  <span class="n">friend</span> <span class="n">Formatter</span><span class="o">&lt;</span><span class="nb">false</span><span class="p">,</span> <span class="n">A</span><span class="p">...</span><span class="o">&gt;</span> <span class="n">format</span><span class="p">(</span><span class="n">StringPiece</span> <span class="n">fmt</span><span class="p">,</span> <span class="n">A</span><span class="o">&amp;&amp;</span><span class="p">...</span> <span class="n">arg</span><span class="p">);</span>
-  <span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">C</span><span class="o">&gt;</span>
-  <span class="n">friend</span> <span class="n">Formatter</span><span class="o">&lt;</span><span class="nb">true</span><span class="p">,</span> <span class="n">C</span><span class="o">&gt;</span> <span class="n">vformat</span><span class="p">(</span><span class="n">StringPiece</span> <span class="n">fmt</span><span class="p">,</span> <span class="n">C</span><span class="o">&amp;&amp;</span> <span class="n">container</span><span class="p">);</span>
- <span class="nl">public:</span>
-  <span class="cm">/**</span>
-<span class="cm">   * Append to output.  out(StringPiece sp) may be called (more than once)</span>
-<span class="cm">   */</span>
-  <span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">Output</span><span class="o">&gt;</span>
-  <span class="kt">void</span> <span class="n">operator</span><span class="p">()(</span><span class="n">Output</span><span class="o">&amp;</span> <span class="n">out</span><span class="p">)</span> <span class="k">const</span><span class="p">;</span>
-
-  <span class="cm">/**</span>
-<span class="cm">   * Append to a string.</span>
-<span class="cm">   */</span>
-  <span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">Str</span><span class="o">&gt;</span>
-  <span class="kr">typename</span> <span class="n">std</span><span class="o">::</span><span class="n">enable_if</span><span class="o">&lt;</span><span class="n">detail</span><span class="o">::</span><span class="n">IsSomeString</span><span class="o">&lt;</span><span class="n">Str</span><span class="o">&gt;::</span><span class="n">value</span><span class="o">&gt;::</span><span class="n">type</span>
-  <span class="n">appendTo</span><span class="p">(</span><span class="n">Str</span><span class="o">&amp;</span> <span class="n">str</span><span class="p">)</span> <span class="k">const</span> <span class="p">{</span>
-    <span class="k">auto</span> <span class="n">appender</span> <span class="o">=</span> <span class="p">[</span><span class="o">&amp;</span><span class="n">str</span><span class="p">]</span> <span class="p">(</span><span class="n">StringPiece</span> <span class="n">s</span><span class="p">)</span> <span class="p">{</span> <span class="n">str</span><span class="p">.</span><span class="n">append</span><span class="p">(</span><span class="n">s</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span> <span class="n">s</span><span class="p">.</span><span class="n">size</span><span class="p">());</span> <span class="p">};</span>
-    <span class="p">(</span><span class="o">*</span><span class="n">this</span><span class="p">)(</span><span class="n">appender</span><span class="p">);</span>
+<tr id="section-2"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-2">&#182;</a></div><p>Parse key</p></td><td class="code"><div class="highlight"><pre>  <span class="k">auto</span> <span class="n">p</span> <span class="o">=</span> <span class="k">static_cast</span><span class="o">&lt;</span><span class="k">const</span> <span class="kt">char</span><span class="o">*&gt;</span><span class="p">(</span><span class="n">memchr</span><span class="p">(</span><span class="n">b</span><span class="p">,</span> <span class="sc">&#39;:&#39;</span><span class="p">,</span> <span class="n">end</span> <span class="o">-</span> <span class="n">b</span><span class="p">));</span>
+  <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">p</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">key_</span> <span class="o">=</span> <span class="n">StringPiece</span><span class="p">(</span><span class="n">b</span><span class="p">,</span> <span class="n">end</span><span class="p">);</span>
+    <span class="k">return</span><span class="p">;</span>
   <span class="p">}</span>
+  <span class="n">key_</span> <span class="o">=</span> <span class="n">StringPiece</span><span class="p">(</span><span class="n">b</span><span class="p">,</span> <span class="n">p</span><span class="p">);</span>
 
-  <span class="cm">/**</span>
-<span class="cm">   * Conversion to string</span>
-<span class="cm">   */</span>
-  <span class="n">std</span><span class="o">::</span><span class="n">string</span> <span class="n">str</span><span class="p">()</span> <span class="k">const</span> <span class="p">{</span>
-    <span class="n">std</span><span class="o">::</span><span class="n">string</span> <span class="n">s</span><span class="p">;</span>
-    <span class="n">appendTo</span><span class="p">(</span><span class="n">s</span><span class="p">);</span>
-    <span class="k">return</span> <span class="n">s</span><span class="p">;</span>
-  <span class="p">}</span>
-
-  <span class="cm">/**</span>
-<span class="cm">   * Conversion to fbstring</span>
-<span class="cm">   */</span>
-  <span class="n">fbstring</span> <span class="n">fbstr</span><span class="p">()</span> <span class="k">const</span> <span class="p">{</span>
-    <span class="n">fbstring</span> <span class="n">s</span><span class="p">;</span>
-    <span class="n">appendTo</span><span class="p">(</span><span class="n">s</span><span class="p">);</span>
-    <span class="k">return</span> <span class="n">s</span><span class="p">;</span>
-  <span class="p">}</span>
-
- <span class="nl">private:</span>
-  <span class="n">explicit</span> <span class="n">Formatter</span><span class="p">(</span><span class="n">StringPiece</span> <span class="n">str</span><span class="p">,</span> <span class="n">Args</span><span class="o">&amp;&amp;</span><span class="p">...</span> <span class="n">args</span><span class="p">);</span></pre></div></td></tr>
+  <span class="k">if</span> <span class="p">(</span><span class="o">*</span><span class="n">p</span> <span class="o">==</span> <span class="sc">&#39;:&#39;</span><span class="p">)</span> <span class="p">{</span></pre></div></td></tr>
 
 
-<tr id="section-3"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-3">&#182;</a></div><p>Not copyable</p></td><td class="code"><div class="highlight"><pre>  <span class="n">Formatter</span><span class="p">(</span><span class="k">const</span> <span class="n">Formatter</span><span class="o">&amp;</span><span class="p">)</span> <span class="o">=</span> <span class="n">delete</span><span class="p">;</span>
-  <span class="n">Formatter</span><span class="o">&amp;</span> <span class="n">operator</span><span class="o">=</span><span class="p">(</span><span class="k">const</span> <span class="n">Formatter</span><span class="o">&amp;</span><span class="p">)</span> <span class="o">=</span> <span class="n">delete</span><span class="p">;</span></pre></div></td></tr>
+<tr id="section-3"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-3">&#182;</a></div><p>parse format spec</p></td><td class="code"><div class="highlight"><pre>    <span class="k">if</span> <span class="p">(</span><span class="o">++</span><span class="n">p</span> <span class="o">==</span> <span class="n">end</span><span class="p">)</span> <span class="k">return</span><span class="p">;</span></pre></div></td></tr>
 
 
-<tr id="section-4"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-4">&#182;</a></div><p>Movable, but the move constructor and assignment operator are private,
-for the exclusive use of format() (below).  This way, you can't create
-a Formatter object, but can handle references to it (for streaming,
-conversion to string, etc) -- which is good, as Formatter objects are
-dangerous (they hold references, possibly to temporaries)</p></td><td class="code"><div class="highlight"><pre>  <span class="n">Formatter</span><span class="p">(</span><span class="n">Formatter</span><span class="o">&amp;&amp;</span><span class="p">)</span> <span class="o">=</span> <span class="k">default</span><span class="p">;</span>
-  <span class="n">Formatter</span><span class="o">&amp;</span> <span class="n">operator</span><span class="o">=</span><span class="p">(</span><span class="n">Formatter</span><span class="o">&amp;&amp;</span><span class="p">)</span> <span class="o">=</span> <span class="k">default</span><span class="p">;</span>
-
-  <span class="k">typedef</span> <span class="n">std</span><span class="o">::</span><span class="n">tuple</span><span class="o">&lt;</span><span class="n">FormatValue</span><span class="o">&lt;</span>
-      <span class="kr">typename</span> <span class="n">std</span><span class="o">::</span><span class="n">decay</span><span class="o">&lt;</span><span class="n">Args</span><span class="o">&gt;::</span><span class="n">type</span><span class="o">&gt;</span><span class="p">...</span><span class="o">&gt;</span> <span class="n">ValueTuple</span><span class="p">;</span>
-  <span class="k">static</span> <span class="n">constexpr</span> <span class="kt">size_t</span> <span class="n">valueCount</span> <span class="o">=</span> <span class="n">std</span><span class="o">::</span><span class="n">tuple_size</span><span class="o">&lt;</span><span class="n">ValueTuple</span><span class="o">&gt;::</span><span class="n">value</span><span class="p">;</span>
-
-  <span class="n">template</span> <span class="o">&lt;</span><span class="kt">size_t</span> <span class="n">K</span><span class="p">,</span> <span class="n">class</span> <span class="n">Callback</span><span class="o">&gt;</span>
-  <span class="kr">typename</span> <span class="n">std</span><span class="o">::</span><span class="n">enable_if</span><span class="o">&lt;</span><span class="n">K</span> <span class="o">==</span> <span class="n">valueCount</span><span class="o">&gt;::</span><span class="n">type</span>
-  <span class="n">doFormatFrom</span><span class="p">(</span><span class="kt">size_t</span> <span class="n">i</span><span class="p">,</span> <span class="n">FormatArg</span><span class="o">&amp;</span> <span class="n">arg</span><span class="p">,</span> <span class="n">Callback</span><span class="o">&amp;</span> <span class="n">cb</span><span class="p">)</span> <span class="k">const</span> <span class="p">{</span>
-    <span class="n">arg</span><span class="p">.</span><span class="n">error</span><span class="p">(</span><span class="s">&quot;argument index out of range, max=&quot;</span><span class="p">,</span> <span class="n">i</span><span class="p">);</span>
-  <span class="p">}</span>
-
-  <span class="n">template</span> <span class="o">&lt;</span><span class="kt">size_t</span> <span class="n">K</span><span class="p">,</span> <span class="n">class</span> <span class="n">Callback</span><span class="o">&gt;</span>
-  <span class="kr">typename</span> <span class="n">std</span><span class="o">::</span><span class="n">enable_if</span><span class="o">&lt;</span><span class="p">(</span><span class="n">K</span> <span class="o">&lt;</span> <span class="n">valueCount</span><span class="p">)</span><span class="o">&gt;::</span><span class="n">type</span>
-  <span class="n">doFormatFrom</span><span class="p">(</span><span class="kt">size_t</span> <span class="n">i</span><span class="p">,</span> <span class="n">FormatArg</span><span class="o">&amp;</span> <span class="n">arg</span><span class="p">,</span> <span class="n">Callback</span><span class="o">&amp;</span> <span class="n">cb</span><span class="p">)</span> <span class="k">const</span> <span class="p">{</span>
-    <span class="k">if</span> <span class="p">(</span><span class="n">i</span> <span class="o">==</span> <span class="n">K</span><span class="p">)</span> <span class="p">{</span>
-      <span class="n">std</span><span class="o">::</span><span class="n">get</span><span class="o">&lt;</span><span class="n">K</span><span class="o">&gt;</span><span class="p">(</span><span class="n">values_</span><span class="p">).</span><span class="n">format</span><span class="p">(</span><span class="n">arg</span><span class="p">,</span> <span class="n">cb</span><span class="p">);</span>
-    <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
-      <span class="n">doFormatFrom</span><span class="o">&lt;</span><span class="n">K</span><span class="o">+</span><span class="mi">1</span><span class="o">&gt;</span><span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="n">arg</span><span class="p">,</span> <span class="n">cb</span><span class="p">);</span>
+<tr id="section-4"><td class="docs"><div class="pilwrap"><a class="pilcrow" href="#section-4">&#182;</a></div><p>fill/align, or just align</p></td><td class="code"><div class="highlight"><pre>    <span class="n">Align</span> <span class="n">a</span><span class="p">;</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">p</span> <span class="o">+</span> <span class="mi">1</span> <span class="o">!=</span> <span class="n">end</span> <span class="o">&amp;&amp;</span>
+        <span class="p">(</span><span class="n">a</span> <span class="o">=</span> <span class="n">formatAlignTable</span><span class="p">[</span><span class="k">static_cast</span><span class="o">&lt;</span><span class="kt">unsigned</span> <span class="kt">char</span><span class="o">&gt;</span><span class="p">(</span><span class="n">p</span><span class="p">[</span><span class="mi">1</span><span class="p">])])</span> <span class="o">!=</span>
+        <span class="n">Align</span><span class="o">::</span><span class="n">INVALID</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">fill</span> <span class="o">=</span> <span class="o">*</span><span class="n">p</span><span class="p">;</span>
+      <span class="n">align</span> <span class="o">=</span> <span class="n">a</span><span class="p">;</span>
+      <span class="n">p</span> <span class="o">+=</span> <span class="mi">2</span><span class="p">;</span>
+      <span class="k">if</span> <span class="p">(</span><span class="n">p</span> <span class="o">==</span> <span class="n">end</span><span class="p">)</span> <span class="k">return</span><span class="p">;</span>
+    <span class="p">}</span> <span class="k">else</span> <span class="k">if</span> <span class="p">((</span><span class="n">a</span> <span class="o">=</span> <span class="n">formatAlignTable</span><span class="p">[</span><span class="k">static_cast</span><span class="o">&lt;</span><span class="kt">unsigned</span> <span class="kt">char</span><span class="o">&gt;</span><span class="p">(</span><span class="o">*</span><span class="n">p</span><span class="p">)])</span> <span class="o">!=</span>
+               <span class="n">Align</span><span class="o">::</span><span class="n">INVALID</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">align</span> <span class="o">=</span> <span class="n">a</span><span class="p">;</span>
+      <span class="k">if</span> <span class="p">(</span><span class="o">++</span><span class="n">p</span> <span class="o">==</span> <span class="n">end</span><span class="p">)</span> <span class="k">return</span><span class="p">;</span>
     <span class="p">}</span>
+
+    <span class="n">Sign</span> <span class="n">s</span><span class="p">;</span>
+    <span class="kt">unsigned</span> <span class="kt">char</span> <span class="n">uSign</span> <span class="o">=</span> <span class="k">static_cast</span><span class="o">&lt;</span><span class="kt">unsigned</span> <span class="kt">char</span><span class="o">&gt;</span><span class="p">(</span><span class="o">*</span><span class="n">p</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">((</span><span class="n">s</span> <span class="o">=</span> <span class="n">formatSignTable</span><span class="p">[</span><span class="n">uSign</span><span class="p">])</span> <span class="o">!=</span> <span class="n">Sign</span><span class="o">::</span><span class="n">INVALID</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">sign</span> <span class="o">=</span> <span class="n">s</span><span class="p">;</span>
+      <span class="k">if</span> <span class="p">(</span><span class="o">++</span><span class="n">p</span> <span class="o">==</span> <span class="n">end</span><span class="p">)</span> <span class="k">return</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="k">if</span> <span class="p">(</span><span class="o">*</span><span class="n">p</span> <span class="o">==</span> <span class="sc">&#39;#&#39;</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">basePrefix</span> <span class="o">=</span> <span class="kc">true</span><span class="p">;</span>
+      <span class="k">if</span> <span class="p">(</span><span class="o">++</span><span class="n">p</span> <span class="o">==</span> <span class="n">end</span><span class="p">)</span> <span class="k">return</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="k">if</span> <span class="p">(</span><span class="o">*</span><span class="n">p</span> <span class="o">==</span> <span class="sc">&#39;0&#39;</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">enforce</span><span class="p">(</span><span class="n">align</span> <span class="o">==</span> <span class="n">Align</span><span class="o">::</span><span class="n">DEFAULT</span><span class="p">,</span> <span class="s">&quot;alignment specified twice&quot;</span><span class="p">);</span>
+      <span class="n">fill</span> <span class="o">=</span> <span class="sc">&#39;0&#39;</span><span class="p">;</span>
+      <span class="n">align</span> <span class="o">=</span> <span class="n">Align</span><span class="o">::</span><span class="n">PAD_AFTER_SIGN</span><span class="p">;</span>
+      <span class="k">if</span> <span class="p">(</span><span class="o">++</span><span class="n">p</span> <span class="o">==</span> <span class="n">end</span><span class="p">)</span> <span class="k">return</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="k">if</span> <span class="p">(</span><span class="o">*</span><span class="n">p</span> <span class="o">&gt;=</span> <span class="sc">&#39;0&#39;</span> <span class="o">&amp;&amp;</span> <span class="o">*</span><span class="n">p</span> <span class="o">&lt;=</span> <span class="sc">&#39;9&#39;</span><span class="p">)</span> <span class="p">{</span>
+      <span class="k">auto</span> <span class="n">b</span> <span class="o">=</span> <span class="n">p</span><span class="p">;</span>
+      <span class="k">do</span> <span class="p">{</span>
+        <span class="o">++</span><span class="n">p</span><span class="p">;</span>
+      <span class="p">}</span> <span class="k">while</span> <span class="p">(</span><span class="n">p</span> <span class="o">!=</span> <span class="n">end</span> <span class="o">&amp;&amp;</span> <span class="o">*</span><span class="n">p</span> <span class="o">&gt;=</span> <span class="sc">&#39;0&#39;</span> <span class="o">&amp;&amp;</span> <span class="o">*</span><span class="n">p</span> <span class="o">&lt;=</span> <span class="sc">&#39;9&#39;</span><span class="p">);</span>
+      <span class="n">width</span> <span class="o">=</span> <span class="n">to</span><span class="o">&lt;</span><span class="kt">int</span><span class="o">&gt;</span><span class="p">(</span><span class="n">StringPiece</span><span class="p">(</span><span class="n">b</span><span class="p">,</span> <span class="n">p</span><span class="p">));</span>
+
+      <span class="k">if</span> <span class="p">(</span><span class="n">p</span> <span class="o">==</span> <span class="n">end</span><span class="p">)</span> <span class="k">return</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="k">if</span> <span class="p">(</span><span class="o">*</span><span class="n">p</span> <span class="o">==</span> <span class="sc">&#39;,&#39;</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">thousandsSeparator</span> <span class="o">=</span> <span class="kc">true</span><span class="p">;</span>
+      <span class="k">if</span> <span class="p">(</span><span class="o">++</span><span class="n">p</span> <span class="o">==</span> <span class="n">end</span><span class="p">)</span> <span class="k">return</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="k">if</span> <span class="p">(</span><span class="o">*</span><span class="n">p</span> <span class="o">==</span> <span class="sc">&#39;.&#39;</span><span class="p">)</span> <span class="p">{</span>
+      <span class="k">auto</span> <span class="n">b</span> <span class="o">=</span> <span class="o">++</span><span class="n">p</span><span class="p">;</span>
+      <span class="k">while</span> <span class="p">(</span><span class="n">p</span> <span class="o">!=</span> <span class="n">end</span> <span class="o">&amp;&amp;</span> <span class="o">*</span><span class="n">p</span> <span class="o">&gt;=</span> <span class="sc">&#39;0&#39;</span> <span class="o">&amp;&amp;</span> <span class="o">*</span><span class="n">p</span> <span class="o">&lt;=</span> <span class="sc">&#39;9&#39;</span><span class="p">)</span> <span class="p">{</span>
+        <span class="o">++</span><span class="n">p</span><span class="p">;</span>
+      <span class="p">}</span>
+      <span class="n">precision</span> <span class="o">=</span> <span class="n">to</span><span class="o">&lt;</span><span class="kt">int</span><span class="o">&gt;</span><span class="p">(</span><span class="n">StringPiece</span><span class="p">(</span><span class="n">b</span><span class="p">,</span> <span class="n">p</span><span class="p">));</span>
+
+      <span class="k">if</span> <span class="p">(</span><span class="n">p</span> <span class="o">==</span> <span class="n">end</span><span class="p">)</span> <span class="k">return</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="n">presentation</span> <span class="o">=</span> <span class="o">*</span><span class="n">p</span><span class="p">;</span>
+    <span class="k">if</span> <span class="p">(</span><span class="o">++</span><span class="n">p</span> <span class="o">==</span> <span class="n">end</span><span class="p">)</span> <span class="k">return</span><span class="p">;</span>
   <span class="p">}</span>
 
-  <span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">Callback</span><span class="o">&gt;</span>
-  <span class="kt">void</span> <span class="n">doFormat</span><span class="p">(</span><span class="kt">size_t</span> <span class="n">i</span><span class="p">,</span> <span class="n">FormatArg</span><span class="o">&amp;</span> <span class="n">arg</span><span class="p">,</span> <span class="n">Callback</span><span class="o">&amp;</span> <span class="n">cb</span><span class="p">)</span> <span class="k">const</span> <span class="p">{</span>
-    <span class="k">return</span> <span class="n">doFormatFrom</span><span class="o">&lt;</span><span class="mi">0</span><span class="o">&gt;</span><span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="n">arg</span><span class="p">,</span> <span class="n">cb</span><span class="p">);</span>
+  <span class="n">error</span><span class="p">(</span><span class="s">&quot;extra characters in format string&quot;</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="kt">void</span> <span class="n">FormatArg</span><span class="o">::</span><span class="n">validate</span><span class="p">(</span><span class="n">Type</span> <span class="n">type</span><span class="p">)</span> <span class="k">const</span> <span class="p">{</span>
+  <span class="n">enforce</span><span class="p">(</span><span class="n">keyEmpty</span><span class="p">(),</span> <span class="s">&quot;index not allowed&quot;</span><span class="p">);</span>
+  <span class="k">switch</span> <span class="p">(</span><span class="n">type</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">case</span> <span class="n">Type</span><span class="o">::</span><span class="nl">INTEGER:</span>
+    <span class="n">enforce</span><span class="p">(</span><span class="n">precision</span> <span class="o">==</span> <span class="n">kDefaultPrecision</span><span class="p">,</span>
+            <span class="s">&quot;precision not allowed on integers&quot;</span><span class="p">);</span>
+    <span class="k">break</span><span class="p">;</span>
+  <span class="k">case</span> <span class="n">Type</span><span class="o">::</span><span class="nl">FLOAT:</span>
+    <span class="n">enforce</span><span class="p">(</span><span class="o">!</span><span class="n">basePrefix</span><span class="p">,</span>
+            <span class="s">&quot;base prefix (&#39;#&#39;) specifier only allowed on integers&quot;</span><span class="p">);</span>
+    <span class="n">enforce</span><span class="p">(</span><span class="o">!</span><span class="n">thousandsSeparator</span><span class="p">,</span>
+            <span class="s">&quot;thousands separator (&#39;,&#39;) only allowed on integers&quot;</span><span class="p">);</span>
+    <span class="k">break</span><span class="p">;</span>
+  <span class="k">case</span> <span class="n">Type</span><span class="o">::</span><span class="nl">OTHER:</span>
+    <span class="n">enforce</span><span class="p">(</span><span class="n">align</span> <span class="o">!=</span> <span class="n">Align</span><span class="o">::</span><span class="n">PAD_AFTER_SIGN</span><span class="p">,</span>
+            <span class="s">&quot;&#39;=&#39;alignment only allowed on numbers&quot;</span><span class="p">);</span>
+    <span class="n">enforce</span><span class="p">(</span><span class="n">sign</span> <span class="o">==</span> <span class="n">Sign</span><span class="o">::</span><span class="n">DEFAULT</span><span class="p">,</span>
+            <span class="s">&quot;sign specifier only allowed on numbers&quot;</span><span class="p">);</span>
+    <span class="n">enforce</span><span class="p">(</span><span class="o">!</span><span class="n">basePrefix</span><span class="p">,</span>
+            <span class="s">&quot;base prefix (&#39;#&#39;) specifier only allowed on integers&quot;</span><span class="p">);</span>
+    <span class="n">enforce</span><span class="p">(</span><span class="o">!</span><span class="n">thousandsSeparator</span><span class="p">,</span>
+            <span class="s">&quot;thousands separator (&#39;,&#39;) only allowed on integers&quot;</span><span class="p">);</span>
+    <span class="k">break</span><span class="p">;</span>
   <span class="p">}</span>
-
-  <span class="n">bool</span> <span class="n">containerMode_</span><span class="p">;</span>
-  <span class="n">StringPiece</span> <span class="n">str_</span><span class="p">;</span>
-  <span class="n">ValueTuple</span> <span class="n">values_</span><span class="p">;</span>
-<span class="p">};</span>
-
-<span class="cm">/**</span>
-<span class="cm"> * Formatter objects can be written to streams.</span>
-<span class="cm"> */</span>
-<span class="n">template</span><span class="o">&lt;</span><span class="n">bool</span> <span class="n">containerMode</span><span class="p">,</span> <span class="n">class</span><span class="p">...</span> <span class="n">Args</span><span class="o">&gt;</span>
-<span class="n">std</span><span class="o">::</span><span class="n">ostream</span><span class="o">&amp;</span> <span class="n">operator</span><span class="o">&lt;&lt;</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">ostream</span><span class="o">&amp;</span> <span class="n">out</span><span class="p">,</span>
-                         <span class="k">const</span> <span class="n">Formatter</span><span class="o">&lt;</span><span class="n">containerMode</span><span class="p">,</span> <span class="n">Args</span><span class="p">...</span><span class="o">&gt;&amp;</span> <span class="n">formatter</span><span class="p">)</span> <span class="p">{</span>
-  <span class="k">auto</span> <span class="n">writer</span> <span class="o">=</span> <span class="p">[</span><span class="o">&amp;</span><span class="n">out</span><span class="p">]</span> <span class="p">(</span><span class="n">StringPiece</span> <span class="n">sp</span><span class="p">)</span> <span class="p">{</span> <span class="n">out</span><span class="p">.</span><span class="n">write</span><span class="p">(</span><span class="n">sp</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span> <span class="n">sp</span><span class="p">.</span><span class="n">size</span><span class="p">());</span> <span class="p">};</span>
-  <span class="n">formatter</span><span class="p">(</span><span class="n">writer</span><span class="p">);</span>
-  <span class="k">return</span> <span class="n">out</span><span class="p">;</span>
 <span class="p">}</span>
-
-<span class="cm">/**</span>
-<span class="cm"> * Create a formatter object.</span>
-<span class="cm"> *</span>
-<span class="cm"> * std::string formatted = format(&quot;{} {}&quot;, 23, 42);</span>
-<span class="cm"> * LOG(INFO) &lt;&lt; format(&quot;{} {}&quot;, 23, 42);</span>
-<span class="cm"> */</span>
-<span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span><span class="p">...</span> <span class="n">Args</span><span class="o">&gt;</span>
-<span class="n">Formatter</span><span class="o">&lt;</span><span class="nb">false</span><span class="p">,</span> <span class="n">Args</span><span class="p">...</span><span class="o">&gt;</span> <span class="n">format</span><span class="p">(</span><span class="n">StringPiece</span> <span class="n">fmt</span><span class="p">,</span> <span class="n">Args</span><span class="o">&amp;&amp;</span><span class="p">...</span> <span class="n">args</span><span class="p">)</span> <span class="p">{</span>
-  <span class="k">return</span> <span class="n">Formatter</span><span class="o">&lt;</span><span class="nb">false</span><span class="p">,</span> <span class="n">Args</span><span class="p">...</span><span class="o">&gt;</span><span class="p">(</span>
-      <span class="n">fmt</span><span class="p">,</span> <span class="n">std</span><span class="o">::</span><span class="n">forward</span><span class="o">&lt;</span><span class="n">Args</span><span class="o">&gt;</span><span class="p">(</span><span class="n">args</span><span class="p">)...);</span>
-<span class="p">}</span>
-
-<span class="cm">/**</span>
-<span class="cm"> * Create a formatter object that takes one argument (of container type)</span>
-<span class="cm"> * and uses that container to get argument values from.</span>
-<span class="cm"> *</span>
-<span class="cm"> * std::map&lt;string, string&gt; map { {&quot;hello&quot;, &quot;world&quot;}, {&quot;answer&quot;, &quot;42&quot;} };</span>
-<span class="cm"> *</span>
-<span class="cm"> * The following are equivalent:</span>
-<span class="cm"> * format(&quot;{0[hello]} {0[answer]}&quot;, map);</span>
-<span class="cm"> *</span>
-<span class="cm"> * vformat(&quot;{hello} {answer}&quot;, map);</span>
-<span class="cm"> *</span>
-<span class="cm"> * but the latter is cleaner.</span>
-<span class="cm"> */</span>
-<span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">Container</span><span class="o">&gt;</span>
-<span class="n">Formatter</span><span class="o">&lt;</span><span class="nb">true</span><span class="p">,</span> <span class="n">Container</span><span class="o">&gt;</span> <span class="n">vformat</span><span class="p">(</span><span class="n">StringPiece</span> <span class="n">fmt</span><span class="p">,</span> <span class="n">Container</span><span class="o">&amp;&amp;</span> <span class="n">container</span><span class="p">)</span> <span class="p">{</span>
-  <span class="k">return</span> <span class="n">Formatter</span><span class="o">&lt;</span><span class="nb">true</span><span class="p">,</span> <span class="n">Container</span><span class="o">&gt;</span><span class="p">(</span>
-      <span class="n">fmt</span><span class="p">,</span> <span class="n">std</span><span class="o">::</span><span class="n">forward</span><span class="o">&lt;</span><span class="n">Container</span><span class="o">&gt;</span><span class="p">(</span><span class="n">container</span><span class="p">));</span>
-<span class="p">}</span>
-
-<span class="cm">/**</span>
-<span class="cm"> * Append formatted output to a string.</span>
-<span class="cm"> *</span>
-<span class="cm"> * std::string foo;</span>
-<span class="cm"> * format(&amp;foo, &quot;{} {}&quot;, 42, 23);</span>
-<span class="cm"> *</span>
-<span class="cm"> * Shortcut for toAppend(format(...), &amp;foo);</span>
-<span class="cm"> */</span>
-<span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">Str</span><span class="p">,</span> <span class="n">class</span><span class="p">...</span> <span class="n">Args</span><span class="o">&gt;</span>
-<span class="kr">typename</span> <span class="n">std</span><span class="o">::</span><span class="n">enable_if</span><span class="o">&lt;</span><span class="n">detail</span><span class="o">::</span><span class="n">IsSomeString</span><span class="o">&lt;</span><span class="n">Str</span><span class="o">&gt;::</span><span class="n">value</span><span class="o">&gt;::</span><span class="n">type</span>
-<span class="n">format</span><span class="p">(</span><span class="n">Str</span><span class="o">*</span> <span class="n">out</span><span class="p">,</span> <span class="n">StringPiece</span> <span class="n">fmt</span><span class="p">,</span> <span class="n">Args</span><span class="o">&amp;&amp;</span><span class="p">...</span> <span class="n">args</span><span class="p">)</span> <span class="p">{</span>
-  <span class="n">format</span><span class="p">(</span><span class="n">fmt</span><span class="p">,</span> <span class="n">std</span><span class="o">::</span><span class="n">forward</span><span class="o">&lt;</span><span class="n">Args</span><span class="o">&gt;</span><span class="p">(</span><span class="n">args</span><span class="p">)...).</span><span class="n">appendTo</span><span class="p">(</span><span class="o">*</span><span class="n">out</span><span class="p">);</span>
-<span class="p">}</span>
-
-<span class="cm">/**</span>
-<span class="cm"> * Append vformatted output to a string.</span>
-<span class="cm"> */</span>
-<span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">Str</span><span class="p">,</span> <span class="n">class</span> <span class="n">Container</span><span class="o">&gt;</span>
-<span class="kr">typename</span> <span class="n">std</span><span class="o">::</span><span class="n">enable_if</span><span class="o">&lt;</span><span class="n">detail</span><span class="o">::</span><span class="n">IsSomeString</span><span class="o">&lt;</span><span class="n">Str</span><span class="o">&gt;::</span><span class="n">value</span><span class="o">&gt;::</span><span class="n">type</span>
-<span class="n">vformat</span><span class="p">(</span><span class="n">Str</span><span class="o">*</span> <span class="n">out</span><span class="p">,</span> <span class="n">StringPiece</span> <span class="n">fmt</span><span class="p">,</span> <span class="n">Container</span><span class="o">&amp;&amp;</span> <span class="n">container</span><span class="p">)</span> <span class="p">{</span>
-  <span class="n">vformat</span><span class="p">(</span><span class="n">fmt</span><span class="p">,</span> <span class="n">std</span><span class="o">::</span><span class="n">forward</span><span class="o">&lt;</span><span class="n">Container</span><span class="o">&gt;</span><span class="p">(</span><span class="n">container</span><span class="p">)).</span><span class="n">appendTo</span><span class="p">(</span><span class="o">*</span><span class="n">out</span><span class="p">);</span>
-<span class="p">}</span>
-
-<span class="cm">/**</span>
-<span class="cm"> * Utilities for all format value specializations.</span>
-<span class="cm"> */</span>
-<span class="n">namespace</span> <span class="n">format_value</span> <span class="p">{</span>
-
-<span class="cm">/**</span>
-<span class="cm"> * Format a string in &quot;val&quot;, obeying appropriate alignment, padding, width,</span>
-<span class="cm"> * and precision.  Treats Align::DEFAULT as Align::LEFT, and</span>
-<span class="cm"> * Align::PAD_AFTER_SIGN as Align::RIGHT; use formatNumber for</span>
-<span class="cm"> * number-specific formatting.</span>
-<span class="cm"> */</span>
-<span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">FormatCallback</span><span class="o">&gt;</span>
-<span class="kt">void</span> <span class="n">formatString</span><span class="p">(</span><span class="n">StringPiece</span> <span class="n">val</span><span class="p">,</span> <span class="n">FormatArg</span><span class="o">&amp;</span> <span class="n">arg</span><span class="p">,</span> <span class="n">FormatCallback</span><span class="o">&amp;</span> <span class="n">cb</span><span class="p">);</span>
-
-<span class="cm">/**</span>
-<span class="cm"> * Format a number in &quot;val&quot;; the first prefixLen characters form the prefix</span>
-<span class="cm"> * (sign, &quot;0x&quot; base prefix, etc) which must be left-aligned if the alignment</span>
-<span class="cm"> * is Align::PAD_AFTER_SIGN.  Treats Align::DEFAULT as Align::LEFT.  Ignores</span>
-<span class="cm"> * arg.precision, as that has a different meaning for numbers (not &quot;maximum</span>
-<span class="cm"> * field width&quot;)</span>
-<span class="cm"> */</span>
-<span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">FormatCallback</span><span class="o">&gt;</span>
-<span class="kt">void</span> <span class="n">formatNumber</span><span class="p">(</span><span class="n">StringPiece</span> <span class="n">val</span><span class="p">,</span> <span class="kt">int</span> <span class="n">prefixLen</span><span class="p">,</span> <span class="n">FormatArg</span><span class="o">&amp;</span> <span class="n">arg</span><span class="p">,</span>
-                  <span class="n">FormatCallback</span><span class="o">&amp;</span> <span class="n">cb</span><span class="p">);</span>
-
-
-<span class="cm">/**</span>
-<span class="cm"> * Format a Formatter object recursively.  Behaves just like</span>
-<span class="cm"> * formatString(fmt.str(), arg, cb); but avoids creating a temporary</span>
-<span class="cm"> * string if possible.</span>
-<span class="cm"> */</span>
-<span class="n">template</span> <span class="o">&lt;</span><span class="n">class</span> <span class="n">FormatCallback</span><span class="p">,</span> <span class="n">bool</span> <span class="n">containerMode</span><span class="p">,</span> <span class="n">class</span><span class="p">...</span> <span class="n">Args</span><span class="o">&gt;</span>
-<span class="kt">void</span> <span class="n">formatFormatter</span><span class="p">(</span><span class="k">const</span> <span class="n">Formatter</span><span class="o">&lt;</span><span class="n">containerMode</span><span class="p">,</span> <span class="n">Args</span><span class="p">...</span><span class="o">&gt;&amp;</span> <span class="n">formatter</span><span class="p">,</span>
-                     <span class="n">FormatArg</span><span class="o">&amp;</span> <span class="n">arg</span><span class="p">,</span>
-                     <span class="n">FormatCallback</span><span class="o">&amp;</span> <span class="n">cb</span><span class="p">);</span>
-
-<span class="p">}</span>  <span class="c1">// namespace format_value</span>
-
-<span class="cm">/*</span>
-<span class="cm"> * Specialize folly::FormatValue for your type.</span>
-<span class="cm"> *</span>
-<span class="cm"> * FormatValue&lt;T&gt; is constructed with a (reference-collapsed) T&amp;&amp;, which is</span>
-<span class="cm"> * guaranteed to stay alive until the FormatValue object is destroyed, so you</span>
-<span class="cm"> * may keep a reference (or pointer) to it instead of making a copy.</span>
-<span class="cm"> *</span>
-<span class="cm"> * You must define</span>
-<span class="cm"> *   template &lt;class Callback&gt;</span>
-<span class="cm"> *   void format(FormatArg&amp; arg, Callback&amp; cb) const;</span>
-<span class="cm"> * with the following semantics: format the value using the given argument.</span>
-<span class="cm"> *</span>
-<span class="cm"> * arg is given by non-const reference for convenience -- it won&#39;t be reused,</span>
-<span class="cm"> * so feel free to modify it in place if necessary.  (For example, wrap an</span>
-<span class="cm"> * existing conversion but change the default, or remove the &quot;key&quot; when</span>
-<span class="cm"> * extracting an element from a container)</span>
-<span class="cm"> *</span>
-<span class="cm"> * Call the callback to append data to the output.  You may call the callback</span>
-<span class="cm"> * as many times as you&#39;d like (or not at all, if you want to output an</span>
-<span class="cm"> * empty string)</span>
-<span class="cm"> */</span>
 
 <span class="p">}</span>  <span class="c1">// namespace folly</span>
-
-<span class="cp">#include &quot;folly/Format-inl.h&quot;</span>
-
-<span class="cp">#endif </span><span class="cm">/* FOLLY_FORMAT_H_ */</span><span class="cp"></span>
 
 </pre></div></td></tr>
 

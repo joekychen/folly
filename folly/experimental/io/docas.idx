@@ -1,6 +1,6 @@
-f | IOBufQueue.h | s | 6.4K | 184 | Tudor Bosman | tudorb@fb.com | 1340830276 |  | Minor changes to folly/experimental/io  Reviewed By: philipp@fb.com  FB internal diff: D491952
-f | IOBufQueue.cpp | s | 5.9K | 213 | Tudor Bosman | tudorb@fb.com | 1339180112 |  | Add IOBufQueue::wrapBuffer, which handles buffers > 4GB.  Test Plan: test added  Reviewed By: brianp@fb.com  FB internal diff: D489158
 f | TypedIOBuf.h | s | 4.0K | 155 | Tudor Bosman | tudorb@fb.com | 1340830276 |  | Minor changes to folly/experimental/io  Reviewed By: philipp@fb.com  FB internal diff: D491952
+f | IOBufQueue.cpp | s | 5.9K | 213 | Tudor Bosman | tudorb@fb.com | 1339180112 |  | Add IOBufQueue::wrapBuffer, which handles buffers > 4GB.  Test Plan: test added  Reviewed By: brianp@fb.com  FB internal diff: D489158
+f | IOBufQueue.h | s | 6.4K | 184 | Tudor Bosman | tudorb@fb.com | 1340830276 |  | Minor changes to folly/experimental/io  Reviewed By: philipp@fb.com  FB internal diff: D491952
 f | IOBuf.cpp | s | 19K | 524 | Tudor Bosman | tudorb@fb.com | 1339543381 |  | InternalBuf doesn't need capacity  Summary: as it's always kMaxInternalDataSize.  Test Plan: all tests in folly/experimental/io/test, both opt and dbg  Reviewed By: brianp@fb.com  FB internal diff: D492008
 d | test |  | 5 items |  | Tudor Bosman | tudorb@fb.com | 1340332731 |  | Add TypedIOBuf.  Summary: Simple class to handle IOBuf as an array of objects of fixed size.  Test Plan: test added  Reviewed By: brianp@fb.com  FB internal diff: D497287
 f | Cursor.h | s | 9.8K | 352 | Jordan DeLong | jdelong@fb.com | 1338661169 |  | Pull from FB rev 63ce89e2f2301e6bba44a111cc7d4218022156f6
